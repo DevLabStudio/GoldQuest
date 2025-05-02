@@ -16,7 +16,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, CreditCard, Landmark, Wallet, ArrowLeftRight } from 'lucide-react';
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight } from 'lucide-react'; // Added Wallet
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -82,25 +82,25 @@ export default function RootLayout({
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
-                      {/* TODO: Add Debits and Investments links when pages are created */}
-                      {/*
-                      <SidebarMenuItem>
-                          <Link href="/debits" passHref>
-                              <SidebarMenuButton tooltip="Manage Debits">
-                                  <CreditCard />
-                                  <span>Debits</span>
-                              </SidebarMenuButton>
-                          </Link>
-                      </SidebarMenuItem>
-                      <SidebarMenuItem>
-                          <Link href="/investments" passHref>
-                              <SidebarMenuButton tooltip="Manage Investments">
-                                  <Wallet />
-                                  <span>Investments</span>
-                              </SidebarMenuButton>
-                          </Link>
-                      </SidebarMenuItem>
-                      */}
+                    {/* TODO: Add Debits link when page is created */}
+                    {/*
+                    <SidebarMenuItem>
+                        <Link href="/debits" passHref>
+                            <SidebarMenuButton tooltip="Manage Debits">
+                                <CreditCard />
+                                <span>Debits</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    */}
+                    <SidebarMenuItem>
+                        <Link href="/investments" passHref>
+                            <SidebarMenuButton tooltip="Manage Investments">
+                                <Wallet />
+                                <span>Investments</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
                 </SidebarGroup>
               </SidebarMenu>
             </SidebarContent>

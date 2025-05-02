@@ -1,6 +1,7 @@
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { DollarSign, TrendingUp, TrendingDown } from "lucide-react";
+import SpendingChart from "@/components/dashboard/spending-chart"; // Import the chart component
 
 // Helper function to format currency
 const formatCurrency = (amount: number): string => {
@@ -24,6 +25,16 @@ export default async function Dashboard() {
   const monthlyIncome = 5000;
   const monthlyExpenses = 3500;
   const savingsRate = ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100;
+
+  // Placeholder spending data for the chart
+  const spendingData = [
+    { category: "Groceries", amount: 450.75 },
+    { category: "Utilities", amount: 150.30 },
+    { category: "Rent", amount: 1200.00 },
+    { category: "Transport", amount: 180.50 },
+    { category: "Food", amount: 350.00 },
+    { category: "Other", amount: 200.00 },
+  ];
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -101,16 +112,15 @@ export default async function Dashboard() {
         </Card>
        </div>
 
-       {/* Placeholder for Spending Trends Chart */}
+       {/* Spending Trends Chart */}
        <div className="mt-8">
            <Card>
                <CardHeader>
                    <CardTitle>Spending Trends (Placeholder)</CardTitle>
-                   <CardDescription>Visualize your spending over time.</CardDescription>
+                   <CardDescription>Monthly spending by category.</CardDescription>
                </CardHeader>
-               <CardContent className="h-64 flex items-center justify-center text-muted-foreground">
-                   {/* Chart component will go here */}
-                   <p>Spending chart coming soon...</p>
+               <CardContent className="h-80"> {/* Increased height for better chart display */}
+                  <SpendingChart data={spendingData} />
                </CardContent>
            </Card>
        </div>
