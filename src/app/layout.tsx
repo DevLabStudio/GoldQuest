@@ -31,7 +31,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'FinancioSimples',
+  title: 'The Golden Game', // Updated title
   description: 'Simple personal finance management',
 };
 
@@ -51,7 +51,7 @@ export default function RootLayout({
         <SidebarProvider>
           <Sidebar side="left" variant="inset" collapsible="icon">
             <SidebarHeader className="items-center justify-between">
-              <span className="text-lg font-semibold text-primary">FinancioSimples</span>
+              <span className="text-lg font-semibold text-primary">The Golden Game</span> {/* Updated app name */}
               <SidebarTrigger className="md:hidden" />
             </SidebarHeader>
             <SidebarContent>
