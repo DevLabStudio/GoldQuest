@@ -486,8 +486,19 @@ export default function ImportDataPage() {
 
                // Additional check if parsedAmount is still NaN
               if (isNaN(parsedAmount)) {
-                  console.error(`Row ${rowNumber}: Amount could not be determined. Signed='${signedAmountValue}', Income='${incomeAmountValue}', Expense='${expenseAmountValue}'.`);
-                  throw new Error(`Could not determine a valid amount.`);
+                  // If type is 'opening balance', try to use the amount from the main amount column
+                  if (typeValue === 'opening balance' && amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
+                     parsedAmount = parseAmount(signedAmountValue);
+                     if (isNaN(parsedAmount)) {
+                         console.error(`Row ${rowNumber}: Could not parse amount for 'opening balance'. Signed='${signedAmountValue}'.`);
+                         throw new Error(`Could not parse amount for 'opening balance'.`);
+                     } else {
+                         console.log(`Row ${rowNumber}: Used amount column for 'opening balance': ${parsedAmount}`);
+                     }
+                  } else {
+                     console.error(`Row ${rowNumber}: Amount could not be determined. Signed='${signedAmountValue}', Income='${incomeAmountValue}', Expense='${expenseAmountValue}'.`);
+                     throw new Error(`Could not determine a valid amount.`);
+                  }
               }
 
 
@@ -562,21 +573,23 @@ export default function ImportDataPage() {
                        parsedAmount = -Math.abs(parsedAmount); // Ensure negative for withdrawal
                        transactionTypeInternal = 'expense';
                    } else if (typeValue === 'opening balance') {
-                        transactionTypeInternal = 'skip'; // Skip creating a transaction for opening balance
+                        // Don't skip anymore, but mark description
+                        transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense'; // Treat as income/expense for balance update
                         description = description + " (Opening Balance Entry)";
+                        console.log(`Row ${rowNumber}: Identified 'opening balance' type for account ${accountNameValue}. Amount: ${parsedAmount}. This will set the initial balance.`);
                    } else {
                        // Fallback to amount sign if type column is missing or unhelpful
                        transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
                    }
 
-                   // Re-check skipping if 'initialBalance' column was explicitly mapped and indicates opening balance
-                   if (transactionTypeInternal !== 'skip' && initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
+                   // Re-check skipping only if NOT opening balance type and desc/cat suggests it
+                    if (transactionTypeInternal !== 'skip' && typeValue !== 'opening balance' && initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
                        const descLower = description.toLowerCase();
                        const catLower = category.toLowerCase();
                        if (descLower.includes('initial balance') || descLower.includes('starting balance') || catLower.includes('initial balance') || catLower.includes('starting balance')) {
-                           console.log(`Row ${rowNumber}: Skipping transaction creation for potential initial balance entry: "${description}" (from desc/cat)`);
+                           console.log(`Row ${rowNumber}: Skipping transaction creation for potential initial balance entry: "${description}" (from desc/cat/initialBalanceCol)`);
                            transactionTypeInternal = 'skip';
-                           description = description + " (Initial Balance Entry)";
+                           description = description + " (Initial Balance Entry - Skipped Tx)";
                        }
                    }
 
@@ -618,20 +631,38 @@ export default function ImportDataPage() {
                         tags: parsedTags,
                         originalRecord: record,
                         importStatus: 'skipped',
-                        errorMessage: 'Skipped (e.g., opening balance).',
+                        errorMessage: 'Skipped (e.g., non-opening initial balance).',
                     };
                } else {
-                    return {
-                        // Use the determined temporary account ID (could be source, dest, or primary)
-                        accountId: primaryAccountId!, // Validated above
-                        date: parseDate(dateValue),
-                        amount: parsedAmount, // Amount has correct sign or is positive for transfer
-                        description: description,
-                        category: category,
-                        tags: parsedTags,
-                        originalRecord: record,
-                        importStatus: 'pending', // Default status
-                    };
+                    // If it was an opening balance type, SKIP creating a transaction row in the preview,
+                    // as the balance will be set during account creation/update.
+                    // The logic in createOrUpdateAccountsAndGetMap already handles this.
+                     if (typeValue === 'opening balance') {
+                        return {
+                            accountId: 'skipped', // Use skipped ID
+                            date: parseDate(dateValue),
+                            amount: parsedAmount, // Keep amount for potential logging/debugging
+                            description: description,
+                            category: 'Opening Balance', // Mark category
+                            tags: parsedTags,
+                            originalRecord: record,
+                            importStatus: 'skipped', // Mark as skipped in the transaction list
+                            errorMessage: 'Opening Balance (sets initial account value)',
+                        };
+                     } else {
+                        // Regular transaction (income, expense, transfer)
+                        return {
+                            // Use the determined temporary account ID (could be source, dest, or primary)
+                            accountId: primaryAccountId!, // Validated above
+                            date: parseDate(dateValue),
+                            amount: parsedAmount, // Amount has correct sign or is positive for transfer
+                            description: description,
+                            category: category,
+                            tags: parsedTags,
+                            originalRecord: record,
+                            importStatus: 'pending', // Default status
+                        };
+                     }
                }
 
             } catch (rowError: any) {
@@ -658,7 +689,7 @@ export default function ImportDataPage() {
              errorMessages.push(`${errorMappedData.length} row(s) had processing errors (e.g., missing account, invalid amount).`);
         }
         if (skippedMappedData.length > 0) {
-             errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., opening balance).`);
+             errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., opening balance entries or other skipped types).`);
         }
         if (errorMessages.length > 0) {
             setError(`Import Preview Issues: ${errorMessages.join(' ')} Review the tables below.`);
@@ -996,7 +1027,7 @@ export default function ImportDataPage() {
 
       transactions.forEach(tx => {
           // Process only pending transactions with a valid category name that isn't special
-          if (tx.importStatus === 'pending' && tx.category && !['Uncategorized', 'Initial Balance', 'Transfer', 'Skipped'].includes(tx.category)) {
+          if (tx.importStatus === 'pending' && tx.category && !['Uncategorized', 'Initial Balance', 'Transfer', 'Skipped', 'Opening Balance'].includes(tx.category)) {
               const categoryName = tx.category.trim();
               if (categoryName && !existingCategoryNames.has(categoryName.toLowerCase())) {
                   categoriesToAdd.add(categoryName);
@@ -1112,7 +1143,7 @@ export default function ImportDataPage() {
         console.log("Finalizing account creation/updates before import...");
         let latestAccounts = await getAccounts(); // Fetch current accounts
         const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
-            rawData.filter((_, index) => parsedData[index]?.importStatus === 'pending' || (columnMappings.transaction_type && parsedData[index]?.originalRecord[columnMappings.transaction_type!]?.toLowerCase() === 'opening balance') ), // Include relevant rows for account creation/update
+            rawData, // Pass ALL raw data to ensure all accounts (even those with only opening balances) are processed
             columnMappings, // Pass confirmed mappings
             latestAccounts, // Pass current accounts
             false // Set to false to actually perform creation/update
@@ -1167,6 +1198,18 @@ export default function ImportDataPage() {
               if(item.importStatus === 'error') errorCount++;
               continue;
           }
+
+          // Skip rows marked as 'opening balance' during mapping, as balance is set during account creation/update
+          const typeValue = columnMappings.transaction_type ? item.originalRecord[columnMappings.transaction_type]?.trim().toLowerCase() : undefined;
+           if (typeValue === 'opening balance') {
+               console.log(`Row ${rowNumber}: Skipping transaction import for opening balance.`);
+               updatedData[i] = { ...item, importStatus: 'skipped', errorMessage: 'Opening Balance (handled via account balance)' };
+               errorCount++; // Count as 'skipped/failed' for progress
+               setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
+               setParsedData([...updatedData]);
+               continue;
+           }
+
 
           try {
                const categoryName = item.category?.trim() || 'Uncategorized';
@@ -1269,7 +1312,7 @@ export default function ImportDataPage() {
                         category: finalCategoryName,
                         tags: finalTags,
                      };
-                    // `addTransaction` already handles balance updates
+                    // `addTransaction` now handles balance updates internally
                     await addTransaction(transactionPayload);
                     console.log(`Row ${rowNumber}: Successfully imported ${item.amount >= 0 ? 'income' : 'expense'}: ${item.description}, Amount: ${item.amount} into Account ID: ${accountIdForImport}`);
                  }
@@ -1393,7 +1436,7 @@ export default function ImportDataPage() {
              <Button onClick={handleParseAndMap} disabled={!file || isLoading}>
                 {isLoading && !isMappingDialogOpen ? "Parsing..." : "Parse & Map Columns"}
              </Button>
-             <Button onClick={handleImport} disabled={isLoading || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
+             <Button onClick={handleImport} disabled={isLoading || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending' && d.importStatus !== 'error')}>
                {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Transactions"}
              </Button>
 
@@ -1523,7 +1566,19 @@ export default function ImportDataPage() {
                 <TableBody>
                   {parsedData.map((item, index) => {
                        // Find account using the component's current `accounts` state based on the FINAL map ID if available
-                       const finalAccountId = finalAccountMapForImport[item.accountId?.toLowerCase()] || item.accountId; // Try to map preview ID to final ID
+                       // Check if accountId is a placeholder like 'preview_create_...' or an actual ID
+                       let finalAccountId = item.accountId;
+                       if (finalAccountId && !finalAccountId.startsWith('error_') && !finalAccountId.startsWith('skipped_')) {
+                            // If it's a preview ID, try to resolve it using the final map based on the name embedded in the preview ID
+                            if (finalAccountId.startsWith('preview_create_')) {
+                                const accountName = finalAccountId.replace('preview_create_', '');
+                                finalAccountId = finalAccountMapForImport[accountName] || finalAccountId; // Use final map if available
+                            } else {
+                                // If it's potentially an existing account name used as ID during preview, resolve it
+                                finalAccountId = finalAccountMapForImport[finalAccountId.toLowerCase()] || finalAccountId;
+                            }
+                       }
+
                        const account = accounts.find(acc => acc.id === finalAccountId);
 
                        // Get the account name from the original record based on mappings for display
@@ -1587,7 +1642,7 @@ export default function ImportDataPage() {
                                     !isNaN(item.amount) && item.amount >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
                                 )}>
                                     {/* Use formatCurrency for consistency, pass convertToPreferred=false */}
-                                     {formatCurrency(item.amount, displayCurrency, undefined, false)}
+                                     {item.importStatus !== 'skipped' ? formatCurrency(item.amount, displayCurrency, undefined, false) : 'N/A'}
                                 </TableCell>
                             )}
                             {columnMappings.amount_income && <TableCell className="text-right whitespace-nowrap">{item.originalRecord[columnMappings.amount_income!]}</TableCell>}
@@ -1608,3 +1663,4 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
