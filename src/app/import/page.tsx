@@ -138,18 +138,27 @@ export default function ImportDataPage() {
       // `transformHeader` can rename columns if needed
       complete: (results) => {
         console.log("Parsed CSV Result:", results);
-
-        // Check for general parsing errors reported by PapaParse
+        // Log all errors reported by PapaParse for debugging
         if (results.errors.length > 0) {
-            // Show the first error related to row structure/parsing
-            const rowError = results.errors.find(e => e.row !== undefined);
-            const generalError = results.errors[0];
-            const errorToShow = rowError || generalError;
             console.error("CSV Parsing Errors:", results.errors);
-            setError(`Error parsing CSV on row ${errorToShow.row ?? 'unknown'}: ${errorToShow.message}. Please ensure the file is a valid CSV.`);
+        }
+
+        // Check for errors reported by PapaParse (e.g., structural issues)
+        const structuralError = results.errors.find(e => e.row !== undefined);
+        if (structuralError) {
+            // Show a specific error message about file structure
+            setError(`Error parsing CSV on row ${structuralError.row ?? 'unknown'}: ${structuralError.message}. Please check the file's structure, delimiter (ensure it's comma-separated), and quoting.`);
             setIsLoading(false);
             return;
         }
+
+         // Check for general errors (e.g., file read error, although 'error' callback handles this better)
+         if (results.errors.length > 0 && !structuralError) {
+            const generalError = results.errors[0];
+             setError(`CSV Parsing Error: ${generalError.message}. Please ensure the file is a valid CSV.`);
+             setIsLoading(false);
+             return;
+         }
 
         if (!results.data || results.data.length === 0) {
             setError("CSV file is empty or doesn't contain valid data rows.");
@@ -176,14 +185,14 @@ export default function ImportDataPage() {
         // Map Firefly data to our Transaction structure more flexibly
         const mapped: MappedTransaction[] = results.data.map((record, index) => {
           try {
-              // Validate essential fields *per row*
-              if (!record.Date || !record.Amount || !record.Description) {
-                  throw new Error(`Row ${index + 2}: Missing required data (Date, Amount, or Description).`);
+              // Validate essential fields *per row* - Amount and Description can be empty, but Date is crucial
+              if (!record.Date) {
+                  throw new Error(`Row ${index + 2}: Missing required data (Date).`);
               }
 
-              const amount = parseAmount(record.Amount);
+              const amount = parseAmount(record.Amount || '0'); // Default to 0 if amount is missing/invalid
               const type = mapFireflyType(record);
-              let description = record.Description;
+              let description = record.Description || 'No Description'; // Use default if missing
               let category = record['Category (name)'] || 'Uncategorized'; // Default if missing
 
                // Basic transfer description enrichment (if possible)
@@ -197,13 +206,13 @@ export default function ImportDataPage() {
               return {
                 date: parseDate(record.Date),
                 amount: amount, // Amount directly from CSV (can be positive/negative)
-                description: description || 'No Description', // Ensure description exists
+                description: description,
                 category: category,
                 originalRecord: record,
                 importStatus: 'pending',
               };
             } catch (rowError: any) {
-                // Catch errors during row mapping
+                // Catch errors during row mapping (like missing date)
                 console.error(`Error processing row ${index + 2}:`, rowError);
                  return {
                     date: parseDate(undefined), // Default date
@@ -218,11 +227,10 @@ export default function ImportDataPage() {
         });
 
         // Filter out rows that had mapping errors if necessary, or show them as errors
-        // const validMappedData = mapped.filter(item => item.importStatus !== 'error');
-        // const errorMappedData = mapped.filter(item => item.importStatus === 'error');
-        // if (errorMappedData.length > 0) {
-        //     setError(`Encountered errors processing ${errorMappedData.length} rows. Please review the table.`);
-        // }
+        const errorMappedData = mapped.filter(item => item.importStatus === 'error');
+        if (errorMappedData.length > 0 && !structuralError) { // Don't show this if there was a structural error already
+             setError(`Encountered errors processing ${errorMappedData.length} row(s). Please review the table below. Common issues include missing 'Date' values.`);
+        }
 
         setParsedData(mapped); // Show all rows, including errors
         setIsLoading(false);
@@ -332,8 +340,7 @@ export default function ImportDataPage() {
         <CardHeader>
           <CardTitle>Import Transactions from CSV</CardTitle>
           <CardDescription>
-            Import transactions from a CSV file (e.g., Firefly III export). Requires columns: Date, Amount, Description.
-            Select a target account for the imported transactions. Transfers will be skipped for now.
+            Import transactions from a standard comma-separated CSV file (e.g., Firefly III export). Requires columns: <code className="bg-muted px-1 rounded">Date</code>, <code className="bg-muted px-1 rounded">Amount</code>, <code className="bg-muted px-1 rounded">Description</code>. Other columns like <code className="bg-muted px-1 rounded">Category (name)</code> are used if present. Transfers are currently skipped. Select a target account below.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -433,4 +440,3 @@ export default function ImportDataPage() {
     </div>
   );
 }
-
