@@ -17,17 +17,18 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { format } from 'date-fns';
 
 // Define the expected structure of Firefly III CSV export (default format)
-// Adjust based on the actual CSV structure if needed.
+// Make fields potentially optional where appropriate
 interface FireflyIIIRecord {
-  'Date': string; // e.g., "2023-10-26"
-  'Amount': string; // e.g., "-12.34" or "500.00"
-  'Description': string;
-  'Source account (name)': string; // May be empty if type is deposit/withdrawal
-  'Destination account (name)': string; // May be empty if type is deposit/withdrawal
-  'Category (name)': string; // e.g., "Groceries"
+  'Date'?: string; // e.g., "2023-10-26"
+  'Amount'?: string; // e.g., "-12.34" or "500.00"
+  'Description'?: string;
+  'Source account (name)'?: string; // May be empty if type is deposit/withdrawal
+  'Destination account (name)'?: string; // May be empty if type is deposit/withdrawal
+  'Category (name)'?: string; // e.g., "Groceries"
   'Budget (name)'?: string; // Optional
   'Transaction type'?: string; // Optional, e.g., "withdrawal", "deposit", "transfer"
-  // Add other relevant columns if present in your specific Firefly III export
+  // Allow any other properties
+  [key: string]: string | undefined;
 }
 
 type MappedTransaction = Omit<Transaction, 'id' | 'accountId'> & {
@@ -41,7 +42,7 @@ const mapFireflyType = (record: FireflyIIIRecord): 'expense' | 'income' | 'trans
     if (record['Transaction type']?.toLowerCase() === 'transfer') {
         return 'transfer';
     }
-    const amount = parseAmount(record['Amount']);
+    const amount = parseAmount(record['Amount'] || '0'); // Default to '0' if missing
     if (amount < 0) {
         return 'expense';
     }
@@ -49,37 +50,32 @@ const mapFireflyType = (record: FireflyIIIRecord): 'expense' | 'income' | 'trans
         return 'income';
     }
     // Default or handle zero amount cases if necessary
-    return 'expense'; // Or throw error?
+    return 'expense'; // Or throw error? Treat 0 as expense?
 };
 
 // Helper to parse amount string
 const parseAmount = (amountStr: string): number => {
     // Remove currency symbols, thousands separators, etc. Handle different decimal separators if needed.
     const cleaned = amountStr.replace(/[^0-9.,-]/g, '').replace(',', '.');
-    return parseFloat(cleaned);
+    const parsed = parseFloat(cleaned);
+    return isNaN(parsed) ? 0 : parsed; // Return 0 if parsing fails
 };
 
 // Helper to parse date string (assuming YYYY-MM-DD or similar ISO-like format)
-const parseDate = (dateStr: string): string => {
+const parseDate = (dateStr: string | undefined): string => {
+    if (!dateStr) return format(new Date(), 'yyyy-MM-dd'); // Default to today if missing
     try {
         // Attempt to parse common formats, default to ISO string if possible
         const parsedDate = new Date(dateStr); // Use dateStr directly
         if (!isNaN(parsedDate.getTime())) {
-             // Firefly usually uses YYYY-MM-DD, ensure correct format for service
+             // Ensure correct format for service
              return format(parsedDate, 'yyyy-MM-dd');
         }
-        // Fallback or further parsing attempts for other formats (e.g., DD/MM/YYYY)
-        // const parts = dateStr.match(/(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/);
-        // if (parts) {
-        //   // Assuming DD/MM/YYYY - adjust if needed
-        //   const date = new Date(parseInt(parts[3]), parseInt(parts[2]) - 1, parseInt(parts[1]));
-        //   if (!isNaN(date.getTime())) return format(date, 'yyyy-MM-dd');
-        // }
     } catch (e) {
         console.error("Error parsing date:", dateStr, e);
     }
-    // Return original string or throw error if parsing fails critically
-    return dateStr; // Or handle error appropriately
+    // Return original string or a default if parsing fails critically
+    return format(new Date(), 'yyyy-MM-dd'); // Default to today on error
 };
 
 
@@ -137,58 +133,104 @@ export default function ImportDataPage() {
     Papa.parse<FireflyIIIRecord>(file, {
       header: true, // Assumes first row is header
       skipEmptyLines: true,
+      // `dynamicTyping: true` can help, but be cautious with dates/numbers
+      // `delimiter` can be set if not comma (e.g., ";")
+      // `transformHeader` can rename columns if needed
       complete: (results) => {
-        console.log("Parsed CSV Data:", results.data);
+        console.log("Parsed CSV Result:", results);
+
+        // Check for general parsing errors reported by PapaParse
         if (results.errors.length > 0) {
+            // Show the first error related to row structure/parsing
+            const rowError = results.errors.find(e => e.row !== undefined);
+            const generalError = results.errors[0];
+            const errorToShow = rowError || generalError;
             console.error("CSV Parsing Errors:", results.errors);
-            setError(`Error parsing CSV: ${results.errors[0].message}. Please ensure the file is a valid Firefly III export.`);
+            setError(`Error parsing CSV on row ${errorToShow.row ?? 'unknown'}: ${errorToShow.message}. Please ensure the file is a valid CSV.`);
             setIsLoading(false);
             return;
         }
+
         if (!results.data || results.data.length === 0) {
             setError("CSV file is empty or doesn't contain valid data rows.");
             setIsLoading(false);
             return;
         }
-        // Validate expected columns exist
-        const requiredColumns: (keyof FireflyIIIRecord)[] = ['Date', 'Amount', 'Description', 'Category (name)'];
-        const firstRow = results.data[0];
-        const missingColumns = requiredColumns.filter(col => !(col in firstRow));
-        if (missingColumns.length > 0) {
-             setError(`Missing required columns in CSV: ${missingColumns.join(', ')}. Please use the default Firefly III export format.`);
+
+        // Validate that *essential* columns exist in the header row (results.meta.fields)
+        const essentialColumns: (keyof FireflyIIIRecord)[] = ['Date', 'Amount', 'Description']; // Category is often optional/derived
+        const headers = results.meta.fields;
+        if (!headers) {
+             setError("Could not read CSV headers.");
+             setIsLoading(false);
+             return;
+        }
+        const missingEssentialColumns = essentialColumns.filter(col => !headers.includes(col));
+        if (missingEssentialColumns.length > 0) {
+             setError(`Missing essential columns in CSV header: ${missingEssentialColumns.join(', ')}. Required: Date, Amount, Description.`);
              setIsLoading(false);
              return;
         }
 
 
-        // Map Firefly data to our Transaction structure
-        const mapped: MappedTransaction[] = results.data.map(record => {
-          const amount = parseAmount(record.Amount);
-          const type = mapFireflyType(record);
-          let description = record.Description;
-          let category = record['Category (name)'];
+        // Map Firefly data to our Transaction structure more flexibly
+        const mapped: MappedTransaction[] = results.data.map((record, index) => {
+          try {
+              // Validate essential fields *per row*
+              if (!record.Date || !record.Amount || !record.Description) {
+                  throw new Error(`Row ${index + 2}: Missing required data (Date, Amount, or Description).`);
+              }
 
-           // Basic transfer description enrichment
-          if (type === 'transfer') {
-              description = `Transfer ${amount > 0 ? 'from ' + record['Source account (name)'] : 'to ' + record['Destination account (name)']}` + (record.Description ? ` (${record.Description})` : '');
-              category = 'Transfer'; // Standardize transfer category
-          }
+              const amount = parseAmount(record.Amount);
+              const type = mapFireflyType(record);
+              let description = record.Description;
+              let category = record['Category (name)'] || 'Uncategorized'; // Default if missing
 
-          return {
-            date: parseDate(record.Date),
-            amount: amount, // Amount directly from CSV (can be positive/negative)
-            description: description || 'No Description',
-            category: category || 'Uncategorized',
-            originalRecord: record,
-            importStatus: 'pending',
-          };
+               // Basic transfer description enrichment (if possible)
+              if (type === 'transfer') {
+                  const sourceName = record['Source account (name)'] || 'Unknown';
+                  const destName = record['Destination account (name)'] || 'Unknown';
+                  description = `Transfer ${amount > 0 ? 'from ' + sourceName : 'to ' + destName}` + (record.Description ? ` (${record.Description})` : '');
+                  category = 'Transfer'; // Standardize transfer category
+              }
+
+              return {
+                date: parseDate(record.Date),
+                amount: amount, // Amount directly from CSV (can be positive/negative)
+                description: description || 'No Description', // Ensure description exists
+                category: category,
+                originalRecord: record,
+                importStatus: 'pending',
+              };
+            } catch (rowError: any) {
+                // Catch errors during row mapping
+                console.error(`Error processing row ${index + 2}:`, rowError);
+                 return {
+                    date: parseDate(undefined), // Default date
+                    amount: 0,
+                    description: `Error Processing Row ${index + 2}`,
+                    category: 'Uncategorized',
+                    originalRecord: record,
+                    importStatus: 'error',
+                    errorMessage: rowError.message || 'Failed to process row.',
+                 };
+            }
         });
-        setParsedData(mapped);
+
+        // Filter out rows that had mapping errors if necessary, or show them as errors
+        // const validMappedData = mapped.filter(item => item.importStatus !== 'error');
+        // const errorMappedData = mapped.filter(item => item.importStatus === 'error');
+        // if (errorMappedData.length > 0) {
+        //     setError(`Encountered errors processing ${errorMappedData.length} rows. Please review the table.`);
+        // }
+
+        setParsedData(mapped); // Show all rows, including errors
         setIsLoading(false);
       },
       error: (err) => {
-        console.error("PapaParse Error:", err);
-        setError(`Failed to parse CSV file: ${err.message}`);
+        // Catch file reading errors
+        console.error("PapaParse File Reading Error:", err);
+        setError(`Failed to read or parse CSV file: ${err.message}`);
         setIsLoading(false);
       }
     });
@@ -204,63 +246,82 @@ export default function ImportDataPage() {
         return;
     }
 
+    const recordsToImport = parsedData.filter(item => item.importStatus === 'pending');
+    if (recordsToImport.length === 0) {
+        setError("No pending records to import. Check for errors in the table below.");
+        return;
+    }
+
 
     setIsLoading(true);
     setImportProgress(0);
-    const totalRecords = parsedData.length;
+    const totalToImport = recordsToImport.length;
     let importedCount = 0;
     let errorCount = 0;
 
-    const updatedData = [...parsedData]; // Create a mutable copy
+    const updatedData = [...parsedData]; // Create a mutable copy of the full list
 
-    for (let i = 0; i < totalRecords; i++) {
-      const item = updatedData[i];
+    for (let i = 0; i < updatedData.length; i++) {
+        const item = updatedData[i];
 
-      // Skip transfers for now if not fully implemented
-      if (mapFireflyType(item.originalRecord) === 'transfer') {
-          updatedData[i] = { ...item, importStatus: 'error', errorMessage: 'Transfer import not yet supported.' };
-          errorCount++;
-          setImportProgress(((i + 1) / totalRecords) * 100);
-          // Update state incrementally to show progress visually
-           setParsedData([...updatedData]);
-          continue; // Skip to next item
-      }
+        // Skip already processed or errored items
+        if (item.importStatus !== 'pending') {
+            if(item.importStatus === 'error') errorCount++; // Recount errors
+            continue;
+        }
+
+        // Skip transfers for now if not fully implemented
+        if (mapFireflyType(item.originalRecord) === 'transfer') {
+            updatedData[i] = { ...item, importStatus: 'error', errorMessage: 'Transfer import not yet supported.' };
+            errorCount++;
+             // Update state incrementally to show progress visually
+             setParsedData([...updatedData]);
+            setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
+            continue; // Skip to next item
+        }
 
 
-      try {
-        // Prepare transaction data using the selected target account ID
-        const transactionPayload: Omit<Transaction, 'id'> = {
-          accountId: targetAccount, // Use the selected account
-          date: item.date,
-          amount: item.amount, // Use amount directly (can be +/-)
-          description: item.description,
-          category: item.category,
-        };
-        await addTransaction(transactionPayload);
-        updatedData[i] = { ...item, importStatus: 'success' };
-        importedCount++;
-      } catch (err: any) {
-        console.error(`Failed to import record ${i}:`, err);
-        updatedData[i] = { ...item, importStatus: 'error', errorMessage: err.message || 'Unknown error' };
-        errorCount++;
-      }
+        try {
+            // Prepare transaction data using the selected target account ID
+            const transactionPayload: Omit<Transaction, 'id'> = {
+            accountId: targetAccount, // Use the selected account
+            date: item.date,
+            amount: item.amount, // Use amount directly (can be +/-)
+            description: item.description,
+            category: item.category,
+            };
+            await addTransaction(transactionPayload);
+            updatedData[i] = { ...item, importStatus: 'success', errorMessage: undefined }; // Clear previous errors
+            importedCount++;
+        } catch (err: any) {
+            console.error(`Failed to import record for row ${i+2}:`, err);
+            updatedData[i] = { ...item, importStatus: 'error', errorMessage: err.message || 'Unknown import error' };
+            errorCount++;
+        }
 
-      setImportProgress(((i + 1) / totalRecords) * 100);
-      // Update state incrementally to show progress visually
-      setParsedData([...updatedData]);
+         // Update state incrementally to show progress visually
+        setParsedData([...updatedData]);
+        setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
 
-      // Optional: Add a small delay to prevent overwhelming the system/API
-      // await new Promise(resolve => setTimeout(resolve, 50));
+
+        // Optional: Add a small delay to prevent overwhelming the system/API
+        // await new Promise(resolve => setTimeout(resolve, 50));
     }
 
     setIsLoading(false);
     toast({
       title: "Import Complete",
-      description: `Successfully imported ${importedCount} records. Failed: ${errorCount}.`,
+      description: `Successfully imported ${importedCount} records. Failed or skipped: ${errorCount}.`,
       variant: errorCount > 0 ? "destructive" : "default",
       duration: 5000,
     });
   };
+
+  // Helper to calculate progress percentage
+  const calculateProgress = (processed: number, total: number): number => {
+      if (total === 0) return 0;
+      return (processed / total) * 100;
+  }
 
 
   return (
@@ -271,7 +332,7 @@ export default function ImportDataPage() {
         <CardHeader>
           <CardTitle>Import Transactions from CSV</CardTitle>
           <CardDescription>
-            Import transactions exported from Firefly III (default CSV format).
+            Import transactions from a CSV file (e.g., Firefly III export). Requires columns: Date, Amount, Description.
             Select a target account for the imported transactions. Transfers will be skipped for now.
           </CardDescription>
         </CardHeader>
@@ -332,7 +393,7 @@ export default function ImportDataPage() {
         <Card>
           <CardHeader>
             <CardTitle>Parsed Transactions ({parsedData.length})</CardTitle>
-            <CardDescription>Review the parsed transactions before importing.</CardDescription>
+            <CardDescription>Review the parsed transactions before importing. Rows with errors will be skipped.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-[500px] overflow-y-auto">
@@ -360,7 +421,7 @@ export default function ImportDataPage() {
                         {item.amount.toFixed(2)} {/* Display raw amount from CSV */}
                       </TableCell>
                        <TableCell className="capitalize">{item.importStatus}</TableCell>
-                       <TableCell className="text-xs text-muted-foreground">{item.errorMessage}</TableCell>
+                       <TableCell className="text-xs text-muted-foreground max-w-[200px] truncate" title={item.errorMessage}>{item.errorMessage}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -372,3 +433,4 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
