@@ -1,5 +1,5 @@
 import type { Metadata } from 'next';
-import { Geist, Geist_Mono } from 'next/font/google';
+import { Oxanium } from 'next/font/google'; // Import Oxanium
 import './globals.css';
 import { cn } from '@/lib/utils';
 import {
@@ -16,22 +16,18 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight } from 'lucide-react'; // Added Wallet
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight } from 'lucide-react';
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
-const geistSans = Geist({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = Geist_Mono({
-  variable: '--font-geist-mono',
+// Configure Oxanium font
+const oxanium = Oxanium({
+  variable: '--font-oxanium',
   subsets: ['latin'],
 });
 
 export const metadata: Metadata = {
-  title: 'The Golden Game', // Updated title
+  title: 'The Golden Game',
   description: 'Simple personal finance management',
 };
 
@@ -44,14 +40,14 @@ export default function RootLayout({
     <html lang="en">
       <body
         className={cn(
-          `${geistSans.variable} ${geistMono.variable} antialiased`,
+          `${oxanium.variable} font-sans antialiased`, // Apply Oxanium font variable and set as default sans font
           'min-h-screen flex flex-col'
         )}
       >
         <SidebarProvider>
           <Sidebar side="left" variant="inset" collapsible="icon">
             <SidebarHeader className="items-center justify-between">
-              <span className="text-lg font-semibold text-primary">The Golden Game</span> {/* Updated app name */}
+              <span className="text-lg font-semibold text-primary">The Golden Game</span>
               <SidebarTrigger className="md:hidden" />
             </SidebarHeader>
             <SidebarContent>

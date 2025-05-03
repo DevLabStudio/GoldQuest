@@ -2,9 +2,12 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Remove explicit body font-family to use variable from layout.tsx */
+/*
 body {
   font-family: Arial, Helvetica, sans-serif;
 }
+*/
 
 @layer base {
   :root {
@@ -41,6 +44,9 @@ body {
     --sidebar-accent-foreground: 0 0% 9%; /* Dark Gray / Near Black */
     --sidebar-border: 0 0% 89.8%; /* Light Gray */
     --sidebar-ring: 36 100% 50%; /* Bitcoin Orange */
+
+    /* Define font variable */
+    --font-oxanium: var(--font-oxanium); /* Add this line */
   }
   .dark {
     --background: 0 0% 3.9%; /* Near Black */
@@ -75,6 +81,9 @@ body {
     --sidebar-accent-foreground: 0 0% 98%; /* White */
     --sidebar-border: 0 0% 14.9%; /* Dark Gray */
     --sidebar-ring: 36 100% 50%; /* Bitcoin Orange */
+
+    /* Define font variable for dark mode */
+    --font-oxanium: var(--font-oxanium); /* Add this line */
   }
 }
 
@@ -83,6 +92,6 @@ body {
     @apply border-border;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans; /* Ensure font-sans is applied */
   }
 }
