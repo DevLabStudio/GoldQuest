@@ -13,6 +13,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { addTransaction, type Transaction } from '@/services/transactions.tsx'; // Assuming addTransaction exists
 import { getAccounts, type Account } from '@/services/account-sync'; // To select target account
+import { getCategories, addCategory, type Category } from '@/services/categories.tsx'; // Import category services
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 
@@ -114,23 +115,35 @@ export default function ImportDataPage() {
   const [error, setError] = useState<string | null>(null);
   const [targetAccount, setTargetAccount] = useState<string | undefined>(undefined);
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]); // State for existing categories
   const { toast } = useToast();
 
-  // Fetch accounts on component mount
+  // Fetch accounts and categories on component mount
   useEffect(() => {
-    const fetchAccounts = async () => {
+    const fetchData = async () => {
        if (typeof window !== 'undefined') {
+            setIsLoading(true); // Start loading
+            setError(null);
             try {
                 const fetchedAccounts = await getAccounts();
                 setAccounts(fetchedAccounts);
+                const fetchedCategories = await getCategories(); // Fetch categories
+                setCategories(fetchedCategories); // Store categories
             } catch (err) {
-                console.error("Failed to fetch accounts for import:", err);
-                setError("Could not load accounts. Please add accounts before importing.");
+                console.error("Failed to fetch initial data for import:", err);
+                setError("Could not load accounts or categories. Please check console and try again.");
+                 toast({
+                    title: "Initialization Error",
+                    description: "Failed to load accounts or categories.",
+                    variant: "destructive",
+                 });
+            } finally {
+                setIsLoading(false); // Stop loading
             }
        }
     };
-    fetchAccounts();
-  }, []);
+    fetchData();
+  }, [toast]); // Add toast to dependency array
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,6 +312,50 @@ export default function ImportDataPage() {
     });
   };
 
+ // Function to add new categories found in the CSV
+ const addMissingCategories = async (transactions: MappedTransaction[]): Promise<void> => {
+    const existingCategoryNames = new Set(categories.map(cat => cat.name.toLowerCase()));
+    const categoriesToAdd = new Set<string>();
+
+    transactions.forEach(tx => {
+        if (tx.importStatus === 'pending' && tx.category) {
+            const categoryName = tx.category.trim();
+            if (categoryName && !existingCategoryNames.has(categoryName.toLowerCase())) {
+                categoriesToAdd.add(categoryName);
+            }
+        }
+    });
+
+    if (categoriesToAdd.size > 0) {
+        console.log(`Found ${categoriesToAdd.size} new categories to add:`, Array.from(categoriesToAdd));
+        const addPromises = Array.from(categoriesToAdd).map(async (catName) => {
+            try {
+                await addCategory(catName);
+                console.log(`Successfully added category: ${catName}`);
+                // Update the local state to include the new category immediately
+                setCategories(prev => [...prev, { id: `cat-${catName.toLowerCase()}`, name: catName }]); // Simple ID for local state
+            } catch (err: any) {
+                console.error(`Failed to add category "${catName}":`, err);
+                // Decide how to handle: maybe mark transactions with this category as error?
+                 toast({
+                    title: "Category Add Error",
+                    description: `Could not add category "${catName}". Transactions using it might fail. Error: ${err.message}`,
+                    variant: "destructive",
+                 });
+            }
+        });
+        await Promise.all(addPromises);
+         // Optionally refetch all categories after adding to ensure IDs are correct, though not strictly necessary if addCategory handles it
+         // const updatedCategories = await getCategories();
+         // setCategories(updatedCategories);
+         toast({
+            title: "Categories Added",
+            description: `Added ${categoriesToAdd.size} new categories found in the file.`,
+         });
+    }
+ };
+
+
  const handleImport = async () => {
     if (!parsedData.length) {
       setError("No data parsed to import.");
@@ -318,6 +375,17 @@ export default function ImportDataPage() {
 
     setIsLoading(true);
     setImportProgress(0);
+
+    // Step 1: Add any missing categories BEFORE importing transactions
+    try {
+       await addMissingCategories(recordsToImport);
+    } catch (catErr) {
+       // If category adding fails significantly, maybe stop the import?
+       // For now, we log errors and proceed, relying on addMissingCategories toast messages.
+       console.error("Error during category creation phase:", catErr);
+    }
+
+    // Step 2: Proceed with transaction import
     const totalToImport = recordsToImport.length;
     let importedCount = 0;
     let errorCount = 0;
@@ -351,7 +419,7 @@ export default function ImportDataPage() {
             date: item.date,
             amount: item.amount, // Use amount directly (can be +/-)
             description: item.description,
-            category: item.category,
+            category: item.category || 'Uncategorized', // Ensure category is present, default if needed
             };
             await addTransaction(transactionPayload);
             updatedData[i] = { ...item, importStatus: 'success', errorMessage: undefined }; // Clear previous errors
@@ -395,7 +463,7 @@ export default function ImportDataPage() {
         <CardHeader>
           <CardTitle>Import Transactions from CSV</CardTitle>
           <CardDescription>
-            Import transactions from a comma-separated CSV file. Requires header row with at least <code className="bg-muted px-1 rounded">Date</code>, <code className="bg-muted px-1 rounded">Amount</code>, and <code className="bg-muted px-1 rounded">Description</code> columns (case-insensitive). Optional <code className="bg-muted px-1 rounded">Category</code> column used if present. Select a target account below.
+            Import transactions from a comma-separated CSV file. Requires header row with at least <code className="bg-muted px-1 rounded">Date</code>, <code className="bg-muted px-1 rounded">Amount</code>, and <code className="bg-muted px-1 rounded">Description</code> columns (case-insensitive). Optional <code className="bg-muted px-1 rounded">Category</code> column used if present. Select a target account below. New categories found in the file will be added automatically.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -444,7 +512,7 @@ export default function ImportDataPage() {
 
           <div className="flex space-x-4">
              <Button onClick={handleParse} disabled={!file || !targetAccount || isLoading}>
-                {isLoading && importProgress === 0 ? "Parsing..." : "Parse File"}
+                {isLoading && parsedData.length === 0 ? "Parsing..." : "Parse File"}
              </Button>
              <Button onClick={handleImport} disabled={!parsedData.length || isLoading || parsedData.every(d => d.importStatus !== 'pending')}>
                {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Parsed Data"}

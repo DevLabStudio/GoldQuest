@@ -1,3 +1,4 @@
+
 'use client'; // This module interacts with localStorage
 
 import React from 'react'; // Import React for JSX types
@@ -81,9 +82,9 @@ async function saveCategories(categories: Category[]): Promise<void> {
 }
 
 /**
- * Adds a new category.
+ * Adds a new category. If category name already exists (case-insensitive), returns the existing category.
  * @param categoryName The name of the category to add.
- * @returns A promise resolving to the newly created Category object.
+ * @returns A promise resolving to the newly created or existing Category object.
  */
 export async function addCategory(categoryName: string): Promise<Category> {
   if (!categoryName || typeof categoryName !== 'string' || categoryName.trim().length === 0) {
@@ -93,8 +94,11 @@ export async function addCategory(categoryName: string): Promise<Category> {
   const normalizedName = categoryName.trim();
 
   // Check for duplicates (case-insensitive)
-  if (currentCategories.some(cat => cat.name.toLowerCase() === normalizedName.toLowerCase())) {
-    throw new Error(`Category "${normalizedName}" already exists.`);
+  const existingCategory = currentCategories.find(cat => cat.name.toLowerCase() === normalizedName.toLowerCase());
+  if (existingCategory) {
+     console.log(`Category "${normalizedName}" already exists. Returning existing.`);
+     return existingCategory; // Return the existing category if found
+    // throw new Error(`Category "${normalizedName}" already exists.`);
   }
 
   const newCategory: Category = {
