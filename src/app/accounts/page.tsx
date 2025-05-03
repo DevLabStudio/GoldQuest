@@ -5,14 +5,17 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account } from "@/services/account-sync";
-import { PlusCircle, Edit, Trash2 } from "lucide-react";
+import { PlusCircle, Edit, Trash2, MoreHorizontal, Check } from "lucide-react"; // Added MoreHorizontal, Check
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"; // Added DropdownMenu components
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"; // Added Table components
 import AddAccountForm from '@/components/accounts/add-account-form';
-import EditAccountForm from '@/components/accounts/edit-account-form'; // Import the new edit form
+import EditAccountForm from '@/components/accounts/edit-account-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
+import { format } from 'date-fns'; // For formatting placeholder date
 
 
 export default function AccountsPage() {
@@ -20,8 +23,8 @@ export default function AccountsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); // State for edit dialog
-  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null); // State for the account being edited
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const { toast } = useToast();
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
 
@@ -75,7 +78,7 @@ export default function AccountsPage() {
      return () => {
        window.removeEventListener('storage', handleStorageChange);
      };
-  }, []); // Remove toast from dependency array as it doesn't change
+  }, []);
 
   const handleAccountAdded = async (newAccountData: Omit<Account, 'id'>) => {
     try {
@@ -99,9 +102,9 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      await fetchAccountsData(); // Refetch to update the list
-      setIsEditDialogOpen(false); // Close the edit dialog
-      setSelectedAccount(null); // Clear the selected account
+      await fetchAccountsData();
+      setIsEditDialogOpen(false);
+      setSelectedAccount(null);
       toast({
         title: "Success",
         description: `Account "${updatedAccountData.name}" updated successfully.`,
@@ -123,7 +126,6 @@ export default function AccountsPage() {
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,
-            // variant: "destructive", // Can make this default for less alarm
         });
     } catch (err) {
         console.error("Failed to delete account:", err);
@@ -144,12 +146,13 @@ export default function AccountsPage() {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Accounts</h1>
+        <h1 className="text-3xl font-bold">Asset accounts</h1>
         {/* Add Account Dialog */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add New Account
+             {/* Updated Button Style */}
+            <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+              <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
             </Button>
           </DialogTrigger>
           <DialogContent className="sm:max-w-[425px]">
@@ -170,93 +173,153 @@ export default function AccountsPage() {
           </div>
        )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Your Accounts</CardTitle>
-          <CardDescription>
-             View and manage your manually added accounts. Balances shown in original currency, with conversions to {preferredCurrency} below.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-             <div className="space-y-4">
-               {[...Array(2)].map((_, i) => (
-                 <div key={i} className="flex flex-col md:flex-row justify-between items-start md:items-center border p-4 rounded-lg shadow-sm">
-                   <div className="mb-2 md:mb-0 w-full md:w-1/2">
-                     <Skeleton className="h-6 w-3/4 mb-1" />
-                     <Skeleton className="h-4 w-1/2" />
-                   </div>
-                   <div className="flex flex-col items-end w-full md:w-auto">
-                     <Skeleton className="h-8 w-24 mb-1" />
-                     <Skeleton className="h-3 w-20" /> {/* Placeholder for original balance */}
-                     <Skeleton className="h-3 w-16 mt-1" /> {/* Placeholder for converted balance */}
-                     <div className="mt-2 space-x-2">
-                        <Skeleton className="h-8 w-16 inline-block" />
-                        <Skeleton className="h-8 w-16 inline-block" />
-                     </div>
-                   </div>
-                 </div>
-               ))}
-            </div>
-          ) : accounts.length > 0 ? (
-            <ul className="space-y-4">
-              {accounts.map((account) => (
-                <li key={account.id} className="flex flex-col md:flex-row justify-between items-start md:items-center border p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
-                  <div className="mb-2 md:mb-0">
-                    <p className="font-semibold text-lg">{account.name}</p>
-                    <p className="text-sm text-muted-foreground capitalize">{account.bankName || 'N/A'} - {account.type} ({account.currency})</p>
-                  </div>
-                  <div className="flex flex-col items-end">
-                     {/* Display original balance prominently */}
-                     <p className="font-bold text-xl text-primary">{formatCurrency(account.balance, account.currency, undefined, false)}</p>
-                     <p className="text-xs text-muted-foreground">Original Balance</p>
-                     {/* Display converted balance less prominently if different from original */}
-                     {account.currency !== preferredCurrency && (
-                         <p className="text-xs text-muted-foreground mt-1">
-                             (≈ {formatCurrency(account.balance, account.currency)})
-                         </p>
-                     )}
-                      <div className="mt-2 space-x-2">
-                          {/* Enable Edit Button and trigger the dialog */}
-                          <Button variant="outline" size="sm" onClick={() => openEditDialog(account)}>
-                              <Edit className="mr-1 h-3 w-3" /> Edit
+        {/* Table Layout */}
+        <Card>
+          <CardHeader className="sr-only"> {/* Hide header visually, but keep for structure */}
+            <CardTitle>Your Accounts</CardTitle>
+            <CardDescription>
+              View and manage your manually added accounts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Role</TableHead>
+                  <TableHead>Account number</TableHead>
+                  <TableHead>Current balance</TableHead>
+                  <TableHead>Is active?</TableHead>
+                  <TableHead>Last activity</TableHead>
+                  <TableHead>Balance difference</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {isLoading ? (
+                  // Skeleton rows
+                  [...Array(3)].map((_, i) => (
+                    <TableRow key={`skeleton-${i}`}>
+                      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-28" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-5 rounded-full" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                      <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
+                    </TableRow>
+                  ))
+                ) : accounts.length > 0 ? (
+                  accounts.map((account) => (
+                    <TableRow key={account.id} className="hover:bg-muted/50">
+                      <TableCell className="font-medium">{account.name}</TableCell>
+                      <TableCell className="text-muted-foreground capitalize">{account.type}</TableCell>
+                      <TableCell className="text-muted-foreground">{account.bankName || 'N/A'}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-primary">
+                            {formatCurrency(account.balance, account.currency, undefined, false)}
+                          </span>
+                          {account.currency !== preferredCurrency && (
+                            <span className="text-xs text-muted-foreground mt-1">
+                                (≈ {formatCurrency(account.balance, account.currency)})
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+                       <TableCell className="text-center">
+                           {/* Placeholder for 'Is active?' - Assuming all are active */}
+                           <Check className="h-4 w-4 text-green-500" />
+                       </TableCell>
+                       <TableCell className="text-muted-foreground">
+                           {/* Placeholder for 'Last activity' */}
+                           {format(new Date(), 'PP')} {/* Example: Using current date */}
+                       </TableCell>
+                       <TableCell className="text-muted-foreground">
+                           {/* Placeholder for 'Balance difference' */}
+                           {formatCurrency(0, account.currency)} {/* Example: Zero difference */}
+                       </TableCell>
+                      <TableCell className="text-right">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                              <span className="sr-only">Open menu</span>
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openEditDialog(account)}>
+                              <Edit className="mr-2 h-4 w-4" />
+                              <span>Edit</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => handleDeleteAccount(account.id)}
+                              className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              <span>Delete</span>
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  // Empty state row
+                  <TableRow>
+                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                      No accounts added yet.
+                       <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                         <DialogTrigger asChild>
+                            <Button variant="link" className="ml-2 px-0 h-auto text-primary">
+                                Add your first account
+                            </Button>
+                          </DialogTrigger>
+                         <DialogContent className="sm:max-w-[425px]">
+                            <DialogHeader>
+                              <DialogTitle>Add New Account</DialogTitle>
+                              <DialogDescription>
+                                Enter the details of your new financial account.
+                              </DialogDescription>
+                            </DialogHeader>
+                            <AddAccountForm onAccountAdded={handleAccountAdded} />
+                         </DialogContent>
+                       </Dialog>
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </CardContent>
+           {/* Add button at the bottom if needed, matching the image */}
+           {!isLoading && accounts.length > 0 && (
+              <CardContent className="pt-4 border-t">
+                  <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                      <DialogTrigger asChild>
+                          <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                              <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
                           </Button>
-                          <Button variant="destructive" size="sm" onClick={() => handleDeleteAccount(account.id)}>
-                              <Trash2 className="mr-1 h-3 w-3" /> Delete
-                          </Button>
-                      </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <div className="text-center py-10">
-              <p className="text-muted-foreground mb-4">No accounts added yet.</p>
-               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-                 <DialogTrigger asChild>
-                    <Button>
-                        <PlusCircle className="mr-2 h-4 w-4" /> Add Your First Account
-                    </Button>
-                  </DialogTrigger>
-                 <DialogContent className="sm:max-w-[425px]">
-                    <DialogHeader>
-                      <DialogTitle>Add New Account</DialogTitle>
-                      <DialogDescription>
-                        Enter the details of your new financial account.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <AddAccountForm onAccountAdded={handleAccountAdded} />
-                 </DialogContent>
-               </Dialog>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px]">
+                          <DialogHeader>
+                              <DialogTitle>Add New Account</DialogTitle>
+                              <DialogDescription>
+                                  Enter the details of your new financial account.
+                              </DialogDescription>
+                          </DialogHeader>
+                          <AddAccountForm onAccountAdded={handleAccountAdded} />
+                      </DialogContent>
+                  </Dialog>
+              </CardContent>
+            )}
+        </Card>
 
-       {/* Edit Account Dialog */}
+
+       {/* Edit Account Dialog (remains the same) */}
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
-          if (!open) setSelectedAccount(null); // Clear selection when closing
+          if (!open) setSelectedAccount(null);
       }}>
           <DialogContent className="sm:max-w-[425px]">
               <DialogHeader>
@@ -265,21 +328,12 @@ export default function AccountsPage() {
                       Modify the details of your account.
                   </DialogDescription>
               </DialogHeader>
-              {/* Render EditAccountForm only if an account is selected */}
               {selectedAccount && (
                   <EditAccountForm
                       account={selectedAccount}
                       onAccountUpdated={handleAccountUpdated}
                   />
               )}
-              {/* Optional: Add a footer with a close button if not handled by the form */}
-               {/*
-               <DialogFooter>
-                   <DialogClose asChild>
-                        <Button variant="outline">Cancel</Button>
-                   </DialogClose>
-              </DialogFooter>
-               */}
           </DialogContent>
       </Dialog>
 

@@ -1,4 +1,6 @@
 
+import { format } from 'date-fns'; // Import date-fns for formatting
+
 /**
  * Represents a financial account.
  */
@@ -12,7 +14,7 @@ export interface Account {
    */
   name: string;
   /**
-   * The type of the account (e.g., checking, savings, credit card).
+   * The type of the account (e.g., checking, savings, credit card). Often used as 'Role'.
    */
   type: string;
   /**
@@ -24,9 +26,21 @@ export interface Account {
    */
   currency: string;
   /**
-   * The name of the bank associated with the account. Optional for flexibility.
+   * The name of the bank or institution, or account number/identifier.
    */
-  bankName?: string;
+  bankName?: string; // Could represent Account Number in the table
+   /**
+   * Placeholder: Indicates if the account is currently active.
+   */
+  isActive?: boolean;
+  /**
+   * Placeholder: The date of the last recorded activity for the account.
+   */
+  lastActivity?: string; // Store as ISO string or timestamp, format on display
+  /**
+   * Placeholder: The difference in balance since a certain point (e.g., last statement).
+   */
+  balanceDifference?: number;
 }
 
 
@@ -37,80 +51,78 @@ export interface Account {
  * @returns A promise that resolves to an array of Account objects.
  */
 export async function getAccounts(): Promise<Account[]> {
-  // Simulate fetching from storage (e.g., localStorage or a database)
-  // For now, return a static example list.
    console.log("Simulating fetching accounts...");
-   // Introduce a small delay to simulate network latency
    await new Promise(resolve => setTimeout(resolve, 500));
 
-   // Retrieve existing accounts from localStorage or default to mock data
    const storedAccounts = localStorage.getItem('userAccounts');
    let accounts: Account[];
 
    if (storedAccounts) {
      try {
-       accounts = JSON.parse(storedAccounts);
+       // Parse and ensure placeholder fields exist
+       const parsedAccounts = JSON.parse(storedAccounts) as Partial<Account>[];
+        accounts = parsedAccounts.map(acc => ({
+            ...getDefaultAccountValues(), // Apply defaults first
+            ...acc, // Override with stored values
+        })) as Account[]; // Assert type after mapping
      } catch (e) {
        console.error("Failed to parse stored accounts, using default.", e);
        accounts = getDefaultAccounts();
-       localStorage.setItem('userAccounts', JSON.stringify(accounts)); // Store defaults if parse failed
+       localStorage.setItem('userAccounts', JSON.stringify(accounts));
      }
    } else {
      accounts = getDefaultAccounts();
-     localStorage.setItem('userAccounts', JSON.stringify(accounts)); // Store default if nothing exists
+     localStorage.setItem('userAccounts', JSON.stringify(accounts));
    }
 
    return accounts;
 }
 
+// Helper function to provide default values for potentially missing fields
+function getDefaultAccountValues(): Partial<Account> {
+    return {
+        isActive: true, // Assume active by default
+        lastActivity: new Date().toISOString(), // Default to now
+        balanceDifference: 0, // Default to zero difference
+    };
+}
+
+
 function getDefaultAccounts(): Account[] {
-  // Keep default data minimal or empty to encourage user input
+  // Return an empty array or minimal default accounts
   return [
-    // Example structure - remove or keep as needed
+     // Example - can be removed
     /*
-    {
-      id: 'manual-123',
-      name: 'My Main Checking',
-      type: 'checking',
-      balance: 1572.50,
-      currency: 'BRL',
-      bankName: 'Itaú Unibanco',
-    },
-    {
-      id: 'manual-456',
-      name: 'Emergency Fund',
-      type: 'savings',
-      balance: 8350.00,
-      currency: 'BRL',
-      bankName: 'Nubank',
-    },
      {
-      id: 'manual-789',
-      name: 'Travel Card USD',
-      type: 'credit card',
-      balance: -450.80,
-      currency: 'USD',
-      bankName: 'Revolut (Europe/Global)',
-    },
-    */
+        id: 'manual-123',
+        name: 'Nubank',
+        type: 'Default asset account', // Role
+        balance: 2025.46,
+        currency: 'BRL',
+        bankName: '16981076797', // Account number
+        isActive: true,
+        lastActivity: new Date(2025, 3, 30).toISOString(), // April 30th, 2025
+        balanceDifference: 2025.46,
+      },
+      */
   ];
 }
 
 
-// Add functions to simulate adding/deleting accounts using localStorage
-
 /**
  * Simulates adding a new account to localStorage.
+ * Adds default values for placeholder fields.
  * @param accountData - The data for the new account (without ID).
  * @returns A promise resolving to the newly created account with an ID.
  */
 export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Account> {
     console.log("Simulating adding account:", accountData);
-    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     const newAccount: Account = {
-        ...accountData,
-        id: `manual-${Math.random().toString(36).substring(2, 9)}`, // Generate a mock ID
+        ...getDefaultAccountValues(), // Add default placeholders
+        ...accountData, // User provided data overrides defaults
+        id: `manual-${Math.random().toString(36).substring(2, 9)}`,
     };
 
     const currentAccounts = await getAccounts();
@@ -123,12 +135,13 @@ export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Acco
 
 /**
  * Simulates updating an existing account in localStorage.
+ * Ensures placeholder fields are preserved or updated.
  * @param updatedAccount - The account object with updated details. Must include the correct ID.
  * @returns A promise resolving to the updated account.
  */
 export async function updateAccount(updatedAccount: Account): Promise<Account> {
     console.log("Simulating updating account:", updatedAccount.id);
-    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     const currentAccounts = await getAccounts();
     const accountIndex = currentAccounts.findIndex(acc => acc.id === updatedAccount.id);
@@ -137,13 +150,20 @@ export async function updateAccount(updatedAccount: Account): Promise<Account> {
         throw new Error(`Account with ID ${updatedAccount.id} not found.`);
     }
 
+    // Ensure default values are present if not provided in update
+    const accountWithDefaults = {
+        ...getDefaultAccountValues(),
+        ...currentAccounts[accountIndex], // Get existing values including placeholders
+        ...updatedAccount, // Apply updates
+    };
+
     const updatedAccounts = [...currentAccounts];
-    updatedAccounts[accountIndex] = updatedAccount; // Replace the old account with the updated one
+    updatedAccounts[accountIndex] = accountWithDefaults;
 
     localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
 
-    console.log("Account updated (simulated):", updatedAccount);
-    return updatedAccount;
+    console.log("Account updated (simulated):", accountWithDefaults);
+    return accountWithDefaults;
 }
 
 
@@ -154,7 +174,7 @@ export async function updateAccount(updatedAccount: Account): Promise<Account> {
  */
 export async function deleteAccount(accountId: string): Promise<void> {
     console.log("Simulating deleting account:", accountId);
-    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+    await new Promise(resolve => setTimeout(resolve, 300));
 
     const currentAccounts = await getAccounts();
     const updatedAccounts = currentAccounts.filter(acc => acc.id !== accountId);
