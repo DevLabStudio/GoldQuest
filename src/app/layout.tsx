@@ -31,6 +31,38 @@ export const metadata: Metadata = {
   description: 'Simple personal finance management',
 };
 
+// SVG Logo Component
+const LogoIcon = () => (
+  <svg
+    width="24"
+    height="24"
+    viewBox="0 0 100 100"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+    className="mr-2 text-primary" // Use primary color from theme
+  >
+    {/* Thin grid lines */}
+    <path d="M50 10 L75 25 L75 75 L50 90 L25 75 L25 25 Z" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
+    <path d="M25 25 L75 75 M75 25 L25 75 M50 10 L50 90 M25 50 L75 50" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
+    <path d="M25 25 L50 50 L75 25 L50 10 Z" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
+    <path d="M25 25 L25 75 L50 90 L75 75 L75 25 M50 50 L25 75 M50 50 L75 75" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
+
+    {/* Thick 'G' Lines */}
+    <path d="M75 25 A 30 30 0 0 0 25 25 L 25 75 L 50 90 L 75 75 V 50 H 50 V 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+
+    {/* Circles */}
+    <circle cx="50" cy="10" r="5" fill="currentColor"/>
+    <circle cx="75" cy="25" r="5" fill="currentColor"/>
+    <circle cx="75" cy="75" r="5" fill="currentColor"/>
+    <circle cx="50" cy="90" r="5" fill="currentColor"/>
+    <circle cx="25" cy="75" r="5" fill="currentColor"/>
+    <circle cx="25" cy="25" r="5" fill="currentColor"/>
+    <circle cx="50" cy="50" r="5" fill="currentColor"/>
+
+  </svg>
+);
+
+
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -39,7 +71,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body
-        className={cn(
+      className={cn(
           `${oxanium.variable} font-sans antialiased`, // Apply Oxanium font variable and set as default sans font
           'min-h-screen flex flex-col'
         )}
@@ -47,7 +79,11 @@ export default function RootLayout({
         <SidebarProvider>
           <Sidebar side="left" variant="inset" collapsible="icon">
             <SidebarHeader className="items-center justify-between">
-              <span className="text-lg font-semibold text-primary">The Golden Game</span>
+              {/* Wrap logo and text in a flex container */}
+              <div className="flex items-center">
+                 <LogoIcon />
+                 <span className="text-lg font-semibold text-primary">The Golden Game</span>
+              </div>
               <SidebarTrigger className="md:hidden" />
             </SidebarHeader>
             <SidebarContent>
