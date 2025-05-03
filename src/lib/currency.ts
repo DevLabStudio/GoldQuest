@@ -1,10 +1,12 @@
 
+
 import { getUserPreferences } from './preferences'; // Import preference getter
 
 // --- Static Exchange Rates (Relative to BRL for simplicity) ---
+// Rates represent: 1 unit of the KEY currency = VALUE units of BRL
 // In a real app, fetch these from an API (e.g., Open Exchange Rates, Fixer.io)
 const exchangeRates: { [key: string]: number } = {
-  BRL: 1,
+  BRL: 1,    // 1 BRL = 1 BRL (Base)
   USD: 5.30, // 1 USD = 5.30 BRL (Example rate)
   EUR: 5.70, // 1 EUR = 5.70 BRL (Example rate)
   GBP: 6.50, // 1 GBP = 6.50 BRL (Example rate)
@@ -15,12 +17,13 @@ export const supportedCurrencies = Object.keys(exchangeRates);
 
 /**
  * Converts an amount from a source currency to a target currency using static rates.
+ * Assumes exchangeRates are defined as 1 unit of KEY currency = VALUE units of BASE currency (BRL).
  * @param amount The amount to convert.
  * @param sourceCurrency The currency code of the original amount (e.g., 'USD').
  * @param targetCurrency The currency code to convert to (e.g., 'BRL').
  * @returns The converted amount in the target currency, or the original amount if conversion fails.
  */
-function convertCurrency(amount: number, sourceCurrency: string, targetCurrency: string): number {
+export function convertCurrency(amount: number, sourceCurrency: string, targetCurrency: string): number {
   const sourceUpper = sourceCurrency.toUpperCase();
   const targetUpper = targetCurrency.toUpperCase();
 
@@ -28,19 +31,21 @@ function convertCurrency(amount: number, sourceCurrency: string, targetCurrency:
       return amount; // No conversion needed
   }
 
-  const sourceRate = exchangeRates[sourceUpper];
-  const targetRate = exchangeRates[targetUpper];
+  const sourceRate = exchangeRates[sourceUpper]; // Rate: 1 SOURCE = sourceRate BASE (BRL)
+  const targetRate = exchangeRates[targetUpper]; // Rate: 1 TARGET = targetRate BASE (BRL)
 
   if (!sourceRate || !targetRate) {
     console.warn(`Cannot convert currency: Invalid source (${sourceCurrency}) or target (${targetCurrency}) currency.`);
     return amount; // Return original amount if rates are missing
   }
 
-  // Convert source amount to base currency (BRL in this case)
-  const amountInBase = amount / sourceRate; // Correction: Divide by source rate to get to base
+  // 1. Convert source amount to base currency (BRL)
+  // Example: 100 USD to BRL -> 100 * 5.30 = 530 BRL
+  const amountInBase = amount * sourceRate;
 
-  // Convert base amount to target currency
-  const convertedAmount = amountInBase * targetRate; // Correction: Multiply by target rate
+  // 2. Convert base amount (BRL) to target currency
+  // Example: 530 BRL to EUR -> 530 / 5.70 = 92.98 EUR
+  const convertedAmount = amountInBase / targetRate;
 
   return convertedAmount;
 }
@@ -83,12 +88,14 @@ export function formatCurrency(
     let displayCurrency = accountCurrency.toUpperCase();
     let displayLocale = locale;
 
-    if (convertToPreferred) {
+    if (convertToPreferred && typeof window !== 'undefined') { // Ensure conversion only happens client-side
         const targetCurrency = preferredCurrency || accountCurrency; // Fallback if preference somehow missing
-        displayAmount = convertCurrency(amount, accountCurrency, targetCurrency);
+        if (accountCurrency.toUpperCase() !== targetCurrency.toUpperCase()) {
+             displayAmount = convertCurrency(amount, accountCurrency, targetCurrency);
+        }
         displayCurrency = targetCurrency.toUpperCase();
     } else {
-        // Keep original amount and currency if convertToPreferred is false
+        // Keep original amount and currency if convertToPreferred is false or on server
         displayAmount = amount;
         displayCurrency = accountCurrency.toUpperCase();
     }
@@ -103,6 +110,8 @@ export function formatCurrency(
         return new Intl.NumberFormat(displayLocale, {
             style: 'currency',
             currency: displayCurrency,
+            // minimumFractionDigits: 2, // Ensure 2 decimal places
+            // maximumFractionDigits: 2, // Ensure 2 decimal places
         }).format(displayAmount);
     } catch (error) {
         console.error(`Error formatting currency: Amount=${displayAmount}, Currency=${displayCurrency}, Locale=${displayLocale}`, error);
@@ -131,3 +140,6 @@ export function getCurrencySymbol(currencyCode: string): string {
 
 // You might add functions here later to fetch real-time exchange rates
 // async function getRealTimeRates() { ... }
+
+// Export convertCurrency for potential use elsewhere (like dashboard total calculation)
+export { convertCurrency };

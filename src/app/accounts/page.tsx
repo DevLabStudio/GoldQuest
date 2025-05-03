@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -13,7 +14,7 @@ import AddAccountForm from '@/components/accounts/add-account-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency'; // Use the corrected formatCurrency
 import { getUserPreferences } from '@/lib/preferences';
 import { format } from 'date-fns'; // For formatting placeholder date
 
@@ -29,6 +30,7 @@ export default function AccountsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
 
    useEffect(() => {
+    // Client-side only check for preferences
     if (typeof window !== 'undefined') {
         const prefs = getUserPreferences();
         setPreferredCurrency(prefs.preferredCurrency);
@@ -37,6 +39,7 @@ export default function AccountsPage() {
 
 
   const fetchAccountsData = async () => {
+     // Client-side only check for local storage access
      if (typeof window === 'undefined') {
          setIsLoading(false);
          setError("Account data can only be loaded on the client.");
@@ -66,19 +69,26 @@ export default function AccountsPage() {
 
   useEffect(() => {
     fetchAccountsData();
+     // Client-side only listener
      const handleStorageChange = (event: StorageEvent) => {
         if (event.key === 'userAccounts' || event.key === 'userPreferences') {
             console.log("Storage changed, refetching data...");
-             const prefs = getUserPreferences();
-             setPreferredCurrency(prefs.preferredCurrency);
+             if (typeof window !== 'undefined') { // Check again inside listener
+                 const prefs = getUserPreferences();
+                 setPreferredCurrency(prefs.preferredCurrency);
+             }
              fetchAccountsData();
         }
      };
-     window.addEventListener('storage', handleStorageChange);
+     if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorageChange);
+     }
      return () => {
-       window.removeEventListener('storage', handleStorageChange);
+       if (typeof window !== 'undefined') {
+         window.removeEventListener('storage', handleStorageChange);
+       }
      };
-  }, []);
+  }, []); // Empty dependency array runs once on mount
 
   const handleAccountAdded = async (newAccountData: Omit<Account, 'id'>) => {
     try {
@@ -150,8 +160,8 @@ export default function AccountsPage() {
         {/* Add Account Dialog */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-             {/* Updated Button Style - Removed green classes */}
-            <Button variant="default"> {/* Rely on theme primary color */}
+             {/* Updated Button Style - Relies on theme primary color */}
+            <Button variant="default">
               <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
             </Button>
           </DialogTrigger>
@@ -219,11 +229,14 @@ export default function AccountsPage() {
                       <TableCell>
                         <div className="flex flex-col">
                           <span className="font-semibold text-primary">
+                            {/* Format in account's original currency */}
                             {formatCurrency(account.balance, account.currency, undefined, false)}
                           </span>
+                          {/* Conditionally show converted balance */}
                           {account.currency !== preferredCurrency && (
                             <span className="text-xs text-muted-foreground mt-1">
-                                (≈ {formatCurrency(account.balance, account.currency)})
+                                {/* Format and convert to preferred currency */}
+                                (≈ {formatCurrency(account.balance, account.currency, undefined, true)})
                             </span>
                           )}
                         </div>
@@ -234,8 +247,8 @@ export default function AccountsPage() {
                            {format(new Date(account.lastActivity || Date.now()), 'PP')} {/* Format existing date or fallback */}
                        </TableCell>
                        <TableCell className="text-muted-foreground">
-                           {/* Placeholder for 'Balance difference' */}
-                           {formatCurrency(account.balanceDifference ?? 0, account.currency)} {/* Format existing diff or fallback */}
+                           {/* Placeholder for 'Balance difference', format in account's currency */}
+                           {formatCurrency(account.balanceDifference ?? 0, account.currency, undefined, false)}
                        </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -295,8 +308,8 @@ export default function AccountsPage() {
               <CardContent className="pt-4 border-t">
                   <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                       <DialogTrigger asChild>
-                           {/* Updated Button Style - Removed green classes */}
-                          <Button variant="default" size="sm"> {/* Rely on theme primary color */}
+                           {/* Updated Button Style - Relies on theme primary color */}
+                          <Button variant="default" size="sm">
                               <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
                           </Button>
                       </DialogTrigger>

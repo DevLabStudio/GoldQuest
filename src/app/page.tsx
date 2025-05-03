@@ -1,4 +1,5 @@
 
+
 'use client'; // Make this a Client Component
 
 import { useState, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { getAccounts, type Account } from "@/services/account-sync";
 import { DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import SpendingChart from "@/components/dashboard/spending-chart";
-import { formatCurrency } from '@/lib/currency'; // Use the new currency formatter
+import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use the new currency formatter and corrected converter
 import { getUserPreferences } from '@/lib/preferences'; // Get user preferences
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
@@ -39,7 +40,8 @@ export default function Dashboard() {
   const [error, setError] = useState<string | null>(null);
 
   // Placeholder data for spending trends (can remain static for now)
-  const monthlyIncome = 5000; // Assume placeholder is in BRL for simplicity, conversion needed if user pref differs
+  const placeholderCurrency = 'BRL'; // Assume placeholder is in BRL for simplicity, conversion needed if user pref differs
+  const monthlyIncome = 5000;
   const monthlyExpenses = 3500; // Assume placeholder is in BRL
   const savingsRate = monthlyIncome > 0 ? ((monthlyIncome - monthlyExpenses) / monthlyIncome) * 100 : 0;
   const spendingData = [
@@ -54,29 +56,30 @@ export default function Dashboard() {
   // Fetch data client-side
   useEffect(() => {
     const fetchData = async () => {
+       // Client-side only checks
+       if (typeof window === 'undefined') {
+         setIsLoading(false);
+         setError("Dashboard data can only be loaded on the client.");
+         return;
+       }
+
       setIsLoading(true);
       setError(null);
       try {
         // 1. Get Preferences (Client-side safe)
         const prefs = getUserPreferences();
-        setPreferredCurrency(prefs.preferredCurrency);
+        const currentPreferredCurrency = prefs.preferredCurrency;
+        setPreferredCurrency(currentPreferredCurrency);
 
         // 2. Fetch Accounts (Client-side safe as it uses localStorage)
         const fetchedAccounts = await getAccounts();
         setAccounts(fetchedAccounts);
 
         // 3. Calculate Total Balance (using the fetched preferredCurrency)
-        // Note: formatCurrency now handles conversion based on stored preference
         const total = fetchedAccounts.reduce((sum, account) => {
-             // Need the raw numeric value converted to preferred currency
-             // formatCurrency returns a string, let's adapt or use a dedicated converter
-             // For now, we assume formatCurrency could expose a conversion utility or we add one
-            const numericValueInPreferred = parseFloat(
-                formatCurrency(account.balance, account.currency) // formatCurrency handles the conversion
-                .replace(/[^0-9,-]+/g,"") // Remove symbols/letters
-                .replace(",", ".") // Handle decimal comma
-            );
-           return sum + (isNaN(numericValueInPreferred) ? 0 : numericValueInPreferred);
+             // Explicitly use the imported convertCurrency function
+            const convertedValue = convertCurrency(account.balance, account.currency, currentPreferredCurrency);
+            return sum + (isNaN(convertedValue) ? 0 : convertedValue); // Add safety check for NaN
         }, 0);
         setTotalBalanceInPreferred(total);
 
@@ -90,21 +93,35 @@ export default function Dashboard() {
 
     fetchData();
 
-    // Add listener for storage changes (preferences or accounts)
+    // Add listener for storage changes (preferences or accounts) - Client-side only
      const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'userPreferences' || event.key === 'userAccounts') {
+        if (typeof window !== 'undefined' && (event.key === 'userPreferences' || event.key === 'userAccounts')) {
             console.log("Storage changed, refetching dashboard data...");
             fetchData(); // Refetch all data on change
         }
      };
-     window.addEventListener('storage', handleStorageChange);
+     if (typeof window !== 'undefined') {
+       window.addEventListener('storage', handleStorageChange);
+     }
 
      // Cleanup listener
      return () => {
-       window.removeEventListener('storage', handleStorageChange);
+       if (typeof window !== 'undefined') {
+         window.removeEventListener('storage', handleStorageChange);
+       }
      };
 
   }, []); // Empty dependency array ensures this runs once on mount and on storage change
+
+    // Convert placeholder income/expenses to preferred currency
+    const convertedMonthlyIncome = typeof window !== 'undefined' ? convertCurrency(monthlyIncome, placeholderCurrency, preferredCurrency) : monthlyIncome;
+    const convertedMonthlyExpenses = typeof window !== 'undefined' ? convertCurrency(monthlyExpenses, placeholderCurrency, preferredCurrency) : monthlyExpenses;
+    // Convert spending data to preferred currency
+    const convertedSpendingData = typeof window !== 'undefined' ? spendingData.map(item => ({
+        ...item,
+        amount: convertCurrency(item.amount, placeholderCurrency, preferredCurrency)
+    })) : spendingData;
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -141,7 +158,6 @@ export default function Dashboard() {
         {/* Monthly Income Card */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            {/* TODO: Convert placeholder income to preferred currency */}
             <CardTitle className="text-sm font-medium">Monthly Income ({preferredCurrency} - Placeholder)</CardTitle>
             <TrendingUp className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -153,8 +169,8 @@ export default function Dashboard() {
                </>
              ) : (
                 <>
-                    {/* Format placeholder income */}
-                    <div className="text-2xl font-bold">{formatTotalBalance(monthlyIncome, preferredCurrency)}</div>
+                    {/* Format converted placeholder income */}
+                    <div className="text-2xl font-bold">{formatTotalBalance(convertedMonthlyIncome, preferredCurrency)}</div>
                     <p className="text-xs text-muted-foreground">+2.1% from last month (example)</p>
                 </>
              )}
@@ -164,7 +180,6 @@ export default function Dashboard() {
         {/* Monthly Expenses Card */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            {/* TODO: Convert placeholder expenses to preferred currency */}
             <CardTitle className="text-sm font-medium">Monthly Expenses ({preferredCurrency} - Placeholder)</CardTitle>
             <TrendingDown className="h-4 w-4 text-muted-foreground" />
           </CardHeader>
@@ -176,8 +191,8 @@ export default function Dashboard() {
                </>
              ) : (
                  <>
-                    {/* Format placeholder expenses */}
-                    <div className="text-2xl font-bold">{formatTotalBalance(monthlyExpenses, preferredCurrency)}</div>
+                    {/* Format converted placeholder expenses */}
+                    <div className="text-2xl font-bold">{formatTotalBalance(convertedMonthlyExpenses, preferredCurrency)}</div>
                     <p className="text-xs text-muted-foreground">-5.3% from last month (example)</p>
                  </>
              )}
@@ -234,8 +249,8 @@ export default function Dashboard() {
                        <p className="font-medium">{account.name}</p>
                        <p className="text-sm text-muted-foreground capitalize">{account.bankName || account.type} ({account.currency})</p>
                      </div>
-                     {/* formatCurrency handles conversion */}
-                     <p className="font-semibold">{formatCurrency(account.balance, account.currency)}</p>
+                     {/* Format balance in preferred currency */}
+                     <p className="font-semibold">{formatCurrency(account.balance, account.currency, undefined, true)}</p>
                    </li>
                  ))}
                </ul>
@@ -250,7 +265,6 @@ export default function Dashboard() {
        <div className="mt-8">
            <Card>
                <CardHeader>
-                    {/* TODO: Convert chart data to preferred currency */}
                    <CardTitle>Spending Trends ({preferredCurrency} - Placeholder)</CardTitle>
                    <CardDescription>Monthly spending by category.</CardDescription>
                </CardHeader>
@@ -259,7 +273,7 @@ export default function Dashboard() {
                      <Skeleton className="h-full w-full" />
                  ) : (
                     /* Pass preferred currency for formatting inside the chart */
-                    <SpendingChart data={spendingData} currency={preferredCurrency} />
+                    <SpendingChart data={convertedSpendingData} currency={preferredCurrency} />
                  )}
                </CardContent>
            </Card>
@@ -268,4 +282,3 @@ export default function Dashboard() {
   );
 }
 
-    

@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -53,7 +54,7 @@ export default function TransactionsPage() {
   const [error, setError] = useState<string | null>(null);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default preference
 
-  // Fetch preferences on mount
+  // Fetch preferences on mount - Client-side only
   useEffect(() => {
     if (typeof window !== 'undefined') {
         const prefs = getUserPreferences();
@@ -61,7 +62,7 @@ export default function TransactionsPage() {
     }
   }, []);
 
-  // Fetch Accounts Effect
+  // Fetch Accounts Effect - Client-side only access to localStorage
   useEffect(() => {
     let isMounted = true; // Flag to prevent state updates on unmounted component
     const fetchAccounts = async () => {
@@ -94,22 +95,26 @@ export default function TransactionsPage() {
     };
     fetchAccounts();
 
-     // Add storage listener for preference/account changes
+     // Add storage listener for preference/account changes - Client-side only
      const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'userAccounts' || event.key === 'userPreferences') {
+         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences')) {
              console.log("Storage changed, refetching data...");
              const prefs = getUserPreferences();
              if (isMounted) { // Check if component is still mounted
                  setPreferredCurrency(prefs.preferredCurrency);
                  fetchAccounts(); // Refetch accounts too, their balances/selection might change
              }
-        }
+         }
      };
-     window.addEventListener('storage', handleStorageChange);
+     if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorageChange);
+     }
 
      return () => {
          isMounted = false; // Cleanup function sets flag to false
-         window.removeEventListener('storage', handleStorageChange);
+         if (typeof window !== 'undefined') {
+            window.removeEventListener('storage', handleStorageChange);
+         }
      }
 
   }, [selectedAccountId]); // Re-run if selectedAccountId changes externally maybe?
@@ -118,6 +123,16 @@ export default function TransactionsPage() {
  useEffect(() => {
     let isMounted = true; // Component mount flag
     const fetchTransactions = async () => {
+      // Ensure this only runs client-side if localStorage is needed by getTransactions indirectly
+      if (typeof window === 'undefined') {
+        if (isMounted) {
+            setTransactions([]);
+            setIsLoadingTransactions(false);
+            // Optionally set an error or message indicating client-side required
+        }
+        return;
+      }
+
       const currentAccount = accounts.find(acc => acc.id === selectedAccountId);
       if (!selectedAccountId || !currentAccount) {
         if (isMounted) {
@@ -183,8 +198,9 @@ export default function TransactionsPage() {
             <SelectContent>
               {accounts.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
+                    {/* Display original balance first, then converted if different */}
                   {account.name} ({formatCurrency(account.balance, account.currency, undefined, false)}
-                  {account.currency !== preferredCurrency && ` / ${formatCurrency(account.balance, account.currency)}`})
+                  {account.currency !== preferredCurrency && ` / ${formatCurrency(account.balance, account.currency, undefined, true)}`})
                 </SelectItem>
               ))}
                {accounts.length === 0 && <SelectItem value="no-accounts" disabled>No accounts available</SelectItem>}
@@ -199,6 +215,7 @@ export default function TransactionsPage() {
           <CardTitle>Transaction History</CardTitle>
            <CardDescription>
                 {isLoadingAccounts && "Loading accounts..."}
+                {/* Update description to reflect display currency */}
                 {selectedAccount && `Showing transactions for: ${selectedAccount.name}. Amounts displayed in ${preferredCurrency}.`}
                 {!selectedAccount && !isLoadingAccounts && "Select an account to view transactions."}
            </CardDescription>
@@ -223,8 +240,8 @@ export default function TransactionsPage() {
               <TableBody>
                 {transactions.map((transaction) => {
                     const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                    // Format transaction amount based on the ACCOUNT's currency, converting to preferred
-                    const formattedAmount = formatCurrency(transaction.amount, selectedAccount.currency); // Default is convertToPreferred=true
+                    // Format transaction amount converting to preferred currency
+                    const formattedAmount = formatCurrency(transaction.amount, selectedAccount.currency, undefined, true); // Explicitly convert
                     return (
                         <TableRow key={transaction.id}>
                         <TableCell className="whitespace-nowrap">{formatDate(transaction.date)}</TableCell>
@@ -255,3 +272,4 @@ export default function TransactionsPage() {
     </div>
   );
 }
+

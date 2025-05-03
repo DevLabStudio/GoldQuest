@@ -1,4 +1,5 @@
 
+
 'use client'; // Make this a Client Component
 
 import { useState, useEffect } from 'react';
@@ -6,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { getAccounts, type Account } from "@/services/account-sync";
 import { DollarSign, TrendingUp, TrendingDown } from "lucide-react";
 import SpendingChart from "@/components/dashboard/spending-chart";
-import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use the new currency formatter and converter
+import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use the new currency formatter and corrected converter
 import { getUserPreferences } from '@/lib/preferences'; // Get user preferences
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
@@ -57,6 +58,13 @@ export default function Dashboard() {
   // Fetch data client-side
   useEffect(() => {
     const fetchData = async () => {
+      // Client-side only checks
+      if (typeof window === 'undefined') {
+        setIsLoading(false);
+        setError("Dashboard data can only be loaded on the client.");
+        return;
+      }
+
       setIsLoading(true);
       setError(null);
       try {
@@ -71,8 +79,9 @@ export default function Dashboard() {
 
         // 3. Calculate Total Balance (converted to preferredCurrency)
         const total = fetchedAccounts.reduce((sum, account) => {
+            // Explicitly use the imported convertCurrency function
             const convertedValue = convertCurrency(account.balance, account.currency, currentPreferredCurrency);
-            return sum + convertedValue;
+            return sum + (isNaN(convertedValue) ? 0 : convertedValue); // Add safety check for NaN
         }, 0);
         setTotalBalanceInPreferred(total);
 
@@ -86,30 +95,34 @@ export default function Dashboard() {
 
     fetchData();
 
-    // Add listener for storage changes (preferences or accounts)
+    // Add listener for storage changes (preferences or accounts) - Client-side only
      const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'userPreferences' || event.key === 'userAccounts') {
+        if (typeof window !== 'undefined' && (event.key === 'userPreferences' || event.key === 'userAccounts')) {
             console.log("Storage changed, refetching dashboard data...");
             fetchData(); // Refetch all data on change
         }
      };
-     window.addEventListener('storage', handleStorageChange);
+     if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorageChange);
+     }
 
      // Cleanup listener
      return () => {
-       window.removeEventListener('storage', handleStorageChange);
+       if (typeof window !== 'undefined') {
+         window.removeEventListener('storage', handleStorageChange);
+       }
      };
 
   }, []); // Empty dependency array ensures this runs once on mount and handles storage changes
 
   // Convert placeholder income/expenses to preferred currency
-  const convertedMonthlyIncome = convertCurrency(monthlyIncome, placeholderCurrency, preferredCurrency);
-  const convertedMonthlyExpenses = convertCurrency(monthlyExpenses, placeholderCurrency, preferredCurrency);
+  const convertedMonthlyIncome = typeof window !== 'undefined' ? convertCurrency(monthlyIncome, placeholderCurrency, preferredCurrency) : monthlyIncome;
+  const convertedMonthlyExpenses = typeof window !== 'undefined' ? convertCurrency(monthlyExpenses, placeholderCurrency, preferredCurrency) : monthlyExpenses;
   // Convert spending data to preferred currency
-  const convertedSpendingData = spendingData.map(item => ({
+  const convertedSpendingData = typeof window !== 'undefined' ? spendingData.map(item => ({
       ...item,
       amount: convertCurrency(item.amount, placeholderCurrency, preferredCurrency)
-  }));
+  })) : spendingData;
 
 
   return (
@@ -247,7 +260,8 @@ export default function Dashboard() {
                         {/* Converted Balance (if different) */}
                         {account.currency !== preferredCurrency && (
                             <p className="text-xs text-muted-foreground mt-1">
-                                (≈ {formatCurrency(account.balance, account.currency)})
+                                {/* Use convertToPreferred=true to show converted value */}
+                                (≈ {formatCurrency(account.balance, account.currency, undefined, true)})
                             </p>
                         )}
                      </div>
@@ -281,3 +295,4 @@ export default function Dashboard() {
     </div>
   );
 }
+
