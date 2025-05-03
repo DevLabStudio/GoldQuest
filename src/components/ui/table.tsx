@@ -51,12 +51,12 @@ const TableFooter = React.forwardRef<
 ))
 TableFooter.displayName = "TableFooter"
 
-// Removed comment from inside the opening tr tag to fix hydration issue
+// Removed potential whitespace inside the opening tr tag to fix hydration issue
 const TableRow = React.forwardRef<
   HTMLTableRowElement,
   React.HTMLAttributes<HTMLTableRowElement>
 >(({ className, ...props }, ref) => (
-  <tr
+  <tr // Ensure no leading/trailing spaces or newlines inside this JSX tag
     ref={ref}
     className={cn(
       "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
