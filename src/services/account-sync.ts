@@ -1,3 +1,4 @@
+
 /**
  * Represents a financial account.
  */
@@ -6,8 +7,8 @@ export interface Account {
    * The ID of the account.
    */
   id: string;
-  /**
-   * The name of the account.
+   /**
+   * The name/nickname of the account given by the user.
    */
   name: string;
   /**
@@ -18,28 +19,84 @@ export interface Account {
    * The current balance of the account.
    */
   balance: number;
+  /**
+   * The name of the bank associated with the account. Optional for flexibility.
+   */
+  bankName?: string;
 }
+
 
 /**
  * Asynchronously retrieves a list of financial accounts.
+ * Simulates fetching manually added accounts. In a real app, this would fetch from a database.
  *
  * @returns A promise that resolves to an array of Account objects.
  */
 export async function getAccounts(): Promise<Account[]> {
-  // TODO: Implement this by calling an API.
+  // Simulate fetching from storage (e.g., localStorage or a database)
+  // For now, return a static example list.
+   console.log("Simulating fetching accounts...");
+   // Introduce a small delay to simulate network latency
+   await new Promise(resolve => setTimeout(resolve, 500));
 
-  return [
+   // Return mock data representing manually added accounts
+   return [
     {
-      id: '123',
-      name: 'Checking Account',
+      id: 'manual-123',
+      name: 'My Main Checking',
       type: 'checking',
-      balance: 1000,
+      balance: 1572.50,
+      bankName: 'Itaú Unibanco',
     },
     {
-      id: '456',
-      name: 'Savings Account',
+      id: 'manual-456',
+      name: 'Emergency Fund',
       type: 'savings',
-      balance: 5000,
+      balance: 8350.00,
+      bankName: 'Nubank',
+    },
+     {
+      id: 'manual-789',
+      name: 'Travel Card',
+      type: 'credit card',
+      balance: -450.80, // Negative balance for credit card
+      bankName: 'Santander',
     },
   ];
+}
+
+
+// Add functions to simulate adding/deleting accounts if needed for local state management
+// These would interact with localStorage or a backend in a real application.
+
+/**
+ * Simulates adding a new account.
+ * In a real app, this would send data to a backend API.
+ * @param accountData - The data for the new account (without ID).
+ * @returns A promise resolving to the newly created account with an ID.
+ */
+export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Account> {
+    console.log("Simulating adding account:", accountData);
+    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+    const newAccount: Account = {
+        ...accountData,
+        id: `manual-${Math.random().toString(36).substring(2, 9)}`, // Generate a mock ID
+    };
+    // Here you would typically save to localStorage or database
+    console.log("Account added (simulated):", newAccount);
+    return newAccount;
+}
+
+/**
+ * Simulates deleting an account by ID.
+ * In a real app, this would send a delete request to a backend API.
+ * @param accountId - The ID of the account to delete.
+ * @returns A promise resolving when the deletion is complete.
+ */
+export async function deleteAccount(accountId: string): Promise<void> {
+    console.log("Simulating deleting account:", accountId);
+    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+    // Here you would typically remove from localStorage or database
+    console.log("Account deleted (simulated):", accountId);
+    return;
 }
