@@ -53,6 +53,7 @@ export async function getAccounts(): Promise<Account[]> {
      } catch (e) {
        console.error("Failed to parse stored accounts, using default.", e);
        accounts = getDefaultAccounts();
+       localStorage.setItem('userAccounts', JSON.stringify(accounts)); // Store defaults if parse failed
      }
    } else {
      accounts = getDefaultAccounts();
@@ -63,13 +64,16 @@ export async function getAccounts(): Promise<Account[]> {
 }
 
 function getDefaultAccounts(): Account[] {
+  // Keep default data minimal or empty to encourage user input
   return [
+    // Example structure - remove or keep as needed
+    /*
     {
       id: 'manual-123',
       name: 'My Main Checking',
       type: 'checking',
       balance: 1572.50,
-      currency: 'BRL', // Add currency
+      currency: 'BRL',
       bankName: 'Itaú Unibanco',
     },
     {
@@ -77,17 +81,18 @@ function getDefaultAccounts(): Account[] {
       name: 'Emergency Fund',
       type: 'savings',
       balance: 8350.00,
-      currency: 'BRL', // Add currency
+      currency: 'BRL',
       bankName: 'Nubank',
     },
      {
       id: 'manual-789',
       name: 'Travel Card USD',
       type: 'credit card',
-      balance: -450.80, // Negative balance for credit card
-      currency: 'USD', // Add currency
+      balance: -450.80,
+      currency: 'USD',
       bankName: 'Revolut (Europe/Global)',
     },
+    */
   ];
 }
 
@@ -115,6 +120,32 @@ export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Acco
     console.log("Account added (simulated):", newAccount);
     return newAccount;
 }
+
+/**
+ * Simulates updating an existing account in localStorage.
+ * @param updatedAccount - The account object with updated details. Must include the correct ID.
+ * @returns A promise resolving to the updated account.
+ */
+export async function updateAccount(updatedAccount: Account): Promise<Account> {
+    console.log("Simulating updating account:", updatedAccount.id);
+    await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+
+    const currentAccounts = await getAccounts();
+    const accountIndex = currentAccounts.findIndex(acc => acc.id === updatedAccount.id);
+
+    if (accountIndex === -1) {
+        throw new Error(`Account with ID ${updatedAccount.id} not found.`);
+    }
+
+    const updatedAccounts = [...currentAccounts];
+    updatedAccounts[accountIndex] = updatedAccount; // Replace the old account with the updated one
+
+    localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
+
+    console.log("Account updated (simulated):", updatedAccount);
+    return updatedAccount;
+}
+
 
 /**
  * Simulates deleting an account by ID from localStorage.
