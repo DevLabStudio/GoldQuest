@@ -31,6 +31,10 @@ export interface Transaction {
    * The account ID that the transaction belongs to.
    */
   accountId: string;
+  /**
+   * Optional tags associated with the transaction.
+   */
+  tags?: string[];
 }
 
 // --- Mock Data Store (In-Memory) ---
@@ -72,6 +76,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         ...transactionData,
         id: `tx-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         category: transactionData.category?.trim() || 'Uncategorized',
+        tags: transactionData.tags || [], // Ensure tags is an array
     };
 
     // Initialize array if account has no transactions yet in this session
@@ -108,7 +113,8 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
 
      accountTransactions[index] = {
          ...updatedTransaction,
-         category: updatedTransaction.category?.trim() || 'Uncategorized'
+         category: updatedTransaction.category?.trim() || 'Uncategorized',
+         tags: updatedTransaction.tags || [], // Ensure tags is an array
      };
 
      console.log("Transaction updated in memory (simulated):", accountTransactions[index]);

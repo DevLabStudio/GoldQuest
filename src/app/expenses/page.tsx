@@ -7,6 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, updateTransaction, deleteTransaction, type Transaction } from "@/services/transactions.tsx"; // Import transaction services
 import { getCategories, getCategoryStyle, Category } from '@/services/categories.tsx'; // Import category services
+import { getTags, type Tag, getTagStyle } from '@/services/tags.tsx'; // Import tag service
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
@@ -35,6 +36,7 @@ const formatDate = (dateString: string): string => {
 export default function ExpensesPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]); // State for categories
+  const [tags, setTags] = useState<Tag[]>([]); // State for tags
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +70,11 @@ export default function ExpensesPage() {
       const fetchedCategories = await getCategories();
       setCategories(fetchedCategories);
 
-      // 4. Fetch Transactions for *all* accounts
+      // 4. Fetch Tags
+      const fetchedTags = await getTags();
+      setTags(fetchedTags);
+
+      // 5. Fetch Transactions for *all* accounts
       const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
       const transactionsByAccount = await Promise.all(transactionPromises);
       const combinedTransactions = transactionsByAccount.flat();
@@ -97,7 +103,7 @@ export default function ExpensesPage() {
     fetchData();
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories')) {
+         if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags'].includes(event.key || '')) {
              console.log("Storage changed, refetching expense data...");
              if (isMounted) fetchData(); // Refetch all data on change
          }
@@ -140,6 +146,7 @@ export default function ExpensesPage() {
             ...updatedData, // Apply changes from the form
             // Ensure date is formatted correctly if needed by the service
             date: updatedData.date instanceof Date ? format(updatedData.date, 'yyyy-MM-dd') : updatedData.date,
+            tags: updatedData.tags || [], // Ensure tags is an array
         };
 
         setIsLoading(true); // Indicate loading state
@@ -228,6 +235,7 @@ export default function ExpensesPage() {
                   <TableHead>Account</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Category</TableHead>
+                  <TableHead>Tags</TableHead> {/* Added Tags Header */}
                   <TableHead className="text-right">Amount ({preferredCurrency})</TableHead>
                   <TableHead className="text-right">Actions</TableHead> {/* Actions Header */}
                 </TableRow>
@@ -251,6 +259,19 @@ export default function ExpensesPage() {
                                     <CategoryIcon />
                                     <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
                                 </Badge>
+                            </TableCell>
+                             {/* Tags Cell */}
+                            <TableCell>
+                                <div className="flex flex-wrap gap-1">
+                                    {transaction.tags?.map(tag => {
+                                        const { color: tagColor } = getTagStyle(tag);
+                                        return (
+                                            <Badge key={tag} variant="outline" className={`text-xs px-1.5 py-0.5 ${tagColor}`}>
+                                                {tag}
+                                            </Badge>
+                                        );
+                                    })}
+                                </div>
                             </TableCell>
                             <TableCell className={`text-right font-medium text-red-500 dark:text-red-400`}>
                                 {formattedAmount}
@@ -320,7 +341,7 @@ export default function ExpensesPage() {
          {!isLoading && expenseTransactions.length > 0 && (
              <CardContent className="pt-4 border-t">
                   {/* TODO: Add button to open 'Add Transaction' dialog */}
-                  {/* Example: <AddTransactionButton accounts={accounts} categories={categories} onTransactionAdded={handleAddTransaction} isLoading={isLoading} /> */}
+                  {/* Example: <AddTransactionButton accounts={accounts} categories={categories} tags={tags} onTransactionAdded={handleAddTransaction} isLoading={isLoading} /> */}
              </CardContent>
          )}
       </Card>
@@ -338,31 +359,30 @@ export default function ExpensesPage() {
                     </DialogDescription>
                 </DialogHeader>
                 {/* Pass selected transaction and necessary data to the form */}
-                {selectedTransaction && accounts.length > 0 && categories.length > 0 && (
+                {selectedTransaction && accounts.length > 0 && categories.length > 0 && tags.length > 0 && (
                     <AddTransactionForm
                         accounts={accounts}
                         categories={categories}
+                        tags={tags} // Pass tags
                         onTransactionAdded={handleUpdateTransaction} // Use the update handler
                         isLoading={isLoading} // Pass loading state
-                        initialType={selectedTransaction.amount < 0 ? 'expense' : 'income'} // Set initial type based on amount
-                        // TODO: Pre-fill the form with selectedTransaction data
-                        // You might need to modify AddTransactionForm to accept initial data
-                        // Example (conceptual - requires AddTransactionForm modification):
-                        // initialData={{
-                        //     type: selectedTransaction.amount < 0 ? 'expense' : 'income',
-                        //     accountId: selectedTransaction.accountId,
-                        //     amount: Math.abs(selectedTransaction.amount),
-                        //     date: new Date(selectedTransaction.date + 'T00:00:00Z'), // Parse date string
-                        //     category: selectedTransaction.category,
-                        //     description: selectedTransaction.description
-                        // }}
+                        // Pre-fill the form with selectedTransaction data
+                        initialData={{
+                            type: selectedTransaction.amount < 0 ? 'expense' : 'income',
+                            accountId: selectedTransaction.accountId,
+                            amount: Math.abs(selectedTransaction.amount),
+                            date: selectedTransaction.date, // Date is already 'yyyy-MM-dd' string
+                            category: selectedTransaction.category,
+                            description: selectedTransaction.description,
+                            tags: selectedTransaction.tags || [] // Pass existing tags
+                        }}
                     />
                 )}
                  {!selectedTransaction && (
                      <p className="text-muted-foreground text-center p-4">Loading transaction data...</p>
                  )}
-                 {(accounts.length === 0 || categories.length === 0) && (
-                     <p className="text-destructive text-center p-4">Cannot edit transaction: Missing account or category data.</p>
+                 {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && (
+                     <p className="text-destructive text-center p-4">Cannot edit transaction: Missing account, category, or tag data.</p>
                  )}
             </DialogContent>
         </Dialog>

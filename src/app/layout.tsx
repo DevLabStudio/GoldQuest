@@ -20,7 +20,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload } from 'lucide-react'; // Added Upload icon
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users } from 'lucide-react'; // Added Upload, Tag, Users icons
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -155,14 +155,7 @@ export default function RootLayout({
                                  </SidebarMenuButton>
                              </Link>
                          </SidebarMenuItem>
-                         <SidebarMenuItem className="ml-4"> {/* Keep indentation */}
-                             <Link href="/categories" passHref>
-                                 <SidebarMenuButton tooltip="Manage Categories" size="sm">
-                                     <ListTree />
-                                     <span>Categories</span>
-                                 </SidebarMenuButton>
-                             </Link>
-                         </SidebarMenuItem>
+                         {/* Categories removed from here */}
                          <SidebarMenuItem className="ml-4">
                              <Link href="/revenue" passHref>
                                  <SidebarMenuButton tooltip="View Revenue/Income" size="sm">
@@ -200,6 +193,36 @@ export default function RootLayout({
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
+
+                 <SidebarGroup>
+                    <SidebarGroupLabel>Organization</SidebarGroupLabel>
+                    <SidebarMenuItem>
+                        <Link href="/categories" passHref>
+                            <SidebarMenuButton tooltip="Manage Categories">
+                                <ListTree />
+                                <span>Categories</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <Link href="/tags" passHref> {/* New link */}
+                            <SidebarMenuButton tooltip="Manage Tags">
+                                <Tag /> {/* New icon */}
+                                <span>Tags</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                     <SidebarMenuItem>
+                        <Link href="/groups" passHref> {/* New link */}
+                            <SidebarMenuButton tooltip="Manage Groups">
+                                <Users /> {/* New icon */}
+                                <span>Groups</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                </SidebarGroup>
+
+
                  <SidebarGroup>
                   <SidebarGroupLabel>Settings</SidebarGroupLabel>
                     <SidebarMenuItem>

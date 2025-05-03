@@ -1,7 +1,7 @@
 
 'use client';
 
-import { FC, useMemo } from 'react'; // Import useMemo
+import { FC, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,9 +17,11 @@ import { cn } from "@/lib/utils";
 import { format } from 'date-fns';
 import type { Account } from '@/services/account-sync';
 import type { Category } from '@/services/categories.tsx';
+import type { Tag } from '@/services/tags.tsx'; // Import Tag type
 import type { Transaction } from '@/services/transactions.tsx';
 import { getCurrencySymbol } from '@/lib/currency';
 import { Textarea } from '@/components/ui/textarea'; // Import Textarea
+import { toast } from "@/hooks/use-toast"; // Import toast
 
 // Define allowed transaction types
 const transactionTypes = ['expense', 'income', 'transfer'] as const;
@@ -29,6 +31,7 @@ const baseSchema = z.object({
   description: z.string().max(100, "Description too long").optional(),
   date: z.date({ required_error: "Transaction date is required" }),
   category: z.string().optional(), // Optional for transfers
+  tags: z.array(z.string()).optional(), // Array of strings for tags
 });
 
 // Schemas for each transaction type
@@ -45,6 +48,7 @@ const transferSchema = baseSchema.extend({
   toAccountId: z.string().min(1, "Destination account is required"),
   amount: z.coerce.number({ invalid_type_error: "Amount must be a number" }).positive("Transfer amount must be positive"),
   category: z.string().optional(), // Category is explicitly optional for transfers
+  tags: z.array(z.string()).optional(), // Also optional for transfers
 });
 
 // Discriminated union schema
@@ -68,18 +72,26 @@ type AddTransactionFormData = z.infer<typeof formSchema>;
 interface AddTransactionFormProps {
   accounts: Account[];
   categories: Category[];
+  tags: Tag[]; // Add tags prop
   // Callback receives data in the format needed by addTransaction or a specific transfer function
   onTransactionAdded: (data: Omit<Transaction, 'id'> | Transaction) => Promise<void> | void; // Accept Transaction for update
-  onTransferAdded?: (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string }) => Promise<void> | void;
+  onTransferAdded?: (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => Promise<void> | void; // Add tags to transfer
   isLoading: boolean;
   initialType?: typeof transactionTypes[number]; // Optional initial type
   // Add initialData prop for editing
   initialData?: Partial<AddTransactionFormData & { date: Date | string }>;
 }
 
+// Helper to parse tags from string (e.g., textarea input)
+const parseTagsInput = (input: string | undefined): string[] => {
+    if (!input) return [];
+    return input.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+};
+
 const AddTransactionForm: FC<AddTransactionFormProps> = ({
     accounts,
     categories,
+    tags, // Receive tags
     onTransactionAdded,
     onTransferAdded,
     isLoading,
@@ -92,7 +104,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     defaultValues: initialData ? {
         ...initialData,
         // Ensure date is a Date object
-        date: initialData.date ? new Date(initialData.date) : new Date(),
+        date: initialData.date ? (typeof initialData.date === 'string' ? new Date(initialData.date + 'T00:00:00Z') : initialData.date) : new Date(), // Ensure UTC for date string
+        tags: initialData.tags || [], // Use initial tags or empty array
     } : {
       type: initialType,
       description: "",
@@ -102,6 +115,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
       toAccountId: accounts.length > 1 ? accounts[1].id : undefined,
       amount: undefined, // No default amount
       category: undefined,
+      tags: [], // Default to empty array for tags
     },
   });
 
@@ -128,6 +142,10 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
 
   async function onSubmit(values: AddTransactionFormData) {
+    // Extract tags - assuming Textarea input for simplicity now
+    // In a real app, use a multi-select component that returns string[]
+    const finalTags = values.tags || []; // Use tags array directly from form state
+
     if (values.type === 'transfer') {
       // Handle transfer
       if (onTransferAdded) {
@@ -137,8 +155,9 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             amount: values.amount, // Already positive
             date: values.date,
             description: values.description || `Transfer to ${accounts.find(a=>a.id === values.toAccountId)?.name || 'account'}`,
+            tags: finalTags, // Pass tags to transfer function
         });
-         console.log("Transfer data:", values);
+         console.log("Transfer data:", { ...values, tags: finalTags });
          // TODO: Implement transfer logic (add two transactions)
       } else {
         console.warn("onTransferAdded callback not provided.");
@@ -151,21 +170,17 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     } else {
       // Handle expense or income
       const transactionAmount = values.type === 'expense' ? -Math.abs(values.amount) : Math.abs(values.amount);
-      // If editing, use the existing ID, otherwise it's handled by onTransactionAdded
       const transactionData: Omit<Transaction, 'id'> | Transaction = {
         accountId: values.accountId,
         amount: transactionAmount,
         date: format(values.date, 'yyyy-MM-dd'), // Format date to string
         description: values.description || values.category, // Use category if description empty
         category: values.category,
+        tags: finalTags, // Pass the final tags array
       };
-      // The parent component (RevenuePage, ExpensesPage, etc.) will handle
-      // whether this is an add or update based on the context (add vs edit dialog)
       await onTransactionAdded(transactionData);
        console.log("Expense/Income data submitted:", transactionData);
     }
-     // Don't reset if editing? Parent dialog will close. Resetting might clear prematurely.
-     // form.reset();
   }
 
   return (
@@ -342,7 +357,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
            </>
         )}
 
-         {/* Common Fields: Date and Description */}
+         {/* Common Fields: Date, Description, Tags */}
           <FormField
           control={form.control}
           name="date"
@@ -404,6 +419,38 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
           )}
         />
 
+       {/* Tags Input Field (Using Textarea for simplicity, replace with multi-select later) */}
+         <FormField
+            control={form.control}
+            name="tags" // The field name should match the schema
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Tags (Optional)</FormLabel>
+                 {/* For editing, display existing tags. For adding, it's an empty array. */}
+                 {/* We use Controller to manage the transformation between string[] and string */}
+                 <Controller
+                      name="tags"
+                      control={form.control}
+                      defaultValue={initialData?.tags || []} // Use initial data if available
+                      render={({ field: controllerField }) => (
+                          <FormControl>
+                              <Textarea
+                                placeholder="Enter tags separated by commas (e.g., work, project-x)"
+                                className="resize-none"
+                                value={controllerField.value?.join(', ') || ''} // Convert array to comma-separated string for display
+                                onChange={(e) => controllerField.onChange(parseTagsInput(e.target.value))} // Parse input string back to array
+                              />
+                          </FormControl>
+                      )}
+                 />
+                 <FormDescription>
+                    Separate tags with commas. Existing tags: {tags.map(t => t.name).join(', ')}
+                 </FormDescription>
+                 <FormMessage />
+                </FormItem>
+            )}
+            />
+
 
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? (initialData ? "Saving..." : "Adding...") : (initialData ? "Save Changes" : `Add ${transactionType.charAt(0).toUpperCase() + transactionType.slice(1)}`)}
@@ -413,8 +460,4 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
   );
 };
 
-// Add toast import if not already present globally
-import { toast } from "@/hooks/use-toast";
-
 export default AddTransactionForm;
-
