@@ -1,5 +1,8 @@
+'use client'; // Required for using state (useState)
+
 import type { Metadata } from 'next';
-import { Oxanium } from 'next/font/google'; // Import Oxanium
+import { useState } from 'react'; // Import useState
+import { Oxanium } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import {
@@ -16,7 +19,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree } from 'lucide-react'; // Added Settings and ListTree icons
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown } from 'lucide-react'; // Added ChevronDown
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -26,10 +29,14 @@ const oxanium = Oxanium({
   subsets: ['latin'],
 });
 
+// Metadata can still be defined in client components, but it's often preferred in server components or dedicated metadata files.
+// For simplicity here, we keep it. Consider moving if needed.
+/*
 export const metadata: Metadata = {
   title: 'The Golden Game',
   description: 'Simple personal finance management',
 };
+*/
 
 // SVG Logo Component
 const LogoIcon = () => (
@@ -68,8 +75,16 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const [isTransactionsOpen, setIsTransactionsOpen] = useState(false); // State for transaction menu
+
   return (
     <html lang="en" className="dark">
+      <head>
+          {/* Metadata can be placed in head directly for client components */}
+          <title>The Golden Game</title>
+          <meta name="description" content="Simple personal finance management" />
+          {/* Add other head elements like favicons if needed */}
+      </head>
       <body
       className={cn(
           `${oxanium.variable} font-sans antialiased`, // Apply Oxanium font variable and set as default sans font
@@ -106,25 +121,40 @@ export default function RootLayout({
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
-                    {/* Transactions Group */}
+
+                    {/* Transactions Group (Collapsible) */}
                     <SidebarMenuItem>
-                      <Link href="/transactions" passHref>
-                        <SidebarMenuButton tooltip="View Transactions">
-                          <ArrowLeftRight />
-                          <span>Transactions</span>
-                        </SidebarMenuButton>
-                      </Link>
+                        {/* Button toggles the state */}
+                         <SidebarMenuButton
+                            tooltip="Transactions"
+                            onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
+                            className="justify-between" // Align items
+                         >
+                           <div className="flex items-center gap-2"> {/* Group icon and text */}
+                             <ArrowLeftRight />
+                             <span>Transactions</span>
+                           </div>
+                           <ChevronDown
+                              className={cn(
+                                 "h-4 w-4 transition-transform duration-200",
+                                 isTransactionsOpen && "rotate-180" // Rotate arrow when open
+                              )}
+                           />
+                         </SidebarMenuButton>
                     </SidebarMenuItem>
-                    {/* Categories (conceptually under Transactions) */}
-                     {/* Add some left margin to visually indicate it's related */}
-                    <SidebarMenuItem className="ml-4">
-                      <Link href="/categories" passHref>
-                        <SidebarMenuButton tooltip="Manage Categories" size="sm"> {/* Use smaller size */}
-                          <ListTree />
-                          <span>Categories</span>
-                        </SidebarMenuButton>
-                      </Link>
-                    </SidebarMenuItem>
+
+                    {/* Categories (Conditional Rendering) */}
+                    {isTransactionsOpen && (
+                         <SidebarMenuItem className="ml-4"> {/* Keep indentation */}
+                             <Link href="/categories" passHref>
+                                 <SidebarMenuButton tooltip="Manage Categories" size="sm">
+                                     <ListTree />
+                                     <span>Categories</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
+                    )}
+
                     {/* TODO: Add Debits link when page is created */}
                     {/*
                     <SidebarMenuItem>
