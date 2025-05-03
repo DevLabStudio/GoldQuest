@@ -150,8 +150,8 @@ export default function AccountsPage() {
         {/* Add Account Dialog */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
-             {/* Updated Button Style */}
-            <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white"> {/* This might need theme adjustment */}
+             {/* Updated Button Style - Removed green classes */}
+            <Button variant="default"> {/* Rely on theme primary color */}
               <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
             </Button>
           </DialogTrigger>
@@ -295,8 +295,8 @@ export default function AccountsPage() {
               <CardContent className="pt-4 border-t">
                   <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                       <DialogTrigger asChild>
-                           {/* Updated Button Style */}
-                          <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700 text-white"> {/* This might need theme adjustment */}
+                           {/* Updated Button Style - Removed green classes */}
+                          <Button variant="default" size="sm"> {/* Rely on theme primary color */}
                               <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
                           </Button>
                       </DialogTrigger>
