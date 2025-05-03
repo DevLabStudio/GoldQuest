@@ -16,7 +16,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings } from 'lucide-react'; // Added Settings icon
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree } from 'lucide-react'; // Added Settings and ListTree icons
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -106,11 +106,22 @@ export default function RootLayout({
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
+                    {/* Transactions Group */}
                     <SidebarMenuItem>
                       <Link href="/transactions" passHref>
                         <SidebarMenuButton tooltip="View Transactions">
                           <ArrowLeftRight />
                           <span>Transactions</span>
+                        </SidebarMenuButton>
+                      </Link>
+                    </SidebarMenuItem>
+                    {/* Categories (conceptually under Transactions) */}
+                     {/* Add some left margin to visually indicate it's related */}
+                    <SidebarMenuItem className="ml-4">
+                      <Link href="/categories" passHref>
+                        <SidebarMenuButton tooltip="Manage Categories" size="sm"> {/* Use smaller size */}
+                          <ListTree />
+                          <span>Categories</span>
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
