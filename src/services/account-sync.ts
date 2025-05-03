@@ -26,9 +26,9 @@ export interface Account {
    */
   currency: string;
   /**
-   * The name of the bank or institution, or account number/identifier.
+   * The name of the bank, institution, exchange, or wallet provider.
    */
-  bankName?: string; // Could represent Account Number in the table
+  providerName?: string; // Renamed from bankName for generality
    /**
    * Placeholder: Indicates if the account is currently active.
    */
@@ -41,7 +41,14 @@ export interface Account {
    * Placeholder: The difference in balance since a certain point (e.g., last statement).
    */
   balanceDifference?: number;
+  /**
+   * Category of the account (e.g., traditional asset or crypto).
+   */
+  category: 'asset' | 'crypto';
 }
+
+/** Data needed to create an account, excluding the system-generated ID. */
+export type NewAccountData = Omit<Account, 'id'>;
 
 
 /**
@@ -62,7 +69,7 @@ export async function getAccounts(): Promise<Account[]> {
        // Parse and ensure placeholder fields exist
        const parsedAccounts = JSON.parse(storedAccounts) as Partial<Account>[];
         accounts = parsedAccounts.map(acc => ({
-            ...getDefaultAccountValues(), // Apply defaults first
+            ...getDefaultAccountValues(acc.category || 'asset'), // Apply defaults first based on category
             ...acc, // Override with stored values
         })) as Account[]; // Assert type after mapping
      } catch (e) {
@@ -79,11 +86,12 @@ export async function getAccounts(): Promise<Account[]> {
 }
 
 // Helper function to provide default values for potentially missing fields
-function getDefaultAccountValues(): Partial<Account> {
+function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Account> {
     return {
         isActive: true, // Assume active by default
         lastActivity: new Date().toISOString(), // Default to now
         balanceDifference: 0, // Default to zero difference
+        category: category, // Ensure category is set
     };
 }
 
@@ -99,10 +107,11 @@ function getDefaultAccounts(): Account[] {
         type: 'Default asset account', // Role
         balance: 2025.46,
         currency: 'BRL',
-        bankName: '16981076797', // Account number
+        providerName: '16981076797', // Account number/provider
         isActive: true,
         lastActivity: new Date(2025, 3, 30).toISOString(), // April 30th, 2025
         balanceDifference: 2025.46,
+        category: 'asset',
       },
       */
   ];
@@ -112,15 +121,15 @@ function getDefaultAccounts(): Account[] {
 /**
  * Simulates adding a new account to localStorage.
  * Adds default values for placeholder fields.
- * @param accountData - The data for the new account (without ID).
+ * @param accountData - The data for the new account (without ID). Requires category.
  * @returns A promise resolving to the newly created account with an ID.
  */
-export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Account> {
+export async function addAccount(accountData: NewAccountData): Promise<Account> {
     console.log("Simulating adding account:", accountData);
     await new Promise(resolve => setTimeout(resolve, 300));
 
     const newAccount: Account = {
-        ...getDefaultAccountValues(), // Add default placeholders
+        ...getDefaultAccountValues(accountData.category), // Add default placeholders based on category
         ...accountData, // User provided data overrides defaults
         id: `manual-${Math.random().toString(36).substring(2, 9)}`,
     };
@@ -136,7 +145,7 @@ export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Acco
 /**
  * Simulates updating an existing account in localStorage.
  * Ensures placeholder fields are preserved or updated.
- * @param updatedAccount - The account object with updated details. Must include the correct ID.
+ * @param updatedAccount - The account object with updated details. Must include the correct ID and category.
  * @returns A promise resolving to the updated account.
  */
 export async function updateAccount(updatedAccount: Account): Promise<Account> {
@@ -151,8 +160,8 @@ export async function updateAccount(updatedAccount: Account): Promise<Account> {
     }
 
     // Ensure default values are present if not provided in update
-    const accountWithDefaults = {
-        ...getDefaultAccountValues(),
+    const accountWithDefaults: Account = {
+        ...getDefaultAccountValues(updatedAccount.category), // Use category from updated account
         ...currentAccounts[accountIndex], // Get existing values including placeholders
         ...updatedAccount, // Apply updates
     };

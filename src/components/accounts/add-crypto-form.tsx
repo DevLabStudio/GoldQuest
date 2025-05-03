@@ -10,56 +10,57 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { popularBanks } from '@/lib/banks'; // Import bank list
+import { popularExchanges, popularWallets } from '@/lib/crypto-providers'; // Import crypto provider lists
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency'; // Import currency utils
 import type { NewAccountData } from '@/services/account-sync'; // Use NewAccountData
 
 // Define Zod schema for form validation
 const formSchema = z.object({
-  providerName: z.string().min(1, "Provider name is required"), // Renamed from bankName
+  providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
-  accountType: z.enum(['checking', 'savings', 'credit card', 'investment', 'other'], {
+  accountType: z.enum(['exchange', 'wallet', 'staking', 'other'], { // Crypto-specific types
     required_error: "Account type is required",
   }),
-  currency: z.string().min(3, "Currency is required").refine(
-      (val) => supportedCurrencies.includes(val.toUpperCase()),
-      { message: "Unsupported currency" }
-  ),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative for initial setup"), // Coerce to number
+  // For crypto, currency might often be a specific crypto asset (BTC, ETH) or a stablecoin (USDT)
+  // Keeping it as string for flexibility, but validation might need refinement for crypto symbols.
+  currency: z.string().min(3, "Asset/Currency symbol is required").max(10, "Symbol too long"),
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative"), // Coerce to number
 });
 
-type AddAccountFormData = z.infer<typeof formSchema>;
+type AddCryptoFormData = z.infer<typeof formSchema>;
 
-interface AddAccountFormProps {
+interface AddCryptoFormProps {
   onAccountAdded: (account: NewAccountData) => void; // Callback when account is added, use NewAccountData
 }
 
-const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
-  const form = useForm<AddAccountFormData>({
+const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
+  const form = useForm<AddCryptoFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      providerName: "", // Renamed default
+      providerName: "",
       accountName: "",
       accountType: undefined, // Default to no selection
-      currency: "BRL", // Default to BRL
+      currency: "BTC", // Default to BTC maybe? Or require selection?
       balance: 0,
     },
   });
 
-  function onSubmit(values: AddAccountFormData) {
-    // Prepare data in the expected NewAccountData format, setting category to 'asset'
+  function onSubmit(values: AddCryptoFormData) {
+    // Prepare data in the expected NewAccountData format, setting category to 'crypto'
     const newAccountData: NewAccountData = {
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
-        currency: values.currency.toUpperCase(), // Ensure currency is uppercase
-        providerName: values.providerName, // Renamed field
-        category: 'asset', // Explicitly set category for this form
+        currency: values.currency.toUpperCase(), // Ensure currency/asset symbol is uppercase
+        providerName: values.providerName,
+        category: 'crypto', // Explicitly set category for this form
     };
     onAccountAdded(newAccountData);
     form.reset(); // Reset form after successful submission
   }
 
+  // Combine exchanges and wallets for the provider dropdown
+  const cryptoProviders = [...popularExchanges, ...popularWallets].sort();
   const selectedCurrency = form.watch('currency'); // Watch the currency field
 
   return (
@@ -67,20 +68,20 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="providerName" // Renamed field
+          name="providerName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Bank/Institution Name</FormLabel> {/* Updated label */}
+              <FormLabel>Exchange/Wallet Provider</FormLabel>
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a bank or institution" /> {/* Updated placeholder */}
+                    <SelectValue placeholder="Select an exchange or wallet" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {popularBanks.map((bank) => (
-                    <SelectItem key={bank} value={bank}>
-                      {bank}
+                  {cryptoProviders.map((provider) => (
+                    <SelectItem key={provider} value={provider}>
+                      {provider}
                     </SelectItem>
                   ))}
                    <SelectItem value="Other">Other (Specify in Name)</SelectItem>
@@ -96,12 +97,12 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
           name="accountName"
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Account Name</FormLabel>
+              <FormLabel>Account/Wallet Name</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., My Primary Checking" {...field} />
+                <Input placeholder="e.g., My Binance Spot, Ledger Main" {...field} />
               </FormControl>
               <FormDescription>
-                Give your account a nickname.
+                Give your account or wallet a nickname.
               </FormDescription>
               <FormMessage />
             </FormItem>
@@ -121,11 +122,10 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  <SelectItem value="checking">Checking</SelectItem>
-                  <SelectItem value="savings">Savings</SelectItem>
-                  <SelectItem value="credit card">Credit Card</SelectItem>
-                  <SelectItem value="investment">Investment</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
+                  <SelectItem value="exchange">Exchange Account</SelectItem>
+                  <SelectItem value="wallet">Self-Custody Wallet</SelectItem>
+                  <SelectItem value="staking">Staking/Yield Account</SelectItem>
+                  <SelectItem value="other">Other Crypto Holding</SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -139,21 +139,14 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
               name="currency"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Currency</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {supportedCurrencies.map((curr) => (
-                        <SelectItem key={curr} value={curr}>
-                          {curr} ({getCurrencySymbol(curr)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <FormLabel>Primary Asset/Currency</FormLabel>
+                  <FormControl>
+                     {/* Input for crypto symbol, could be enhanced with a search/select later */}
+                    <Input placeholder="e.g., BTC, ETH, USDT" {...field} />
+                  </FormControl>
+                   <FormDescription>
+                       Enter the main crypto symbol (e.g., BTC) or stablecoin (e.g., USDT).
+                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -164,26 +157,24 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
               name="balance"
               render={({ field }) => (
                 <FormItem>
-                   {/* Dynamically update label with currency symbol */}
-                  <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                  <FormLabel>Current Balance ({selectedCurrency.toUpperCase()})</FormLabel>
                   <FormControl>
-                    {/* Use step="0.01" for currency */}
-                    <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                    {/* Step might be much smaller for crypto */}
+                    <Input type="number" placeholder="0.00000000" step="any" {...field} />
                   </FormControl>
+                   <FormDescription>
+                       Amount of the asset/currency.
+                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
         </div>
-         <FormDescription>
-            Enter the current balance in the selected currency.
-         </FormDescription>
 
-        <Button type="submit" className="w-full">Add Asset Account</Button> {/* Updated button text */}
+        <Button type="submit" className="w-full">Add Crypto Account</Button>
       </form>
     </Form>
   );
 };
 
-export default AddAccountForm;
-
+export default AddCryptoForm;
