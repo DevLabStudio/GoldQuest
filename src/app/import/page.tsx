@@ -272,7 +272,7 @@ export default function ImportDataPage() {
                 description: description,
                 category: category,
                 originalRecord: record,
-                importStatus: 'pending',
+                importStatus: 'pending', // Start as pending
               };
             } catch (rowError: any) {
                 // Catch errors during row mapping (like missing date/amount)
@@ -283,7 +283,7 @@ export default function ImportDataPage() {
                     description: `Error Processing Row ${index + 2}`,
                     category: 'Uncategorized',
                     originalRecord: record,
-                    importStatus: 'error',
+                    importStatus: 'error', // Mark as error immediately
                     errorMessage: rowError.message || 'Failed to process row.',
                  };
             }
@@ -320,7 +320,7 @@ export default function ImportDataPage() {
     transactions.forEach(tx => {
         if (tx.importStatus === 'pending' && tx.category) {
             const categoryName = tx.category.trim();
-            if (categoryName && !existingCategoryNames.has(categoryName.toLowerCase())) {
+            if (categoryName && categoryName.toLowerCase() !== 'uncategorized' && !existingCategoryNames.has(categoryName.toLowerCase())) {
                 categoriesToAdd.add(categoryName);
             }
         }
@@ -330,10 +330,11 @@ export default function ImportDataPage() {
         console.log(`Found ${categoriesToAdd.size} new categories to add:`, Array.from(categoriesToAdd));
         const addPromises = Array.from(categoriesToAdd).map(async (catName) => {
             try {
-                await addCategory(catName);
-                console.log(`Successfully added category: ${catName}`);
+                const newCat = await addCategory(catName); // Use the added category object
+                console.log(`Successfully added category: ${newCat.name} (ID: ${newCat.id})`);
                 // Update the local state to include the new category immediately
-                setCategories(prev => [...prev, { id: `cat-${catName.toLowerCase()}`, name: catName }]); // Simple ID for local state
+                 setCategories(prev => [...prev, newCat]); // Add the actual new category object
+                 existingCategoryNames.add(newCat.name.toLowerCase()); // Update the set for subsequent checks in this run
             } catch (err: any) {
                 console.error(`Failed to add category "${catName}":`, err);
                 // Decide how to handle: maybe mark transactions with this category as error?
@@ -345,9 +346,6 @@ export default function ImportDataPage() {
             }
         });
         await Promise.all(addPromises);
-         // Optionally refetch all categories after adding to ensure IDs are correct, though not strictly necessary if addCategory handles it
-         // const updatedCategories = await getCategories();
-         // setCategories(updatedCategories);
          toast({
             title: "Categories Added",
             description: `Added ${categoriesToAdd.size} new categories found in the file.`,
@@ -379,6 +377,10 @@ export default function ImportDataPage() {
     // Step 1: Add any missing categories BEFORE importing transactions
     try {
        await addMissingCategories(recordsToImport);
+        // Crucial: Refetch categories after adding to ensure the `categories` state is up-to-date
+        // *before* the transaction loop starts, otherwise, newly added categories might not be found.
+        const updatedCategories = await getCategories();
+        setCategories(updatedCategories);
     } catch (catErr) {
        // If category adding fails significantly, maybe stop the import?
        // For now, we log errors and proceed, relying on addMissingCategories toast messages.
@@ -395,9 +397,9 @@ export default function ImportDataPage() {
     for (let i = 0; i < updatedData.length; i++) {
         const item = updatedData[i];
 
-        // Skip already processed or errored items
+        // Skip already processed or errored items from parsing phase
         if (item.importStatus !== 'pending') {
-            if(item.importStatus === 'error') errorCount++; // Recount errors
+            if(item.importStatus === 'error') errorCount++; // Recount errors from parse phase
             continue;
         }
 
@@ -413,20 +415,27 @@ export default function ImportDataPage() {
 
 
         try {
+            // Find category ID (case-insensitive) using the *updated* categories state
+             const categoryName = item.category?.trim() || 'Uncategorized';
+             const foundCategory = categories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+
+             // Use 'Uncategorized' if category not found after attempting to add
+             const finalCategoryName = foundCategory ? foundCategory.name : 'Uncategorized';
+
             // Prepare transaction data using the selected target account ID
             const transactionPayload: Omit<Transaction, 'id'> = {
-            accountId: targetAccount, // Use the selected account
-            date: item.date,
-            amount: item.amount, // Use amount directly (can be +/-)
-            description: item.description,
-            category: item.category || 'Uncategorized', // Ensure category is present, default if needed
+                accountId: targetAccount, // Use the selected account
+                date: item.date,
+                amount: item.amount, // Use amount directly (can be +/-)
+                description: item.description,
+                category: finalCategoryName, // Use the potentially corrected category name
             };
             await addTransaction(transactionPayload);
-            updatedData[i] = { ...item, importStatus: 'success', errorMessage: undefined }; // Clear previous errors
+            updatedData[i] = { ...item, importStatus: 'success', errorMessage: undefined }; // Update status to success
             importedCount++;
         } catch (err: any) {
             console.error(`Failed to import record for row ${i+2}:`, err);
-            updatedData[i] = { ...item, importStatus: 'error', errorMessage: err.message || 'Unknown import error' };
+            updatedData[i] = { ...item, importStatus: 'error', errorMessage: err.message || 'Unknown import error' }; // Update status to error
             errorCount++;
         }
 
@@ -569,3 +578,6 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
+
+    
