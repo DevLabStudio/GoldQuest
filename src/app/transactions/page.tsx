@@ -5,17 +5,18 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, type Transaction } from "@/services/transactions"; // Use updated service
+import { getTransactions, type Transaction, getCategoryStyle } from "@/services/transactions"; // Use updated service and import getCategoryStyle
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use formatters and converters
 import { getUserPreferences } from '@/lib/preferences'; // Get user preferences
 import SpendingChart from '@/components/dashboard/spending-chart'; // Reuse the chart
-import { ShoppingCart, Home, Car, Utensils, PiggyBank, AlertCircle, TrendingUp, TrendingDown } from 'lucide-react';
+// Icons are now handled by getCategoryStyle, no need to import them here directly unless used elsewhere
 
 // Helper function to format date (consistent with previous implementation)
 const formatDate = (dateString: string): string => {
     try {
+        // Handle both YYYY-MM-DD and ISO strings more robustly
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
         return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date); // YYYY-MM-DD
@@ -24,22 +25,6 @@ const formatDate = (dateString: string): string => {
         return 'Invalid Date';
     }
 };
-
-// Category styles (consistent with previous implementation)
-const categoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
-  groceries: { icon: ShoppingCart, color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
-  rent: { icon: Home, color: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
-  utilities: { icon: PiggyBank, color: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700' },
-  transportation: { icon: Car, color: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700' },
-  food: { icon: Utensils, color: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700' },
-  income: { icon: TrendingUp, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' }, // Example income
-  salary: { icon: TrendingUp, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' }, // Example income
-  default: { icon: AlertCircle, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-};
-const getCategoryStyle = (category: string) => {
-    const lowerCategory = category?.toLowerCase() || 'default';
-    return categoryStyles[lowerCategory] || categoryStyles.default;
-}
 
 
 export default function TransactionsOverviewPage() {
@@ -208,6 +193,7 @@ export default function TransactionsOverviewPage() {
                     const account = getAccountForTransaction(transaction.accountId);
                     if (!account) return null; // Should not happen if data is consistent
 
+                    // Use getCategoryStyle from the service
                     const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
                     // Format transaction amount converting to preferred currency
                     const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true); // Explicitly convert
@@ -218,7 +204,8 @@ export default function TransactionsOverviewPage() {
                             <TableCell>{transaction.description}</TableCell>
                             <TableCell>
                                 <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
-                                    <CategoryIcon className="h-3 w-3" />
+                                    {/* Render the icon component */}
+                                    <CategoryIcon />
                                     <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
                                 </Badge>
                             </TableCell>
