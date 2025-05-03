@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark"> {/* Apply dark class here */}
+    <html lang="en" className="dark">{/* Apply dark class here */}
       <body
         className={cn(
           `${oxanium.variable} font-sans antialiased`, // Apply Oxanium font variable and set as default sans font
