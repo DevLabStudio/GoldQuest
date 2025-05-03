@@ -5,14 +5,22 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, type Transaction } from "@/services/transactions.tsx"; // Use updated service
-import { getCategoryStyle } from '@/services/categories.tsx'; // Import from categories service (updated extension)
+import { getTransactions, updateTransaction, deleteTransaction, type Transaction } from "@/services/transactions.tsx"; // Use updated service
+import { getCategories, getCategoryStyle, Category } from '@/services/categories.tsx'; // Import from categories service (updated extension)
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use formatters and converters
 import { getUserPreferences } from '@/lib/preferences'; // Get user preferences
 import SpendingChart from '@/components/dashboard/spending-chart'; // Reuse the chart
 import { format } from 'date-fns'; // Import date-fns for formatting
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Edit, Trash2, MoreHorizontal } from 'lucide-react';
+import AddTransactionForm from '@/components/transactions/add-transaction-form'; // For editing
+import { useToast } from '@/hooks/use-toast';
+
 
 // Helper function to format date (consistent with previous implementation)
 const formatDate = (dateString: string): string => {
@@ -20,7 +28,6 @@ const formatDate = (dateString: string): string => {
         // Handle both YYYY-MM-DD and ISO strings more robustly
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        // return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date); // YYYY-MM-DD
         return format(date, 'PP'); // Use a user-friendly format like 'Jul 15, 2024'
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
@@ -31,36 +38,42 @@ const formatDate = (dateString: string): string => {
 
 export default function TransactionsOverviewPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]); // State for categories
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default preference
+  const { toast } = useToast();
 
-  // Fetch preferences and all data on mount - Client-side only
-  useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
+  // State for Edit/Delete Modals
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+
+   const fetchData = async () => {
        if (typeof window === 'undefined') {
-         if (isMounted) {
            setIsLoading(false);
            setError("Transaction data can only be loaded on the client.");
-         }
-         return;
+           return;
        }
 
-      if (isMounted) setIsLoading(true);
-      if (isMounted) setError(null);
+      setIsLoading(true);
+      setError(null);
       try {
         // 1. Get Preferences
         const prefs = getUserPreferences();
-        if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
+        setPreferredCurrency(prefs.preferredCurrency);
 
         // 2. Fetch Accounts
         const fetchedAccounts = await getAccounts();
-        if (isMounted) setAccounts(fetchedAccounts);
+        setAccounts(fetchedAccounts);
 
-        // 3. Fetch Transactions for *all* accounts
-        // In a real app, you might have a dedicated endpoint for this or paginate
+         // 3. Fetch Categories
+        const fetchedCategories = await getCategories();
+        setCategories(fetchedCategories);
+
+        // 4. Fetch Transactions for *all* accounts
         const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
         const transactionsByAccount = await Promise.all(transactionPromises);
         const combinedTransactions = transactionsByAccount.flat();
@@ -68,21 +81,28 @@ export default function TransactionsOverviewPage() {
         // Sort transactions by date (newest first)
         combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
-         if (isMounted) setAllTransactions(combinedTransactions);
+         setAllTransactions(combinedTransactions);
 
       } catch (err) {
         console.error("Failed to fetch transaction data:", err);
-        if (isMounted) setError("Could not load transaction data. Please try again later.");
+        setError("Could not load transaction data. Please try again later.");
+          toast({
+            title: "Error",
+            description: "Failed to load required data.",
+            variant: "destructive",
+        });
       } finally {
-        if (isMounted) setIsLoading(false);
+        setIsLoading(false);
       }
     };
 
+  // Fetch data on mount and listen for storage changes
+  useEffect(() => {
+    let isMounted = true;
     fetchData();
 
-     // Add storage listener for preference/account changes - Client-side only
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences')) {
+         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories')) {
              console.log("Storage changed, refetching transaction overview data...");
              if (isMounted) fetchData(); // Refetch all data on change
          }
@@ -130,6 +150,71 @@ export default function TransactionsOverviewPage() {
         return accounts.find(acc => acc.id === accountId);
    };
 
+   // --- Edit and Delete Handlers ---
+    const openEditDialog = (transaction: Transaction) => {
+        setSelectedTransaction(transaction);
+        setIsEditDialogOpen(true);
+    };
+
+    const handleUpdateTransaction = async (updatedData: Omit<Transaction, 'id'> | Transaction) => {
+        if (!selectedTransaction) return;
+
+        const transactionToUpdate: Transaction = {
+            ...selectedTransaction,
+            ...updatedData,
+            date: updatedData.date instanceof Date ? format(updatedData.date, 'yyyy-MM-dd') : updatedData.date,
+        };
+
+        setIsLoading(true);
+        try {
+            await updateTransaction(transactionToUpdate);
+            await fetchData();
+            setIsEditDialogOpen(false);
+            setSelectedTransaction(null);
+            toast({
+                title: "Success",
+                description: `Transaction "${transactionToUpdate.description}" updated.`,
+            });
+        } catch (err: any) {
+            console.error("Failed to update transaction:", err);
+            toast({
+                title: "Error Updating Transaction",
+                description: err.message || "Could not update the transaction.",
+                variant: "destructive",
+            });
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+
+   const openDeleteDialog = (transaction: Transaction) => {
+      setSelectedTransaction(transaction);
+   };
+
+    const handleDeleteTransactionConfirm = async () => {
+       if (!selectedTransaction) return;
+       setIsDeleting(true);
+       try {
+           await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
+           await fetchData();
+           toast({
+               title: "Transaction Deleted",
+               description: `Transaction "${selectedTransaction.description}" removed.`,
+           });
+       } catch (err: any) {
+           console.error("Failed to delete transaction:", err);
+           toast({
+               title: "Error Deleting Transaction",
+               description: err.message || "Could not delete the transaction.",
+               variant: "destructive",
+           });
+       } finally {
+           setIsDeleting(false);
+           setSelectedTransaction(null);
+       }
+   };
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -174,7 +259,7 @@ export default function TransactionsOverviewPage() {
            </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
+          {isLoading && allTransactions.length === 0 ? ( // Show skeleton only on initial load
             <div className="space-y-2">
               {[...Array(10)].map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
@@ -189,6 +274,7 @@ export default function TransactionsOverviewPage() {
                   <TableHead>Description</TableHead>
                   <TableHead>Category</TableHead>
                   <TableHead className="text-right">Amount ({preferredCurrency})</TableHead>
+                  <TableHead className="text-right">Actions</TableHead> {/* Actions Header */}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -215,6 +301,51 @@ export default function TransactionsOverviewPage() {
                             <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
                                 {formattedAmount}
                             </TableCell>
+                             {/* Actions Cell */}
+                            <TableCell className="text-right">
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild>
+                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                      <span className="sr-only">Open menu</span>
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end">
+                                    <DropdownMenuItem onClick={() => openEditDialog(transaction)}>
+                                      <Edit className="mr-2 h-4 w-4" />
+                                      <span>Edit</span>
+                                    </DropdownMenuItem>
+                                     {/* Use AlertDialog for Delete Confirmation */}
+                                    <AlertDialog>
+                                        <AlertDialogTrigger asChild>
+                                             <div
+                                                className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                                onClick={() => openDeleteDialog(transaction)}
+                                            >
+                                                 <Trash2 className="mr-2 h-4 w-4" />
+                                                 <span>Delete</span>
+                                            </div>
+                                        </AlertDialogTrigger>
+                                        {selectedTransaction?.id === transaction.id && (
+                                            <AlertDialogContent>
+                                                <AlertDialogHeader>
+                                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                  <AlertDialogDescription>
+                                                    This action cannot be undone. This will permanently delete the transaction "{selectedTransaction.description}".
+                                                  </AlertDialogDescription>
+                                                </AlertDialogHeader>
+                                                <AlertDialogFooter>
+                                                  <AlertDialogCancel onClick={() => setSelectedTransaction(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                                  <AlertDialogAction onClick={handleDeleteTransactionConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                    {isDeleting ? "Deleting..." : "Delete"}
+                                                  </AlertDialogAction>
+                                                </AlertDialogFooter>
+                                            </AlertDialogContent>
+                                        )}
+                                    </AlertDialog>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                            </TableCell>
                         </TableRow>
                     );
                 })}
@@ -233,13 +364,44 @@ export default function TransactionsOverviewPage() {
          {!isLoading && allTransactions.length > 0 && (
              <CardContent className="pt-4 border-t">
                   {/* TODO: Add button to open 'Add Transaction' dialog */}
-                  {/* Example: <AddTransactionButton /> */}
+                  {/* Example: <AddTransactionButton accounts={accounts} categories={categories} onTransactionAdded={handleAddTransaction} isLoading={isLoading}/> */}
              </CardContent>
          )}
       </Card>
+
+        {/* Edit Transaction Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+            setIsEditDialogOpen(open);
+            if (!open) setSelectedTransaction(null);
+        }}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Edit Transaction</DialogTitle>
+                    <DialogDescription>
+                        Modify the details of the transaction.
+                    </DialogDescription>
+                </DialogHeader>
+                {selectedTransaction && accounts.length > 0 && categories.length > 0 && (
+                    <AddTransactionForm
+                        accounts={accounts}
+                        categories={categories}
+                        onTransactionAdded={handleUpdateTransaction}
+                        isLoading={isLoading}
+                        initialType={selectedTransaction.amount < 0 ? 'expense' : 'income'}
+                        // TODO: Pre-fill form with selectedTransaction data
+                    />
+                )}
+                {!selectedTransaction && (
+                     <p className="text-muted-foreground text-center p-4">Loading transaction data...</p>
+                 )}
+                  {(accounts.length === 0 || categories.length === 0) && (
+                     <p className="text-destructive text-center p-4">Cannot edit transaction: Missing account or category data.</p>
+                 )}
+            </DialogContent>
+        </Dialog>
+
        {/* TODO: Add the 'Add Transaction' Dialog component here */}
        {/* <AddTransactionDialog accounts={accounts} categories={categories} /> */}
     </div>
   );
 }
-
