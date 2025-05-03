@@ -31,10 +31,11 @@ type CsvRecord = {
 };
 
 // Define the essential *application* fields we need mapped from CsvMappingForm
+// Added 'transaction_type'
 const APP_FIELDS_VALUES = [
     'date', 'amount', 'amount_income', 'amount_expense', 'description', 'account',
     'source_account', 'destination_account', 'category', 'accountCurrency',
-    'tags', 'initialBalance', 'notes'
+    'tags', 'initialBalance', 'notes', 'transaction_type' // Added transaction_type
 ] as const;
 type AppField = typeof APP_FIELDS_VALUES[number];
 
@@ -301,6 +302,8 @@ export default function ImportDataPage() {
          // Try to map initial balance
          initialMappings.initialBalance = findColumnName(detectedHeaders, 'Initial balance') || findColumnName(detectedHeaders, 'Starting balance') || findColumnName(detectedHeaders, 'Balance') || findColumnName(detectedHeaders, 'Account balance'); // Added more generic balance terms
          initialMappings.notes = findColumnName(detectedHeaders, 'Notes') || findColumnName(detectedHeaders, 'Memo'); // Map notes
+         // Map Transaction Type (from Firefly export)
+         initialMappings.transaction_type = findColumnName(detectedHeaders, 'Type') || findColumnName(detectedHeaders, 'Transaction type');
 
 
          // Refined Amount Logic: Prefer 'Amount', then Income/Expense pairs, then specific currency amounts
@@ -394,6 +397,7 @@ export default function ImportDataPage() {
         const tagsCol = confirmedMappings.tags;
         const initialBalanceCol = confirmedMappings.initialBalance;
         const notesCol = confirmedMappings.notes;
+        const typeCol = confirmedMappings.transaction_type; // Transaction type column
 
         // Determine which account column(s) to use for initial account creation pass
         // Prioritize 'account', then 'source', then 'destination'
@@ -411,7 +415,8 @@ export default function ImportDataPage() {
              rawData,
              primaryAccountNameSourceCol, // Use the primary derived column
              accountCurrencyCol,
-             initialBalanceCol
+             initialBalanceCol,
+             typeCol // Pass type column to handle 'Opening Balance'
          );
          setAccountPreviewData(preview);
          console.log("Account preview generated:", preview);
@@ -424,6 +429,7 @@ export default function ImportDataPage() {
              primaryAccountNameSourceCol, // Use the primary derived column
              accountCurrencyCol,
              initialBalanceCol,
+             typeCol, // Pass type column
              true // Indicate it's a preview/map generation only
         );
         console.log("Generated temporary account map for transaction linking:", tempAccountMap);
@@ -444,6 +450,7 @@ export default function ImportDataPage() {
               const destAccountNameValue = destAccountCol ? record[destAccountCol] : undefined;
               const tagsValue = tagsCol ? record[tagsCol] : undefined;
               const notesValue = notesCol ? record[notesCol] : undefined;
+              const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
 
 
               // --- Amount Parsing Logic ---
@@ -488,7 +495,7 @@ export default function ImportDataPage() {
                }
 
               // --- Determine Transaction Type and Involved Accounts ---
-              let transactionType: 'income' | 'expense' | 'transfer' | 'skip' = 'skip';
+              let transactionTypeInternal: 'income' | 'expense' | 'transfer' | 'skip' = 'skip';
               let primaryAccountId: string | undefined = undefined;
               let isTransfer = false;
 
@@ -510,37 +517,58 @@ export default function ImportDataPage() {
                        if (parsedAmount === 0) throw new Error(`Row ${rowNumber}: Transfer amount resolved to zero from income/expense columns.`);
                        console.log(`Row ${rowNumber}: Resolved transfer amount to ${parsedAmount} from income/expense.`);
                    } else if (isNaN(parsedAmount)) {
-                       throw new Error(`Row ${rowNumber}: Could not determine transfer amount.`);
+                       // If signed amount is present for transfer, use it (absolute)
+                       const signedAmount = parseAmount(signedAmountValue);
+                       if (!isNaN(signedAmount)) {
+                           parsedAmount = Math.abs(signedAmount);
+                           console.log(`Row ${rowNumber}: Using absolute signed amount ${parsedAmount} for transfer.`);
+                       } else {
+                          throw new Error(`Row ${rowNumber}: Could not determine transfer amount.`);
+                       }
                    } else {
                        parsedAmount = Math.abs(parsedAmount); // Ensure transfer amount is positive
                    }
 
                    // For preview, use source ID for the representative transaction
                    primaryAccountId = sourceId;
-                   transactionType = 'transfer';
+                   transactionTypeInternal = 'transfer';
                    category = 'Transfer'; // Standardize category
                    description = description || `Transfer from ${sourceAccountNameValue} to ${destAccountNameValue}`;
 
                } else if (accountNameValue) {
-                   // Standard Expense/Income using 'account' column
+                   // Standard Expense/Income/Opening Balance using 'account' column
                    const accountNameLower = accountNameValue.trim().toLowerCase();
                    primaryAccountId = tempAccountMap[accountNameLower]; // Use temp map
                    if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Account '${accountNameValue}' not found in map.`);
 
                    if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value ('${signedAmountValue || incomeAmountValue || expenseAmountValue || 'N/A'}').`);
 
-                   transactionType = parsedAmount >= 0 ? 'income' : 'expense';
+                   // Determine type based on sign OR typeCol if available
+                   if (typeValue === 'deposit' || typeValue === 'transfer') { // Treat 'Transfer' type (without source/dest) as deposit
+                       parsedAmount = Math.abs(parsedAmount); // Ensure positive for deposit/transfer
+                       transactionTypeInternal = 'income';
+                       if (typeValue === 'transfer') category = 'Transfer'; // Mark as transfer category
+                   } else if (typeValue === 'withdrawal') {
+                       parsedAmount = -Math.abs(parsedAmount); // Ensure negative for withdrawal
+                       transactionTypeInternal = 'expense';
+                   } else if (typeValue === 'opening balance') {
+                        transactionTypeInternal = 'skip'; // Skip creating a transaction for opening balance
+                        description = description + " (Opening Balance Entry)";
+                   } else {
+                       // Fallback to amount sign if type column is missing or unhelpful
+                       transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
+                   }
 
-                    // Skip potential initial balance entries NOT identified as transfers
-                    if (initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
-                        const descLower = description.toLowerCase();
-                        const catLower = category.toLowerCase();
-                        if (descLower.includes('initial balance') || descLower.includes('starting balance') || catLower.includes('initial balance') || catLower.includes('starting balance')) {
-                            console.log(`Row ${rowNumber}: Skipping transaction creation for potential initial balance entry: "${description}"`);
-                            transactionType = 'skip';
-                            description = description + " (Initial Balance Entry)";
-                        }
-                    }
+                   // Re-check skipping if 'initialBalance' column was explicitly mapped and indicates opening balance
+                   if (transactionTypeInternal !== 'skip' && initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
+                       const descLower = description.toLowerCase();
+                       const catLower = category.toLowerCase();
+                       if (descLower.includes('initial balance') || descLower.includes('starting balance') || catLower.includes('initial balance') || catLower.includes('starting balance')) {
+                           console.log(`Row ${rowNumber}: Skipping transaction creation for potential initial balance entry: "${description}" (from desc/cat)`);
+                           transactionTypeInternal = 'skip';
+                           description = description + " (Initial Balance Entry)";
+                       }
+                   }
 
                } else {
                    // We should have source/dest OR account by now due to initial validation
@@ -554,7 +582,7 @@ export default function ImportDataPage() {
                       if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value.`);
 
                       // Determine type based on sign (if only one account involved)
-                      transactionType = parsedAmount >= 0 ? 'income' : 'expense';
+                      transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
 
                    } else {
                       // Should not happen if validation is correct
@@ -564,13 +592,13 @@ export default function ImportDataPage() {
 
 
                // Final check for amount validity after all processing
-               if (transactionType !== 'skip' && isNaN(parsedAmount)) {
+               if (transactionTypeInternal !== 'skip' && isNaN(parsedAmount)) {
                     throw new Error(`Row ${rowNumber}: Failed to determine a valid transaction amount.`);
                }
 
 
               // --- Construct Mapped Transaction ---
-               if (transactionType === 'skip') {
+               if (transactionTypeInternal === 'skip') {
                     return {
                         accountId: 'skipped', // Special ID for skipped
                         date: parseDate(dateValue),
@@ -580,7 +608,7 @@ export default function ImportDataPage() {
                         tags: parsedTags,
                         originalRecord: record,
                         importStatus: 'skipped',
-                        errorMessage: 'Skipped (e.g., initial balance entry).',
+                        errorMessage: 'Skipped (e.g., opening balance).',
                     };
                } else {
                     return {
@@ -593,7 +621,7 @@ export default function ImportDataPage() {
                         tags: parsedTags,
                         originalRecord: record,
                         importStatus: 'pending', // Default status
-                        // isTransfer: isTransfer, // Add flag if needed by import logic
+                        // isTransfer: isTransfer, // Flag is implicitly handled by logic now
                     };
                }
 
@@ -621,7 +649,7 @@ export default function ImportDataPage() {
              errorMessages.push(`${errorMappedData.length} row(s) had processing errors (e.g., missing account, invalid amount).`);
         }
         if (skippedMappedData.length > 0) {
-             errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., initial balance).`);
+             errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., opening balance).`);
         }
         if (errorMessages.length > 0) {
             setError(`Import Preview Issues: ${errorMessages.join(' ')} Review the tables below.`);
@@ -644,14 +672,15 @@ export default function ImportDataPage() {
         csvData: CsvRecord[],
         accountNameCol: string,
         accountCurrencyCol?: string,
-        initialBalanceCol?: string
+        initialBalanceCol?: string,
+        typeCol?: string // Add type column
     ): Promise<{ preview: AccountPreview[] }> => {
         const existingAccounts = await getAccounts();
         const preview: AccountPreview[] = [];
         const processedAccountNames = new Set<string>(); // Track processed names
 
         // Map to store details for accounts found in the CSV (normalizedName -> details)
-        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, existingAccounts);
+        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, typeCol, existingAccounts); // Pass typeCol
 
         accountUpdates.forEach((accDetails, normalizedName) => {
             const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
@@ -720,6 +749,7 @@ export default function ImportDataPage() {
         accountNameCol: string, // The primary column determined earlier
         accountCurrencyCol?: string,
         initialBalanceCol?: string,
+        typeCol?: string, // Add type column
         existingAccounts: Account[] // Pass existing accounts to avoid re-fetching
     ): Promise<Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>> => {
         const accountUpdates = new Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
@@ -778,17 +808,34 @@ export default function ImportDataPage() {
                       }
                       details.currency = finalCurrency;
 
-                     // Capture initial balance if mapped and present for *this specific row*
-                     // This updates the balance if found later in the file for the same account
+                     // Capture initial balance if mapped OR if type is 'Opening Balance'
+                     let balanceFromCsv: number | undefined = undefined;
+                     const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
+                     const amountValue = amountCol ? record[amountCol] : undefined; // Need amount for Opening Balance type
+
                      if (initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
                          const balance = parseAmount(record[initialBalanceCol]);
                          if (!isNaN(balance)) {
-                             details.initialBalance = balance; // Update the balance
-                             // console.log(`Row ${index + 2}: Found potential initial balance ${balance} for account "${name}" from CSV.`); // Reduce logging
+                             balanceFromCsv = balance;
                          } else {
-                             console.warn(`Row ${index + 2}: Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}".`);
+                             console.warn(`Row ${index + 2}: Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}" from balance column.`);
+                         }
+                     } else if (typeValue === 'opening balance' && amountValue !== undefined && amountValue !== '') {
+                         // If type is 'Opening Balance', use the 'amount' column for the initial balance
+                         const balance = parseAmount(amountValue);
+                         if (!isNaN(balance)) {
+                            balanceFromCsv = balance;
+                            console.log(`Row ${index + 2}: Using amount ${balance} from 'Opening Balance' type for account "${name}".`);
+                         } else {
+                             console.warn(`Row ${index + 2}: Could not parse amount "${amountValue}" for 'Opening Balance' type for account "${name}".`);
                          }
                      }
+
+                     // Update the initialBalance only if a valid balance was found in the CSV for this account
+                     if (balanceFromCsv !== undefined) {
+                         details.initialBalance = balanceFromCsv;
+                     }
+
                       accountUpdates.set(normalizedName, details);
                  }
              });
@@ -805,6 +852,7 @@ export default function ImportDataPage() {
         accountNameCol: string, // Primary column determined earlier
         accountCurrencyCol?: string,
         initialBalanceCol?: string, // Optional column for initial balance
+        typeCol?: string, // Add type column
         isPreviewOnly: boolean = false // Flag to prevent actual creation/update if true
     ): Promise<{ success: boolean; map: { [key: string]: string } }> => {
         let success = true;
@@ -815,7 +863,7 @@ export default function ImportDataPage() {
         }, {} as { [key: string]: string });
 
         // Map to store details for accounts found in the CSV (normalizedName -> details)
-        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, existingAccounts);
+        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, typeCol, existingAccounts); // Pass typeCol
 
         if (accountUpdates.size === 0 && !isPreviewOnly) {
             console.log("No account updates needed.");
@@ -1046,10 +1094,11 @@ export default function ImportDataPage() {
       // Final check/creation of accounts and get the map just before import
       console.log("Finalizing account mapping before import...");
       const { success: finalAccountMapSuccess, map: finalAccountMap } = await createMissingAccountsAndGetMap(
-          rawData.filter((_, index) => parsedData[index]?.importStatus === 'pending'), // Only process relevant raw data
+          rawData.filter((_, index) => parsedData[index]?.importStatus === 'pending' || (columnMappings.transaction_type && parsedData[index]?.originalRecord[columnMappings.transaction_type!]?.toLowerCase() === 'opening balance') ), // Include opening balance rows for account creation/update
           primaryAccountNameSourceCol, // Pass the primary source column
           columnMappings.accountCurrency,
           columnMappings.initialBalance,
+          columnMappings.transaction_type, // Pass type column
           false // Set to false to actually perform creation/update
       );
        if (!finalAccountMapSuccess) {
@@ -1376,7 +1425,7 @@ export default function ImportDataPage() {
                     <DialogDescription>
                         Match columns from your CSV (right) to application fields (left).
                         Essential fields: Date, Account Name (or Source/Destination), and Amount (either signed or income/expense pair).
-                        We've tried to guess based on common headers. Map 'Initial Balance' if available.
+                        We've tried to guess based on common headers. Map 'Initial Balance' if available. Map 'Transaction Type' if your CSV has it (helps with accuracy).
                     </DialogDescription>
                 </DialogHeader>
                 <CsvMappingForm
@@ -1396,7 +1445,7 @@ export default function ImportDataPage() {
             <Card className="mb-8">
                 <CardHeader>
                     <CardTitle>Step 2.5: Account Changes Preview</CardTitle>
-                    <CardDescription>Review the accounts that will be created or updated based on the CSV data and mappings. Initial balances are estimates from the 'Initial Balance' column if mapped.</CardDescription>
+                    <CardDescription>Review the accounts that will be created or updated based on the CSV data and mappings. Initial balances are derived from 'Initial Balance', 'Opening Balance' type, or existing data.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="max-h-[300px] overflow-y-auto border rounded-md">
@@ -1406,7 +1455,7 @@ export default function ImportDataPage() {
                                     <TableHead>Account Name</TableHead>
                                     <TableHead>Action</TableHead>
                                     <TableHead>Currency</TableHead>
-                                    <TableHead className="text-right">Initial Balance</TableHead>
+                                    <TableHead className="text-right">Initial/Updated Balance</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1435,7 +1484,7 @@ export default function ImportDataPage() {
         <Card>
           <CardHeader>
             <CardTitle>Step 3: Review &amp; Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
-            <CardDescription>Review the mapped transactions. Rows marked 'Error' or 'Skipped' will not be imported. Adjust mappings if needed by clicking "Parse &amp; Map Columns" again with the same file. Click "Import Transactions" above when ready.</CardDescription>
+            <CardDescription>Review the mapped transactions. Rows marked 'Error' or 'Skipped' (like Opening Balances) will not be imported. Adjust mappings if needed by clicking "Parse &amp; Map Columns" again with the same file. Click "Import Transactions" above when ready.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-[500px] overflow-y-auto border rounded-md">
@@ -1448,6 +1497,7 @@ export default function ImportDataPage() {
                     {columnMappings.account && <TableHead>Account (Mapped)</TableHead>}
                     {columnMappings.source_account && <TableHead>Source Acc (CSV)</TableHead>}
                     {columnMappings.destination_account && <TableHead>Dest Acc (CSV)</TableHead>}
+                     {columnMappings.transaction_type && <TableHead>Type (CSV)</TableHead>} {/* Show Type if mapped */}
                     {/* Other details */}
                     {columnMappings.description && <TableHead>Description</TableHead>}
                     {columnMappings.category && <TableHead>Category</TableHead>}
@@ -1487,6 +1537,7 @@ export default function ImportDataPage() {
                             {columnMappings.account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.account!]}>{item.originalRecord[columnMappings.account!]}</TableCell>}
                             {columnMappings.source_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.source_account!]}>{item.originalRecord[columnMappings.source_account!]}</TableCell>}
                             {columnMappings.destination_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.destination_account!]}>{item.originalRecord[columnMappings.destination_account!]}</TableCell>}
+                            {columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>} {/* Show Type */}
                             {columnMappings.description && <TableCell className="max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>}
                             {columnMappings.category && <TableCell className="capitalize max-w-[100px] truncate" title={item.category}>{item.category}</TableCell>}
                             {columnMappings.tags && (
@@ -1531,4 +1582,3 @@ export default function ImportDataPage() {
     </div>
   );
 }
-

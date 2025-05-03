@@ -23,7 +23,8 @@ const APP_FIELDS = [
     { value: 'tags', label: 'Tags (comma-separated)', required: false },
     { value: 'initialBalance', label: 'Initial Account Balance', required: false, description: "Sets the starting balance for new accounts." },
     { value: 'notes', label: 'Notes/Memo', required: false },
-    // Add other potentially useful fields like 'Transaction Type', 'Opposing Account', etc. later if needed
+    { value: 'transaction_type', label: 'Transaction Type', required: false, description: "e.g., Deposit, Withdrawal, Transfer, Opening Balance. Helps clarify amount sign." } // Added Transaction Type
+    // Add other potentially useful fields like 'Opposing Account', etc. later if needed
 ] as const;
 
 
@@ -77,11 +78,18 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
 
     const requiredAppFields = APP_FIELDS.filter(f => f.required);
     const missingMappings = requiredAppFields.filter(field => !mappings[field.value]);
-    const missingFieldLabels = missingMappings.map(f => f.label);
+    let missingFieldLabels = missingMappings.map(f => f.label); // Use let for modification
 
     if (!amountRequirementMet) {
          missingFieldLabels.push("Amount (Signed +/-) * OR *both* Income Amount + Expense Amount");
     }
+
+     // Account Validation - need at least ONE of account, source, or destination
+     const hasPrimaryAccount = !!mappings['account'];
+     const hasTransferAccounts = !!mappings['source_account'] && !!mappings['destination_account'];
+     if (!hasPrimaryAccount && !hasTransferAccounts) {
+         missingFieldLabels.push("Account Name *OR* both Source Account + Destination Account");
+     }
 
 
     if (missingFieldLabels.length > 0) {
@@ -133,7 +141,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
         </div>
       ))}
        <p className="text-xs text-muted-foreground pt-2">
-          Fields marked with * are essential. For amount, map either 'Amount (Signed +/-)' **OR** map **both** 'Income Amount' and 'Expense Amount'.
+          Fields marked with * are essential. Map 'Account Name' or both transfer accounts. Map 'Amount' or both income/expense amounts.
        </p>
        {/* Removed repetitive description texts as they are now part of the label section */}
 
@@ -151,4 +159,3 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
 };
 
 export default CsvMappingForm;
-
