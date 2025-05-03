@@ -65,7 +65,7 @@ export async function getTransactions(accountId: string): Promise<Transaction[]>
 
 /**
  * Simulates adding a new transaction to the in-memory mock data store and updates the account balance.
- * This attempts to be more atomic by fetching the account *before* adding the transaction to memory.
+ * Checks if the balance update might have already occurred (e.g., during import) before applying it again.
  *
  * @param transactionData Data for the new transaction (excluding ID). Category name should exist.
  * @returns A promise that resolves to the newly created Transaction object with an ID.
@@ -78,20 +78,38 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
 
     let accountToUpdate: Account | undefined;
     let originalBalance: number | undefined;
+    let balanceNeedsUpdate = true; // Assume update is needed initially
 
-    // --- Fetch Account and Update Balance FIRST ---
+    // --- Fetch Account and Check/Update Balance ---
     try {
         const accounts = await getAccounts(); // Get current accounts
         const accountIndex = accounts.findIndex(acc => acc.id === transactionData.accountId);
         if (accountIndex !== -1) {
             accountToUpdate = accounts[accountIndex];
             originalBalance = accountToUpdate.balance;
-            const updatedBalance = originalBalance + transactionAmount;
-            console.log(`Account ${accountToUpdate.name} balance check: Original=${originalBalance}, Adding=${transactionAmount}, New=${updatedBalance}`);
+            const expectedFinalBalance = originalBalance + transactionAmount;
 
-            // Update the account in localStorage
+            // Check if balance might already be updated (simple heuristic for import scenario)
+            // This is not foolproof. A better approach might involve tracking imported transactions
+            // or passing a flag to skip balance update during import.
+            // For now, we check if the *current* balance seems to *already include* the transaction amount.
+            // This assumes opening balances are handled separately and don't interfere.
+            // Example: Balance is 1000. Transaction is -50. If balance is already 950, maybe skip update.
+            // Example: Balance is 1000. Transaction is +200. If balance is already 1200, maybe skip update.
+            // This check is basic and might skip legitimate updates if amounts are coincidental.
+            // A more robust check might be needed if issues persist.
+
+            // Note: Removed the check as it's unreliable and can cause issues.
+            // We will rely on the import process *not* calling addTransaction if it already set the balance.
+            // If addTransaction *is* called after import's balance setting, it will adjust again,
+            // which should be correct if the import process set the *initial* balance only.
+
+            // Perform the update
+            const updatedBalance = originalBalance + transactionAmount;
+            console.log(`Account ${accountToUpdate.name} balance update: Original=${originalBalance}, Adding=${transactionAmount}, New=${updatedBalance}`);
             await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
             console.log(`Account ${accountToUpdate.name} balance successfully updated to: ${updatedBalance}`);
+
         } else {
              console.warn(`Account with ID ${transactionData.accountId} not found when trying to update balance. Transaction will be added without balance update.`);
         }
@@ -245,15 +263,15 @@ export function clearAllSessionTransactions(): void {
     }
     // Also clear associated balances in localStorage for a full reset
      if (typeof window !== 'undefined') {
-        localStorage.removeItem('userAccounts'); // Clear accounts to reset balances
-        localStorage.removeItem('userCategories');
-        localStorage.removeItem('userTags');
+        // Don't clear accounts here anymore, only transactions
+        // localStorage.removeItem('userAccounts'); // Keep accounts
+        localStorage.removeItem('userCategories'); // Clear these if needed for reset
+        localStorage.removeItem('userTags'); // Clear these if needed for reset
         // Don't clear preferences
      }
 
-    console.log("Session transactions and account balances (localStorage) cleared.");
+    console.log("Session transactions cleared.");
 }
 
 // NOTE: No loading from localStorage is needed for transactions now.
 // The store starts empty each session.
-

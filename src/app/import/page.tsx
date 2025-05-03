@@ -179,7 +179,8 @@ export default function ImportDataPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]); // Add state for tags
   const [accountPreviewData, setAccountPreviewData] = useState<AccountPreview[]>([]); // State for account preview
-  const [accountNameIdMap, setAccountNameIdMap] = useState<{ [key: string]: string }>({}); // Store map here
+  // Store the final map used for import (after creation/update)
+  const [finalAccountMapForImport, setFinalAccountMapForImport] = useState<{ [key: string]: string }>({});
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping>({});
   const [isClearing, setIsClearing] = useState(false); // State for clearing confirmation
@@ -241,6 +242,7 @@ export default function ImportDataPage() {
       setCsvHeaders([]);
       setImportProgress(0);
       setColumnMappings({});
+      setFinalAccountMapForImport({}); // Reset final map
     }
   };
 
@@ -352,6 +354,7 @@ export default function ImportDataPage() {
         setParsedData([]);
         setAccountPreviewData([]); // Clear previous preview
         setColumnMappings(confirmedMappings); // Store the confirmed mappings
+        setFinalAccountMapForImport({}); // Reset final map for this new mapping
 
         // Validate required mappings
         const hasSignedAmount = !!confirmedMappings.amount;
@@ -413,27 +416,23 @@ export default function ImportDataPage() {
         // --- Preview Account Changes (No creation yet) ---
          const { preview } = await previewAccountChanges(
              rawData,
-             primaryAccountNameSourceCol, // Use the primary derived column
-             accountCurrencyCol,
-             initialBalanceCol,
-             typeCol // Pass type column to handle 'Opening Balance'
+             confirmedMappings, // Pass all mappings
+             existingAccounts // Pass current accounts
          );
          setAccountPreviewData(preview);
          console.log("Account preview generated:", preview);
 
 
-        // --- Generate Account Map for Transaction Linking (No creation yet) ---
+        // --- Generate a TEMPORARY Account Map for Transaction Linking (No creation yet) ---
         // This step gets the IDs of existing accounts and placeholders for new ones
-        const { map: tempAccountMap } = await createMissingAccountsAndGetMap(
+        const { map: tempAccountMap } = await createOrUpdateAccountsAndGetMap(
              rawData,
-             primaryAccountNameSourceCol, // Use the primary derived column
-             accountCurrencyCol,
-             initialBalanceCol,
-             typeCol, // Pass type column
+             confirmedMappings, // Pass all mappings
+             existingAccounts, // Pass current accounts
              true // Indicate it's a preview/map generation only
         );
         console.log("Generated temporary account map for transaction linking:", tempAccountMap);
-        setAccountNameIdMap(tempAccountMap); // Save the map for later use in import
+        // Don't save this temp map to state, it's only for the mapping step
 
 
         // --- Map Transaction Data using the TEMP map ---
@@ -461,15 +460,19 @@ export default function ImportDataPage() {
 
               if (amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
                   parsedAmount = parseAmount(signedAmountValue);
+                   console.log(`Row ${rowNumber}: Parsed amount from signed column ('${amountCol}')='${signedAmountValue}' as ${parsedAmount}`);
               } else if (incomeCol && expenseCol && (incomeAmountValue !== undefined || expenseAmountValue !== undefined)) {
                   const income = parseAmount(incomeAmountValue);
                   const expense = parseAmount(expenseAmountValue);
                    if (!isNaN(income) && income > 0 && (isNaN(expense) || expense === 0)) {
                        parsedAmount = income; // It's income
+                       console.log(`Row ${rowNumber}: Parsed amount from income column ('${incomeCol}')='${incomeAmountValue}' as ${parsedAmount}`);
                    } else if (!isNaN(expense) && expense > 0 && (isNaN(income) || income === 0)) {
                        parsedAmount = -expense; // It's an expense (make it negative)
+                       console.log(`Row ${rowNumber}: Parsed amount from expense column ('${expenseCol}')='${expenseAmountValue}' as ${parsedAmount}`);
                    } else if (!isNaN(income) && income === 0 && !isNaN(expense) && expense === 0) {
                        parsedAmount = 0; // Zero amount transaction
+                       console.log(`Row ${rowNumber}: Parsed amount as 0 from income/expense columns.`);
                    } else if (!isNaN(income) && income > 0 && !isNaN(expense) && expense > 0) {
                       // Ambiguous case (Firefly transfer?) - will resolve based on accounts or error
                        console.warn(`Row ${rowNumber}: Both income (${income}) and expense (${expense}) have values. Transfer logic will attempt to resolve.`);
@@ -477,9 +480,16 @@ export default function ImportDataPage() {
                        parsedAmount = NaN; // Mark as NaN initially
                    } else {
                         // Throw error if parsing failed or logic is unclear
-                       throw new Error(`Row ${rowNumber}: Could not determine amount from Income ('${incomeAmountValue}') and Expense ('${expenseAmountValue}') columns.`);
+                       throw new Error(`Could not determine amount from Income ('${incomeAmountValue}') and Expense ('${expenseAmountValue}') columns.`);
                    }
               }
+
+               // Additional check if parsedAmount is still NaN
+              if (isNaN(parsedAmount)) {
+                  console.error(`Row ${rowNumber}: Amount could not be determined. Signed='${signedAmountValue}', Income='${incomeAmountValue}', Expense='${expenseAmountValue}'.`);
+                  throw new Error(`Could not determine a valid amount.`);
+              }
+
 
               // --- Validation ---
               if (!dateValue) throw new Error(`Row ${rowNumber}: Missing mapped 'Date' data.`);
@@ -496,7 +506,7 @@ export default function ImportDataPage() {
 
               // --- Determine Transaction Type and Involved Accounts ---
               let transactionTypeInternal: 'income' | 'expense' | 'transfer' | 'skip' = 'skip';
-              let primaryAccountId: string | undefined = undefined;
+              let primaryAccountId: string | undefined = undefined; // This will hold the TEMP account ID for linking
               let isTransfer = false;
 
               // Explicit Transfer Check (using Firefly source/destination columns)
@@ -507,8 +517,8 @@ export default function ImportDataPage() {
                    const sourceId = tempAccountMap[sourceNameLower]; // Use the temp map
                    const destId = tempAccountMap[destNameLower]; // Use the temp map
 
-                   if (!sourceId) throw new Error(`Row ${rowNumber}: Transfer detected, but Source account ('${sourceAccountNameValue}') not found in map.`);
-                   if (!destId) throw new Error(`Row ${rowNumber}: Transfer detected, but Destination account ('${destAccountNameValue}') not found in map.`);
+                   if (!sourceId) throw new Error(`Row ${rowNumber}: Transfer detected, but Source account ('${sourceAccountNameValue}') not found in temp map.`);
+                   if (!destId) throw new Error(`Row ${rowNumber}: Transfer detected, but Destination account ('${destAccountNameValue}') not found in temp map.`);
                    if (sourceId === destId) throw new Error(`Row ${rowNumber}: Transfer source and destination accounts are the same ('${sourceAccountNameValue}').`);
 
                    // Resolve amount for transfers when both income/expense present
@@ -539,7 +549,7 @@ export default function ImportDataPage() {
                    // Standard Expense/Income/Opening Balance using 'account' column
                    const accountNameLower = accountNameValue.trim().toLowerCase();
                    primaryAccountId = tempAccountMap[accountNameLower]; // Use temp map
-                   if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Account '${accountNameValue}' not found in map.`);
+                   if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Account '${accountNameValue}' not found in temp map.`);
 
                    if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value ('${signedAmountValue || incomeAmountValue || expenseAmountValue || 'N/A'}').`);
 
@@ -577,7 +587,7 @@ export default function ImportDataPage() {
                    if (singleAccountName) {
                       const accountNameLower = singleAccountName.toLowerCase();
                       primaryAccountId = tempAccountMap[accountNameLower];
-                      if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Account '${singleAccountName}' from source/destination column not found in map.`);
+                      if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Account '${singleAccountName}' from source/destination column not found in temp map.`);
 
                       if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value.`);
 
@@ -612,7 +622,7 @@ export default function ImportDataPage() {
                     };
                } else {
                     return {
-                        // Use the determined account ID (could be source, dest, or primary)
+                        // Use the determined temporary account ID (could be source, dest, or primary)
                         accountId: primaryAccountId!, // Validated above
                         date: parseDate(dateValue),
                         amount: parsedAmount, // Amount has correct sign or is positive for transfer
@@ -621,7 +631,6 @@ export default function ImportDataPage() {
                         tags: parsedTags,
                         originalRecord: record,
                         importStatus: 'pending', // Default status
-                        // isTransfer: isTransfer, // Flag is implicitly handled by logic now
                     };
                }
 
@@ -670,17 +679,14 @@ export default function ImportDataPage() {
      */
     const previewAccountChanges = async (
         csvData: CsvRecord[],
-        accountNameCol: string,
-        accountCurrencyCol?: string,
-        initialBalanceCol?: string,
-        typeCol?: string // Add type column
+        mappings: ColumnMapping, // Pass full mappings
+        existingAccounts: Account[] // Pass existing accounts
     ): Promise<{ preview: AccountPreview[] }> => {
-        const existingAccounts = await getAccounts();
         const preview: AccountPreview[] = [];
         const processedAccountNames = new Set<string>(); // Track processed names
 
         // Map to store details for accounts found in the CSV (normalizedName -> details)
-        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, typeCol, existingAccounts); // Pass typeCol
+        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccounts); // Pass mappings
 
         accountUpdates.forEach((accDetails, normalizedName) => {
             const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
@@ -746,20 +752,25 @@ export default function ImportDataPage() {
      */
     const buildAccountUpdateMap = async (
         csvData: CsvRecord[],
-        accountNameCol: string, // The primary column determined earlier
-        accountCurrencyCol?: string,
-        initialBalanceCol?: string,
-        typeCol?: string, // Add type column
+        mappings: ColumnMapping, // Pass full mappings
         existingAccounts: Account[] // Pass existing accounts to avoid re-fetching
     ): Promise<Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>> => {
         const accountUpdates = new Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
 
+        const accountNameCol = mappings.account;
+        const sourceAccountCol = mappings.source_account;
+        const destAccountCol = mappings.destination_account;
+        const accountCurrencyCol = mappings.accountCurrency;
+        const initialBalanceCol = mappings.initialBalance;
+        const typeCol = mappings.transaction_type;
+        const amountCol = mappings.amount; // Need amount for opening balance logic
+
         csvData.forEach((record, index) => {
             // Consider account, source_account, destination_account for finding unique account names
              const potentialAccountNames = [
-                 record[columnMappings.account || '']?.trim(), // Use mapped column, fallback to ''
-                 record[columnMappings.source_account || '']?.trim(),
-                 record[columnMappings.destination_account || '']?.trim()
+                 accountNameCol ? record[accountNameCol]?.trim() : undefined,
+                 sourceAccountCol ? record[sourceAccountCol]?.trim() : undefined,
+                 destAccountCol ? record[destAccountCol]?.trim() : undefined
              ].filter(Boolean) as string[]; // Get all non-empty account names from relevant columns
 
              potentialAccountNames.forEach(name => {
@@ -832,6 +843,7 @@ export default function ImportDataPage() {
                      }
 
                      // Update the initialBalance only if a valid balance was found in the CSV for this account
+                     // Use the *latest* balance found for this account in the CSV
                      if (balanceFromCsv !== undefined) {
                          details.initialBalance = balanceFromCsv;
                      }
@@ -844,26 +856,24 @@ export default function ImportDataPage() {
     }
 
     /**
-     * Creates missing accounts or updates existing ones with initial balance found in CSV data.
-     * Returns the final account map and a success status.
+     * Creates missing accounts or updates existing ones based on CSV data.
+     * Returns the final account map (mapping lowercase account name to account ID) and a success status.
      */
-    const createMissingAccountsAndGetMap = async (
+    const createOrUpdateAccountsAndGetMap = async (
         csvData: CsvRecord[],
-        accountNameCol: string, // Primary column determined earlier
-        accountCurrencyCol?: string,
-        initialBalanceCol?: string, // Optional column for initial balance
-        typeCol?: string, // Add type column
+        mappings: ColumnMapping, // Pass all mappings
+        existingAccounts: Account[], // Pass current accounts
         isPreviewOnly: boolean = false // Flag to prevent actual creation/update if true
     ): Promise<{ success: boolean; map: { [key: string]: string } }> => {
         let success = true;
-        const existingAccounts = await getAccounts(); // Fetch current accounts
+        // Initialize the working map with existing accounts
         const workingMap = existingAccounts.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
              return map;
         }, {} as { [key: string]: string });
 
-        // Map to store details for accounts found in the CSV (normalizedName -> details)
-        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, typeCol, existingAccounts); // Pass typeCol
+        // Build the map of required account changes based on the CSV
+        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccounts);
 
         if (accountUpdates.size === 0 && !isPreviewOnly) {
             console.log("No account updates needed.");
@@ -878,7 +888,7 @@ export default function ImportDataPage() {
             const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
             try {
                 if (isPreviewOnly) {
-                     // For preview, just populate the map based on what *would* happen
+                    // For preview, just populate the map based on what *would* happen
                     if (existingAccount) {
                         workingMap[normalizedName] = existingAccount.id;
                     } else {
@@ -887,7 +897,6 @@ export default function ImportDataPage() {
                     }
                     continue; // Skip actual creation/update in preview mode
                 }
-
 
                 // Actual Creation/Update Logic
                 if (existingAccount) {
@@ -956,6 +965,23 @@ export default function ImportDataPage() {
 
         if (accountsProcessedCount > 0 && !isPreviewOnly) {
             toast({ title: "Accounts Processed", description: `Created or updated ${accountsProcessedCount} accounts based on CSV data.` });
+            // Refetch accounts *after* all updates are done to ensure consistency
+            try {
+                 const latestAccounts = await getAccounts();
+                 setAccounts(latestAccounts); // Update state for UI consistency
+                 // Rebuild the final map based on the absolute latest data
+                 const finalMap = latestAccounts.reduce((map, acc) => {
+                     map[acc.name.toLowerCase().trim()] = acc.id;
+                     return map;
+                 }, {} as { [key: string]: string });
+                 console.log("Final account map after creation/updates:", finalMap);
+                 return { success, map: finalMap };
+            } catch (fetchError) {
+                 console.error("Failed to refetch accounts after updates:", fetchError);
+                 success = false; // Mark as failure if refetch fails
+                 return { success, map: workingMap }; // Return the map as it was before refetch failed
+            }
+
         }
 
         return { success, map: workingMap }; // Return success status and the final map
@@ -1082,44 +1108,29 @@ export default function ImportDataPage() {
       setError(null); // Clear previous errors
       let overallError = false;
 
-       // Determine primary account column used in mapping
-        const primaryAccountNameSourceCol = columnMappings.account || columnMappings.source_account || columnMappings.destination_account;
-        if (!primaryAccountNameSourceCol) {
-            // This should have been caught earlier, but double-check
-            setError("Critical Error: Account name column mapping is missing.");
+       // --- Crucial Step: Create/Update Accounts and get FINAL map ---
+        console.log("Finalizing account creation/updates before import...");
+        let latestAccounts = await getAccounts(); // Fetch current accounts
+        const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
+            rawData.filter((_, index) => parsedData[index]?.importStatus === 'pending' || (columnMappings.transaction_type && parsedData[index]?.originalRecord[columnMappings.transaction_type!]?.toLowerCase() === 'opening balance') ), // Include relevant rows for account creation/update
+            columnMappings, // Pass confirmed mappings
+            latestAccounts, // Pass current accounts
+            false // Set to false to actually perform creation/update
+        );
+
+        if (!finalAccountMapSuccess) {
+            setError("Error finalizing account mapping before import. Check console.");
             setIsLoading(false);
             return;
         }
+        setFinalAccountMapForImport(finalMap); // Save the final map to state for use in transaction loop
+        console.log("Using FINAL account map for import execution:", finalMap);
 
-      // Final check/creation of accounts and get the map just before import
-      console.log("Finalizing account mapping before import...");
-      const { success: finalAccountMapSuccess, map: finalAccountMap } = await createMissingAccountsAndGetMap(
-          rawData.filter((_, index) => parsedData[index]?.importStatus === 'pending' || (columnMappings.transaction_type && parsedData[index]?.originalRecord[columnMappings.transaction_type!]?.toLowerCase() === 'opening balance') ), // Include opening balance rows for account creation/update
-          primaryAccountNameSourceCol, // Pass the primary source column
-          columnMappings.accountCurrency,
-          columnMappings.initialBalance,
-          columnMappings.transaction_type, // Pass type column
-          false // Set to false to actually perform creation/update
-      );
-       if (!finalAccountMapSuccess) {
-          setError("Error finalizing account mapping before import. Check console.");
-          setIsLoading(false);
-          return;
-      }
-       // Update UI accounts state with potentially newly created/updated accounts AND update the internal map
-       try {
-          const latestAccounts = await getAccounts();
-          setAccounts(latestAccounts);
-          // Rebuild the accountNameIdMap based on the *latest* accounts
-           const latestMap = latestAccounts.reduce((map, acc) => {
-             map[acc.name.toLowerCase().trim()] = acc.id;
-             return map;
-            }, {} as { [key: string]: string });
-           setAccountNameIdMap(latestMap); // Update the state map
-           console.log("Refetched accounts state and updated account map after final mapping.");
-       } catch {
-           console.error("Failed to refetch accounts state before import execution.");
-       }
+        // Refresh accounts state in UI *after* creation/update step
+        latestAccounts = await getAccounts();
+        setAccounts(latestAccounts);
+       // -------------------------------------------------------------
+
 
       // Create missing categories and tags
       console.log("Adding missing categories...");
@@ -1137,7 +1148,6 @@ export default function ImportDataPage() {
       console.log("Fetching latest categories and tags before import...");
       let currentCategories = await getCategories();
       let currentTags = await getTags();
-      console.log("Using FINAL account map (state) for import execution:", accountNameIdMap); // Use the state map
 
 
       const totalToImport = recordsToImport.length;
@@ -1187,18 +1197,18 @@ export default function ImportDataPage() {
                 if (sourceName && destName) { // Explicit transfer based on Firefly columns
                      const sourceNameLower = sourceName.toLowerCase();
                      const destNameLower = destName.toLowerCase();
-                     const sourceId = accountNameIdMap[sourceNameLower]; // Use the final map from state
-                     const destId = accountNameIdMap[destNameLower]; // Use the final map from state
+                     const sourceId = finalMap[sourceNameLower]; // Use the FINAL map
+                     const destId = finalMap[destNameLower]; // Use the FINAL map
 
-                     if (!sourceId) throw new Error(`Row ${rowNumber}: Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(accountNameIdMap)}`);
-                     if (!destId) throw new Error(`Row ${rowNumber}: Transfer Import Error - Could not find final destination account ID for "${destName}". Map: ${JSON.stringify(accountNameIdMap)}`);
-                     if (sourceId === destId) throw new Error(`Row ${rowNumber}: Transfer Import Error - Source and destination accounts are the same ("${sourceName}").`);
+                     if (!sourceId) throw new Error(`Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(finalMap)}`);
+                     if (!destId) throw new Error(`Transfer Import Error - Could not find final destination account ID for "${destName}". Map: ${JSON.stringify(finalMap)}`);
+                     if (sourceId === destId) throw new Error(`Transfer Import Error - Source and destination accounts are the same ("${sourceName}").`);
 
 
                      // Amount for transfers should be positive
                      const transferAmount = Math.abs(item.amount);
                      if (isNaN(transferAmount) || transferAmount <= 0) {
-                         throw new Error(`Row ${rowNumber}: Transfer Import Error - Invalid or zero transfer amount (${item.amount}).`);
+                         throw new Error(`Transfer Import Error - Invalid or zero transfer amount (${item.amount}).`);
                      }
 
                      const transferDate = item.date; // Already parsed yyyy-mm-dd
@@ -1239,12 +1249,12 @@ export default function ImportDataPage() {
                          throw new Error(`Row ${rowNumber}: Could not determine account name for transaction.`);
                      }
 
-                     const accountIdForImport = accountNameIdMap[accountNameForTx.toLowerCase()]; // Use the final map from state
+                     const accountIdForImport = finalMap[accountNameForTx.toLowerCase()]; // Use the FINAL map
 
                      if (!accountIdForImport) {
-                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(accountNameIdMap)}`);
+                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(finalMap)}`);
                      }
-                     if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_')) {
+                     if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_') || accountIdForImport.startsWith('preview_')) {
                          throw new Error(`Invalid account ID reference ('${accountIdForImport}') for import.`);
                      }
                      if (isNaN(item.amount)) {
@@ -1261,7 +1271,7 @@ export default function ImportDataPage() {
                      };
                     // `addTransaction` already handles balance updates
                     await addTransaction(transactionPayload);
-                    console.log(`Row ${rowNumber}: Successfully imported ${item.amount >= 0 ? 'income' : 'expense'}: ${item.description}, Amount: ${item.amount}`);
+                    console.log(`Row ${rowNumber}: Successfully imported ${item.amount >= 0 ? 'income' : 'expense'}: ${item.description}, Amount: ${item.amount} into Account ID: ${accountIdForImport}`);
                  }
 
 
@@ -1300,7 +1310,7 @@ export default function ImportDataPage() {
          setError(`Import finished with ${errorCount} errors/skipped rows. Please review the table.`);
       } else {
          setError(null); // Clear error if all successful
-         // Trigger storage event to update other pages only on full success? Or always?
+         // Trigger storage event to update other pages
           console.log("Dispatching storage event to notify other components of potential updates.");
          window.dispatchEvent(new Event('storage'));
       }
@@ -1335,7 +1345,7 @@ export default function ImportDataPage() {
             setFile(null);
             setColumnMappings({});
             setImportProgress(0);
-            setAccountNameIdMap({}); // Reset the map
+            setFinalAccountMapForImport({}); // Reset the final map
 
             // Reset File Input visually
             const fileInput = document.getElementById('csv-file') as HTMLInputElement;
@@ -1494,7 +1504,7 @@ export default function ImportDataPage() {
                     {/* Dynamically show headers based on what's mapped and relevant */}
                     {columnMappings.date && <TableHead>Date</TableHead>}
                     {/* Account Info - show relevant mapped columns */}
-                    {columnMappings.account && <TableHead>Account (Mapped)</TableHead>}
+                    {columnMappings.account && <TableHead>Account (CSV)</TableHead>}
                     {columnMappings.source_account && <TableHead>Source Acc (CSV)</TableHead>}
                     {columnMappings.destination_account && <TableHead>Dest Acc (CSV)</TableHead>}
                      {columnMappings.transaction_type && <TableHead>Type (CSV)</TableHead>} {/* Show Type if mapped */}
@@ -1503,26 +1513,39 @@ export default function ImportDataPage() {
                     {columnMappings.category && <TableHead>Category</TableHead>}
                     {columnMappings.tags && <TableHead>Tags</TableHead>}
                     {/* Amount - show relevant mapped columns */}
-                    {columnMappings.amount && <TableHead className="text-right">Amount (Signed)</TableHead>}
-                    {columnMappings.amount_income && <TableHead className="text-right">Income Amt</TableHead>}
-                    {columnMappings.amount_expense && <TableHead className="text-right">Expense Amt</TableHead>}
+                    {columnMappings.amount && <TableHead className="text-right">Amount (Parsed)</TableHead>}
+                    {columnMappings.amount_income && <TableHead className="text-right">Income Amt (CSV)</TableHead>}
+                    {columnMappings.amount_expense && <TableHead className="text-right">Expense Amt (CSV)</TableHead>}
                      <TableHead>Status</TableHead>
                      <TableHead className="min-w-[150px]">Message / Info</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {parsedData.map((item, index) => {
-                       // Find account using the component's current `accounts` state
-                       const account = accounts.find(acc => acc.id === item.accountId);
-                       // Get the account name from the original record based on mappings
+                       // Find account using the component's current `accounts` state based on the FINAL map ID if available
+                       const finalAccountId = finalAccountMapForImport[item.accountId?.toLowerCase()] || item.accountId; // Try to map preview ID to final ID
+                       const account = accounts.find(acc => acc.id === finalAccountId);
+
+                       // Get the account name from the original record based on mappings for display
                        const accountNameFromRecord =
                            item.originalRecord[columnMappings.account || ''] ||
                            item.originalRecord[columnMappings.source_account || ''] ||
                            item.originalRecord[columnMappings.destination_account || ''] ||
-                           item.accountId; // Fallback to ID if name not found in record
+                           (item.accountId && item.accountId.startsWith('preview_create_') ? item.accountId.replace('preview_create_', '') : item.accountId) || // Show name for preview-created accounts
+                           'N/A'; // Fallback
 
-                       const accountCurrency = account?.currency || '?';
-                       const currencySymbol = getCurrencySymbol(accountCurrency);
+                       // Determine currency - prioritize actual account currency if found, else guess from record
+                       let displayCurrency = '???';
+                       if (account) {
+                           displayCurrency = account.currency;
+                       } else if (columnMappings.accountCurrency && item.originalRecord[columnMappings.accountCurrency!]) {
+                           const potentialCurrency = item.originalRecord[columnMappings.accountCurrency!]!.trim().toUpperCase();
+                           if (supportedCurrencies.includes(potentialCurrency)) {
+                               displayCurrency = potentialCurrency;
+                           }
+                       }
+
+                       const currencySymbol = getCurrencySymbol(displayCurrency);
 
 
                       return (
@@ -1534,10 +1557,13 @@ export default function ImportDataPage() {
                           )}>
                             {/* Display relevant columns based on mapping */}
                             {columnMappings.date && <TableCell className="whitespace-nowrap">{item.date}</TableCell>}
+                            {/* CSV Account Names */}
                             {columnMappings.account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.account!]}>{item.originalRecord[columnMappings.account!]}</TableCell>}
                             {columnMappings.source_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.source_account!]}>{item.originalRecord[columnMappings.source_account!]}</TableCell>}
                             {columnMappings.destination_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.destination_account!]}>{item.originalRecord[columnMappings.destination_account!]}</TableCell>}
                             {columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>} {/* Show Type */}
+
+                            {/* Parsed Details */}
                             {columnMappings.description && <TableCell className="max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>}
                             {columnMappings.category && <TableCell className="capitalize max-w-[100px] truncate" title={item.category}>{item.category}</TableCell>}
                             {columnMappings.tags && (
@@ -1561,7 +1587,7 @@ export default function ImportDataPage() {
                                     !isNaN(item.amount) && item.amount >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
                                 )}>
                                     {/* Use formatCurrency for consistency, pass convertToPreferred=false */}
-                                     {formatCurrency(item.amount, accountCurrency, undefined, false)}
+                                     {formatCurrency(item.amount, displayCurrency, undefined, false)}
                                 </TableCell>
                             )}
                             {columnMappings.amount_income && <TableCell className="text-right whitespace-nowrap">{item.originalRecord[columnMappings.amount_income!]}</TableCell>}
