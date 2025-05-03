@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -417,7 +416,7 @@ export default function ImportDataPage() {
          const { preview } = await previewAccountChanges(
              rawData,
              confirmedMappings, // Pass all mappings
-             existingAccounts // Pass current accounts
+             accounts // Pass current accounts state
          );
          setAccountPreviewData(preview);
          console.log("Account preview generated:", preview);
@@ -428,7 +427,7 @@ export default function ImportDataPage() {
         const { map: tempAccountMap } = await createOrUpdateAccountsAndGetMap(
              rawData,
              confirmedMappings, // Pass all mappings
-             existingAccounts, // Pass current accounts
+             accounts, // Pass current accounts state
              true // Indicate it's a preview/map generation only
         );
         console.log("Generated temporary account map for transaction linking:", tempAccountMap);
