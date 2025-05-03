@@ -63,6 +63,7 @@ const parseAmount = (amountStr: string | undefined): number => {
          cleaned = cleaned.replace(/,/g, ''); // Treat comma as thousand separator if no period found later
     }
     const parsed = parseFloat(cleaned);
+    console.log(`parseAmount: Input='${amountStr}', Cleaned='${cleaned}', Parsed=${parsed}`);
     return parsed; // Return potentially NaN value
 };
 
@@ -326,35 +327,85 @@ export default function ImportDataPage() {
               if (!accountNameValue) throw new Error(`Row ${index + 2}: Missing mapped 'Account' data.`);
 
               let amount: number = parseAmount(amountValue);
-              if (isNaN(amount)) { // Explicit check for NaN
-                    const incomeColHeader = findColumnName(Object.keys(record), 'Income') || findColumnName(Object.keys(record), 'Deposit');
-                    const expenseColHeader = findColumnName(Object.keys(record), 'Expense') || findColumnName(Object.keys(record), 'Withdrawal');
-
-                    const incomeVal = incomeColHeader ? parseAmount(record[incomeColHeader]) : NaN; // Use NaN
-                    const expenseVal = expenseColHeader ? parseAmount(record[expenseColHeader]) : NaN;
-
-                    if (!isNaN(incomeVal) && incomeVal > 0 && isNaN(expenseVal)) {
-                        console.warn(`Row ${index + 2}: Using 'Income' column value ${incomeVal} as amount.`);
-                        amount = incomeVal;
-                    } else if (!isNaN(expenseVal) && expenseVal > 0 && isNaN(incomeVal)) {
-                        console.warn(`Row ${index + 2}: Using 'Expense' column value ${-expenseVal} as amount.`);
-                        amount = -expenseVal;
-                    } else if (isNaN(amount)) { // If still NaN after checking income/expense
-                        // If it's potentially an initial balance record, don't throw error yet
-                        if (descriptionValue?.toLowerCase().includes('initial balance') || descriptionValue?.toLowerCase().includes('starting balance')) {
-                           console.warn(`Row ${index + 2}: Skipping amount parsing for potential initial balance record.`);
-                           amount = 0; // Treat as 0 amount for transaction, balance is handled elsewhere
-                        } else {
-                           throw new Error(`Row ${index + 2}: Could not parse 'amount' value "${amountValue}" and couldn't derive from Income/Expense columns.`);
-                        }
-                    }
-              }
-
+              const incomeColHeader = findColumnName(Object.keys(record), 'Income') || findColumnName(Object.keys(record), 'Deposit');
+              const expenseColHeader = findColumnName(Object.keys(record), 'Expense') || findColumnName(Object.keys(record), 'Withdrawal');
+              const incomeValStr = incomeColHeader ? record[incomeColHeader] : undefined;
+              const expenseValStr = expenseColHeader ? record[expenseColHeader] : undefined;
+              const incomeVal = parseAmount(incomeValStr);
+              const expenseVal = parseAmount(expenseValStr);
 
               const description = descriptionValue?.trim() || 'Imported Transaction';
               let category = categoryValue?.trim() || 'Uncategorized';
               const accountName = accountNameValue.trim();
               const normalizedAccountName = accountName.toLowerCase();
+
+              // Skip transaction if it looks like an initial balance entry based on description
+              // Check this BEFORE amount logic, as initial balance might have 0 amount but non-zero in balance column.
+               if (initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
+                   // Check if description also indicates initial balance, or if amount is NaN/zero (common for pure balance entries)
+                   const descLower = description.toLowerCase();
+                   if (descLower.includes('initial balance') || descLower.includes('starting balance') || isNaN(amount) || amount === 0) {
+                       console.log(`Row ${index + 2}: Skipping transaction creation for initial balance entry: "${description}"`);
+                       return {
+                           accountId: 'skipped_initial_balance',
+                           date: parseDate(dateValue),
+                           amount: 0, // Treat as zero amount transaction
+                           description: description + " (Initial Balance)",
+                           category: 'Initial Balance', // Special category
+                           tags: [],
+                           originalRecord: record,
+                           importStatus: 'skipped', // Mark as skipped
+                           errorMessage: 'Skipped initial balance entry.',
+                       };
+                   }
+               }
+
+              // Amount Processing Logic
+              if (isNaN(amount)) { // Explicit check for NaN in the primary 'amount' column
+                    // Attempt to derive from Income/Expense columns
+                    if (!isNaN(incomeVal) && incomeVal > 0 && isNaN(expenseVal)) {
+                        console.warn(`Row ${index + 2}: Amount NaN, using 'Income' column value ${incomeVal}.`);
+                        amount = incomeVal;
+                    } else if (!isNaN(expenseVal) && expenseVal > 0 && isNaN(incomeVal)) {
+                        console.warn(`Row ${index + 2}: Amount NaN, using 'Expense' column value ${expenseVal} as negative.`);
+                        amount = -expenseVal;
+                    } else if (!isNaN(incomeVal) && incomeVal > 0 && !isNaN(expenseVal) && expenseVal === 0) {
+                         console.warn(`Row ${index + 2}: Amount NaN, Expense=0, using 'Income' column value ${incomeVal}.`);
+                         amount = incomeVal;
+                    } else if (!isNaN(expenseVal) && expenseVal > 0 && !isNaN(incomeVal) && incomeVal === 0) {
+                         console.warn(`Row ${index + 2}: Amount NaN, Income=0, using 'Expense' column value ${expenseVal} as negative.`);
+                         amount = -expenseVal;
+                    } else {
+                           throw new Error(`Row ${index + 2}: Could not parse 'amount' value "${amountValue}" and couldn't reliably derive from Income/Expense columns (Income: ${incomeValStr}, Expense: ${expenseValStr}).`);
+                    }
+              } else {
+                  // Amount was parsed successfully from the 'amount' column.
+                  // Verify against Income/Expense if they exist and have values.
+                  if (!isNaN(incomeVal) && !isNaN(expenseVal)) {
+                      // Check for conflicts
+                      if (incomeVal > 0 && expenseVal > 0) {
+                          console.warn(`Row ${index + 2}: Potential conflict. Amount column has ${amount}, but both Income (${incomeVal}) and Expense (${expenseVal}) are positive. Using Amount column value.`);
+                      } else if (amount > 0 && expenseVal > 0 && incomeVal === 0) {
+                          console.warn(`Row ${index + 2}: Potential conflict. Amount (${amount}) is positive, but Expense (${expenseVal}) is also positive. Using Amount column value.`);
+                           amount = Math.abs(amount); // Ensure positive for income type
+                      } else if (amount < 0 && incomeVal > 0 && expenseVal === 0) {
+                           console.warn(`Row ${index + 2}: Potential conflict. Amount (${amount}) is negative, but Income (${incomeVal}) is positive. Using Amount column value.`);
+                           amount = -Math.abs(amount); // Ensure negative for expense type
+                      }
+                  } else if (!isNaN(incomeVal) && incomeVal > 0 && amount < 0) {
+                      console.warn(`Row ${index + 2}: Potential conflict. Amount (${amount}) is negative, but Income (${incomeVal}) is positive. Using Amount column value.`);
+                      amount = -Math.abs(amount);
+                  } else if (!isNaN(expenseVal) && expenseVal > 0 && amount > 0) {
+                       console.warn(`Row ${index + 2}: Potential conflict. Amount (${amount}) is positive, but Expense (${expenseVal}) is positive. Using Amount column value.`);
+                       amount = Math.abs(amount);
+                  }
+              }
+
+              // Final check for amount validity
+              if (isNaN(amount)) {
+                    throw new Error(`Row ${index + 2}: Failed to determine a valid transaction amount.`);
+              }
+
 
               const parsedTags = tagsValue?.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) || [];
 
@@ -376,21 +427,6 @@ export default function ImportDataPage() {
                  };
               }
 
-              // Skip transaction if it looks like an initial balance entry based on description
-              if (description.toLowerCase().includes('initial balance') || description.toLowerCase().includes('starting balance')) {
-                  console.log(`Row ${index + 2}: Skipping transaction creation for initial balance entry: "${description}"`);
-                   return {
-                        accountId: accountId,
-                        date: parseDate(dateValue),
-                        amount: 0, // Treat as zero amount transaction
-                        description: description,
-                        category: 'Initial Balance', // Special category
-                        tags: parsedTags,
-                        originalRecord: record,
-                        importStatus: 'skipped', // Mark as skipped
-                        errorMessage: 'Skipped initial balance transaction.',
-                    };
-              }
 
               return {
                 accountId: accountId,
@@ -407,7 +443,7 @@ export default function ImportDataPage() {
                  return {
                     accountId: 'error_processing_row',
                     date: parseDate(record[dateCol]),
-                    amount: 0,
+                    amount: 0, // Default to 0 on error
                     description: `Error Processing Row`,
                     category: 'Uncategorized',
                     tags: [],
@@ -422,7 +458,7 @@ export default function ImportDataPage() {
         const skippedMappedData = mapped.filter(item => item.importStatus === 'skipped');
         const errorMessages: string[] = [];
         if (errorMappedData.length > 0) {
-             errorMessages.push(`${errorMappedData.length} row(s) had processing errors (e.g., missing account).`);
+             errorMessages.push(`${errorMappedData.length} row(s) had processing errors (e.g., missing account, invalid amount).`);
         }
         if (skippedMappedData.length > 0) {
              errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., initial balance).`);
@@ -498,7 +534,7 @@ export default function ImportDataPage() {
                 }
 
                  // Capture initial balance if mapped and present, prioritize over previous finds
-                 if (initialBalanceCol && record[initialBalanceCol]) {
+                 if (initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
                     const balance = parseAmount(record[initialBalanceCol]);
                     if (!isNaN(balance)) {
                          // Update the balance in the details, overwriting previous value
@@ -746,13 +782,13 @@ export default function ImportDataPage() {
                     console.error(`Import Error Row ${i + 2}: Invalid or missing account ID for account name "${accountNameFromRecord}" using map:`, finalAccountMap);
                     throw new Error(`Invalid or missing account ID for "${item.originalRecord[columnMappings.account!] || 'N/A'}"`);
                } else {
-                   console.log(`Row ${i + 2}: Found account ID ${accountIdForImport} for account name "${accountNameFromRecord}"`);
+                   console.log(`Row ${i + 2}: Importing for account ID ${accountIdForImport} (name: "${accountNameFromRecord}"), Amount: ${item.amount}`);
                }
 
               const transactionPayload: Omit<Transaction, 'id'> = {
                   accountId: accountIdForImport,
                   date: item.date,
-                  amount: item.amount,
+                  amount: item.amount, // Amount should now have the correct sign
                   description: item.description,
                   category: finalCategoryName,
                   tags: finalTags,

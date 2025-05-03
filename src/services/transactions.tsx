@@ -73,9 +73,14 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     console.log("Simulating adding transaction to memory:", transactionData);
     await new Promise(resolve => setTimeout(resolve, 50)); // Simulate short delay
 
+    // Ensure amount has the correct sign based on context (e.g., import might provide signed amount already)
+    // If adding via UI form, amount might be positive, and sign depends on 'type' (expense/income)
+    const transactionAmount = transactionData.amount; // Use the amount as provided
+
     const newTransaction: Transaction = {
         ...transactionData,
         id: `tx-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        amount: transactionAmount, // Use the potentially signed amount
         category: transactionData.category?.trim() || 'Uncategorized',
         tags: transactionData.tags || [], // Ensure tags is an array
     };
@@ -93,9 +98,10 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         const accountIndex = accounts.findIndex(acc => acc.id === newTransaction.accountId);
         if (accountIndex !== -1) {
             const accountToUpdate = accounts[accountIndex];
+            // Add the transaction amount (which could be positive or negative)
             const updatedBalance = accountToUpdate.balance + newTransaction.amount;
             await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
-            console.log(`Account ${accountToUpdate.name} balance updated to: ${updatedBalance}`);
+            console.log(`Account ${accountToUpdate.name} balance updated to: ${updatedBalance} (added ${newTransaction.amount})`);
         } else {
              console.warn(`Account with ID ${newTransaction.accountId} not found when trying to update balance.`);
         }
@@ -231,3 +237,4 @@ export function clearAllSessionTransactions(): void {
 
 // NOTE: No loading from localStorage is needed for transactions now.
 // The store starts empty each session.
+
