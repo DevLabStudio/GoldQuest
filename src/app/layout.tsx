@@ -20,7 +20,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList } from 'lucide-react'; // Added LayoutList
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload } from 'lucide-react'; // Added Upload icon
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -179,6 +179,15 @@ export default function RootLayout({
                                  </SidebarMenuButton>
                              </Link>
                          </SidebarMenuItem>
+                          <SidebarMenuItem className="ml-4">
+                             <Link href="/transfers" passHref>
+                                 <SidebarMenuButton tooltip="View Transfers" size="sm">
+                                     {/* Use a suitable icon for transfers */}
+                                     <ArrowLeftRight />
+                                     <span>Transfers</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
                          </>
                     )}
 
@@ -198,6 +207,14 @@ export default function RootLayout({
                         <SidebarMenuButton tooltip="User Preferences">
                           <Settings />
                           <span>Preferences</span>
+                        </SidebarMenuButton>
+                      </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                      <Link href="/import" passHref>
+                        <SidebarMenuButton tooltip="Import Data">
+                          <Upload />
+                          <span>Import Data</span>
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
