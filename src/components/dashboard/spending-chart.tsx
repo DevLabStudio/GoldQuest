@@ -17,10 +17,11 @@ const formatCurrency = (value: number) => {
   }).format(value);
 };
 
+// Updated chartConfig to use the primary gold color
 const chartConfig = {
   amount: {
     label: 'Amount (BRL)',
-    color: 'hsl(var(--primary))',
+    color: 'hsl(var(--primary))', // Use primary color (gold)
   },
 } satisfies ChartConfig;
 
@@ -54,12 +55,14 @@ const SpendingChart: FC<SpendingChartProps> = ({ data }) => {
           tickLine={false}
           tickMargin={10}
           axisLine={false}
+          stroke="hsl(var(--muted-foreground))" // Ensure axis text is visible
         />
         <YAxis
            tickFormatter={(value) => formatCurrency(value)}
            tickLine={false}
            axisLine={false}
            width={80} // Adjust width to accommodate formatted currency labels
+           stroke="hsl(var(--muted-foreground))" // Ensure axis text is visible
         />
         <ChartTooltip
           cursor={false}
@@ -70,6 +73,7 @@ const SpendingChart: FC<SpendingChartProps> = ({ data }) => {
                 indicator="dot"
             />}
         />
+        {/* Use CSS variable defined in chartConfig for the bar fill */}
         <Bar dataKey="amount" fill="var(--color-amount)" radius={4} />
       </BarChart>
     </ChartContainer>
