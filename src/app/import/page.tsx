@@ -1,8 +1,7 @@
-
 'use client';
 
 import { useState, useEffect } from 'react'; // Import useEffect
-import Papa from 'papaparse';
+import Papa, { ParseResult } from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,66 +15,62 @@ import { getAccounts, type Account } from '@/services/account-sync'; // To selec
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 
-// Define the expected structure of Firefly III CSV export (default format)
-// Make fields potentially optional where appropriate
-interface FireflyIIIRecord {
-  'Date'?: string; // e.g., "2023-10-26"
-  'Amount'?: string; // e.g., "-12.34" or "500.00"
-  'Description'?: string;
-  'Source account (name)'?: string; // May be empty if type is deposit/withdrawal
-  'Destination account (name)'?: string; // May be empty if type is deposit/withdrawal
-  'Category (name)'?: string; // e.g., "Groceries"
-  'Budget (name)'?: string; // Optional
-  'Transaction type'?: string; // Optional, e.g., "withdrawal", "deposit", "transfer"
-  // Allow any other properties
+// Define a flexible type for parsed CSV rows
+type CsvRecord = {
   [key: string]: string | undefined;
-}
+};
+
+// Define the essential columns we *need*
+const ESSENTIAL_COLUMNS = ['Date', 'Amount', 'Description'] as const;
+// Define optional columns we can try to use
+const OPTIONAL_COLUMNS = ['Category'] as const; // Simplified 'Category (name)'
 
 type MappedTransaction = Omit<Transaction, 'id' | 'accountId'> & {
-  originalRecord: FireflyIIIRecord;
+  originalRecord: CsvRecord;
   importStatus: 'pending' | 'success' | 'error';
   errorMessage?: string;
 };
 
-// Helper to guess transaction type based on Firefly data
-const mapFireflyType = (record: FireflyIIIRecord): 'expense' | 'income' | 'transfer' => {
-    if (record['Transaction type']?.toLowerCase() === 'transfer') {
-        return 'transfer';
-    }
-    const amount = parseAmount(record['Amount'] || '0'); // Default to '0' if missing
-    if (amount < 0) {
-        return 'expense';
-    }
-    if (amount > 0) {
-        return 'income';
-    }
-    // Default or handle zero amount cases if necessary
-    return 'expense'; // Or throw error? Treat 0 as expense?
+// Helper to find a column name case-insensitively
+const findColumnName = (headers: string[], targetName: string): string | undefined => {
+    return headers.find(header => header.trim().toLowerCase() === targetName.toLowerCase());
 };
 
-// Helper to parse amount string
-const parseAmount = (amountStr: string): number => {
-    // Remove currency symbols, thousands separators, etc. Handle different decimal separators if needed.
-    const cleaned = amountStr.replace(/[^0-9.,-]/g, '').replace(',', '.');
+
+// Helper to parse amount string - more robust
+const parseAmount = (amountStr: string | undefined): number => {
+    if (typeof amountStr !== 'string') return 0;
+    // Remove currency symbols, thousands separators (common ones), handle comma decimal
+    const cleaned = amountStr.replace(/[^\d.,-]/g, '').replace('.', '').replace(',', '.');
     const parsed = parseFloat(cleaned);
     return isNaN(parsed) ? 0 : parsed; // Return 0 if parsing fails
 };
 
-// Helper to parse date string (assuming YYYY-MM-DD or similar ISO-like format)
+// Helper to parse date string - more robust
 const parseDate = (dateStr: string | undefined): string => {
     if (!dateStr) return format(new Date(), 'yyyy-MM-dd'); // Default to today if missing
     try {
-        // Attempt to parse common formats, default to ISO string if possible
-        const parsedDate = new Date(dateStr); // Use dateStr directly
+        // Try common formats or direct parsing
+        const supportedFormats = [
+            'yyyy-MM-dd', 'dd/MM/yyyy', 'MM/dd/yyyy', 'yyyyMMdd' // Add more as needed
+            // Consider date-fns-tz if timezones are involved
+        ];
+
+        // Try direct parsing first (handles ISO well)
+        let parsedDate = new Date(dateStr);
         if (!isNaN(parsedDate.getTime())) {
-             // Ensure correct format for service
              return format(parsedDate, 'yyyy-MM-dd');
         }
+
+         // Add more robust parsing attempts here if needed using date-fns parse function
+         // For now, we rely on the Date constructor's flexibility
+
     } catch (e) {
         console.error("Error parsing date:", dateStr, e);
     }
-    // Return original string or a default if parsing fails critically
-    return format(new Date(), 'yyyy-MM-dd'); // Default to today on error
+    // Return a default if parsing fails critically
+    console.warn(`Could not parse date "${dateStr}", defaulting to today.`);
+    return format(new Date(), 'yyyy-MM-dd');
 };
 
 
@@ -130,38 +125,31 @@ export default function ImportDataPage() {
     setError(null);
     setParsedData([]);
 
-    Papa.parse<FireflyIIIRecord>(file, {
+    Papa.parse<CsvRecord>(file, {
       header: true, // Assumes first row is header
       skipEmptyLines: true,
-      // `dynamicTyping: true` can help, but be cautious with dates/numbers
-      // `delimiter` can be set if not comma (e.g., ";")
-      // `transformHeader` can rename columns if needed
-      complete: (results) => {
+      // `dynamicTyping`: false - Avoid auto-typing which can mess up amounts/dates
+      // `loose`: true - Might help with rows having fewer fields than header, but let's handle manually
+      complete: (results: ParseResult<CsvRecord>) => {
         console.log("Parsed CSV Result Meta:", results.meta);
         console.log("Parsed CSV Result Errors:", results.errors);
         console.log("Parsed CSV Result Data (first 5 rows):", results.data.slice(0, 5));
 
 
-        // Check for errors reported by PapaParse (e.g., structural issues)
-        const structuralError = results.errors.find(e => e.row !== undefined);
-        if (structuralError) {
-             // Improved error message guiding the user
-             let detailedMessage = `Error parsing CSV on row ${structuralError.row ?? 'unknown'}: ${structuralError.message}.`;
-             if (structuralError.code === 'TooFewFields' || structuralError.code === 'TooManyFields') {
-                 detailedMessage += ` Expected ${structuralError.expected} fields based on header, but found ${structuralError.actual}.`;
-             }
-             detailedMessage += " Please verify the file's structure, ensure it's correctly comma-separated (or specify the delimiter if different, like semicolon ';'), check quoting around fields, and confirm the header row matches the data rows.";
-            setError(detailedMessage);
-            setIsLoading(false);
-            return;
-        }
-
-         // Check for general errors (e.g., file read error, although 'error' callback handles this better)
-         if (results.errors.length > 0 && !structuralError) {
-            const generalError = results.errors[0];
-             setError(`CSV Parsing Error: ${generalError.message}. Please ensure the file is a valid CSV.`);
+         // Check for critical PapaParse errors (e.g., file read)
+         if (results.errors.length > 0 && !results.data.length) {
+             const criticalError = results.errors[0];
+             setError(`CSV Parsing Error: ${criticalError.message}. Code: ${criticalError.code}. Please ensure the file is a valid CSV and accessible.`);
              setIsLoading(false);
              return;
+         }
+
+         // Log non-critical row errors, but continue parsing
+         const rowErrors = results.errors.filter(e => e.row !== undefined);
+         if (rowErrors.length > 0) {
+             console.warn(`PapaParse encountered ${rowErrors.length} non-critical row errors during parsing. Attempting to process valid data.`);
+             // Optionally show a non-blocking warning to the user
+             // setError(`Warning: Encountered ${rowErrors.length} potential issues during parsing. Review the data below carefully.`);
          }
 
         if (!results.data || results.data.length === 0) {
@@ -171,44 +159,71 @@ export default function ImportDataPage() {
         }
 
         // Validate that *essential* columns exist in the header row (results.meta.fields)
-        const essentialColumns: (keyof FireflyIIIRecord)[] = ['Date', 'Amount', 'Description']; // Category is often optional/derived
         const headers = results.meta.fields;
-        if (!headers) {
+        if (!headers || headers.length === 0) {
              setError("Could not read CSV headers. Ensure the first row contains column names.");
              setIsLoading(false);
              return;
         }
-        const missingEssentialColumns = essentialColumns.filter(col => !headers.includes(col));
+
+        // Find actual header names case-insensitively
+        const dateCol = findColumnName(headers, 'Date');
+        const amountCol = findColumnName(headers, 'Amount');
+        const descCol = findColumnName(headers, 'Description');
+        const catCol = findColumnName(headers, 'Category'); // Optional
+
+        const missingEssentialColumns = ESSENTIAL_COLUMNS.filter(colName => !findColumnName(headers, colName));
+
         if (missingEssentialColumns.length > 0) {
-             setError(`Missing essential columns in CSV header: ${missingEssentialColumns.join(', ')}. Required: Date, Amount, Description. Please check the first line of your file.`);
+             setError(`Missing essential columns in CSV header (case-insensitive check): ${missingEssentialColumns.join(', ')}. Required: Date, Amount, Description. Found headers: ${headers.join(', ')}`);
              setIsLoading(false);
              return;
         }
 
+        // Ensure required column names were found
+         if (!dateCol || !amountCol || !descCol) {
+             // This case should be covered by the previous check, but added for safety
+             setError(`Could not reliably find required columns (Date, Amount, Description) in the header: ${headers.join(', ')}`);
+             setIsLoading(false);
+             return;
+         }
 
-        // Map Firefly data to our Transaction structure more flexibly
+
+        // Map data to our Transaction structure flexibly
         const mapped: MappedTransaction[] = results.data.map((record, index) => {
           try {
-              // Validate essential fields *per row* - Amount and Description can be empty, but Date is crucial
-              if (!record.Date) {
-                  throw new Error(`Row ${index + 2}: Missing required data (Date).`);
+              // Extract data using the found column names
+              const dateValue = record[dateCol];
+              const amountValue = record[amountCol];
+              const descriptionValue = record[descCol];
+              const categoryValue = catCol ? record[catCol] : undefined;
+
+
+              // Validate essential fields *per row*
+              if (dateValue === undefined || dateValue === null || dateValue.trim() === '') {
+                  throw new Error(`Row ${index + 2}: Missing required data ('Date').`);
+              }
+               if (amountValue === undefined || amountValue === null || amountValue.trim() === '') {
+                  throw new Error(`Row ${index + 2}: Missing required data ('Amount').`);
               }
 
-              const amount = parseAmount(record.Amount || '0'); // Default to 0 if amount is missing/invalid
-              const type = mapFireflyType(record);
-              let description = record.Description || 'No Description'; // Use default if missing
-              let category = record['Category (name)'] || 'Uncategorized'; // Default if missing
+              const amount = parseAmount(amountValue);
+              const description = descriptionValue?.trim() || 'No Description'; // Use default if missing/empty
+              let category = categoryValue?.trim() || 'Uncategorized'; // Default if missing/empty
 
-               // Basic transfer description enrichment (if possible)
-              if (type === 'transfer') {
-                  const sourceName = record['Source account (name)'] || 'Unknown';
-                  const destName = record['Destination account (name)'] || 'Unknown';
-                  description = `Transfer ${amount > 0 ? 'from ' + sourceName : 'to ' + destName}` + (record.Description ? ` (${record.Description})` : '');
-                  category = 'Transfer'; // Standardize transfer category
+              // --- Basic Transfer Detection Attempt (Optional & Simple) ---
+              // This is a heuristic and might misclassify. A dedicated 'type' column is better.
+              if (description.toLowerCase().includes('transfer') || category.toLowerCase() === 'transfer') {
+                 // Basic check: if amount is positive, maybe incoming transfer, negative is outgoing
+                 // This is NOT reliable without source/destination account info in the CSV.
+                 // For now, we'll import transfers as regular income/expense based on amount sign.
+                 // Consider skipping them or marking them for review if needed.
+                 if (category.toLowerCase() === 'transfer') category = 'Uncategorized'; // Re-categorize generic 'Transfer'
+                 console.log(`Row ${index + 2}: Potential transfer detected based on description/category. Importing as regular income/expense.`);
               }
 
               return {
-                date: parseDate(record.Date),
+                date: parseDate(dateValue),
                 amount: amount, // Amount directly from CSV (can be positive/negative)
                 description: description,
                 category: category,
@@ -216,7 +231,7 @@ export default function ImportDataPage() {
                 importStatus: 'pending',
               };
             } catch (rowError: any) {
-                // Catch errors during row mapping (like missing date)
+                // Catch errors during row mapping (like missing date/amount)
                 console.error(`Error processing row ${index + 2}:`, rowError);
                  return {
                     date: parseDate(undefined), // Default date
@@ -232,18 +247,22 @@ export default function ImportDataPage() {
 
         // Filter out rows that had mapping errors if necessary, or show them as errors
         const errorMappedData = mapped.filter(item => item.importStatus === 'error');
-        if (errorMappedData.length > 0 && !structuralError) { // Don't show this if there was a structural error already
-             setError(`Encountered errors processing ${errorMappedData.length} row(s). Please review the table below. Common issues include missing 'Date' values.`);
+        if (errorMappedData.length > 0) {
+             setError(`Encountered errors processing ${errorMappedData.length} row(s). Please review the table below. Common issues include missing 'Date' or 'Amount' values.`);
+        } else if (results.errors.length > 0) {
+             // If there were PapaParse errors but mapping succeeded, show a general warning
+             setError(`Warning: CSV parsing encountered ${results.errors.length} issues, but data was processed. Review carefully before importing.`);
         }
+
 
         setParsedData(mapped); // Show all rows, including errors
         setIsLoading(false);
       },
-      error: (err, file) => {
+      error: (err: Error, file?: File) => {
         // Catch file reading errors or other fundamental PapaParse errors
         console.error("PapaParse File Reading/Parsing Error:", err, file);
          // Provide a more informative error message
-         setError(`Failed to read or parse CSV file: ${err.message}. Ensure the file is accessible and has a valid structure.`);
+         setError(`Failed to read or parse CSV file: ${err.message}. Ensure the file is accessible, uses standard encoding (like UTF-8), and has a valid structure.`);
         setIsLoading(false);
       }
     });
@@ -283,15 +302,15 @@ export default function ImportDataPage() {
             continue;
         }
 
-        // Skip transfers for now if not fully implemented
-        if (mapFireflyType(item.originalRecord) === 'transfer') {
-            updatedData[i] = { ...item, importStatus: 'error', errorMessage: 'Transfer import not yet supported.' };
-            errorCount++;
-             // Update state incrementally to show progress visually
-             setParsedData([...updatedData]);
-            setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
-            continue; // Skip to next item
-        }
+        // Example: Skip transfers if a dedicated mechanism isn't ready
+        // (Remove this block if you want to import them as regular income/expense)
+        // if (item.description.toLowerCase().includes('transfer') || item.category.toLowerCase() === 'transfer') {
+        //     updatedData[i] = { ...item, importStatus: 'error', errorMessage: 'Transfer import skipped.' };
+        //     errorCount++;
+        //     setParsedData([...updatedData]);
+        //     setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
+        //     continue;
+        // }
 
 
         try {
@@ -333,7 +352,7 @@ export default function ImportDataPage() {
   // Helper to calculate progress percentage
   const calculateProgress = (processed: number, total: number): number => {
       if (total === 0) return 0;
-      return (processed / total) * 100;
+      return Math.round((processed / total) * 100); // Return integer percentage
   }
 
 
@@ -345,13 +364,13 @@ export default function ImportDataPage() {
         <CardHeader>
           <CardTitle>Import Transactions from CSV</CardTitle>
           <CardDescription>
-            Import transactions from a standard comma-separated CSV file (e.g., Firefly III export). Requires columns: <code className="bg-muted px-1 rounded">Date</code>, <code className="bg-muted px-1 rounded">Amount</code>, <code className="bg-muted px-1 rounded">Description</code>. Other columns like <code className="bg-muted px-1 rounded">Category (name)</code> are used if present. Transfers are currently skipped. Select a target account below.
+            Import transactions from a comma-separated CSV file. Requires header row with at least <code className="bg-muted px-1 rounded">Date</code>, <code className="bg-muted px-1 rounded">Amount</code>, and <code className="bg-muted px-1 rounded">Description</code> columns (case-insensitive). Optional <code className="bg-muted px-1 rounded">Category</code> column used if present. Select a target account below.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="csv-file">Select CSV File</Label>
-            <Input id="csv-file" type="file" accept=".csv" onChange={handleFileChange} disabled={isLoading}/>
+            <Input id="csv-file" type="file" accept=".csv,text/csv" onChange={handleFileChange} disabled={isLoading}/>
           </div>
 
           {accounts.length > 0 && (
@@ -378,6 +397,12 @@ export default function ImportDataPage() {
                  </p>
              </div>
           )}
+          {accounts.length === 0 && !isLoading && (
+                <Alert variant="destructive">
+                    <AlertTitle>No Accounts Found</AlertTitle>
+                    <AlertDescription>Please add at least one account on the Accounts page before importing data.</AlertDescription>
+                </Alert>
+            )}
 
           {error && (
              <Alert variant="destructive">
@@ -388,10 +413,10 @@ export default function ImportDataPage() {
 
           <div className="flex space-x-4">
              <Button onClick={handleParse} disabled={!file || !targetAccount || isLoading}>
-                {isLoading ? "Parsing..." : "Parse File"}
+                {isLoading && importProgress === 0 ? "Parsing..." : "Parse File"}
              </Button>
              <Button onClick={handleImport} disabled={!parsedData.length || isLoading || parsedData.every(d => d.importStatus !== 'pending')}>
-               {isLoading ? `Importing... (${Math.round(importProgress)}%)` : "Import Parsed Data"}
+               {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Parsed Data"}
              </Button>
           </div>
 
