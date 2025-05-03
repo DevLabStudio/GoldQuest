@@ -174,12 +174,20 @@ export default function RevenuePage() {
               <p className="text-muted-foreground">
                 No income transactions found yet.
               </p>
-              {/* Optional: Add a button or link to add transactions */}
+              {/* TODO: Optional: Add a button or link to add transactions */}
             </div>
           )}
         </CardContent>
+         {/* TODO: Optional: Add button in footer if transactions exist */}
+         {!isLoading && incomeTransactions.length > 0 && (
+             <CardContent className="pt-4 border-t">
+                  {/* TODO: Add button to open 'Add Transaction' dialog */}
+                  {/* Example: <AddTransactionButton /> */}
+             </CardContent>
+         )}
       </Card>
       {/* Future: Could add income charts or summaries here */}
     </div>
   );
 }
+

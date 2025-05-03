@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use formatters and converters
 import { getUserPreferences } from '@/lib/preferences'; // Get user preferences
 import SpendingChart from '@/components/dashboard/spending-chart'; // Reuse the chart
-// Icons are now handled by getCategoryStyle, no need to import them here directly unless used elsewhere
+import { format } from 'date-fns'; // Import date-fns for formatting
 
 // Helper function to format date (consistent with previous implementation)
 const formatDate = (dateString: string): string => {
@@ -20,7 +20,8 @@ const formatDate = (dateString: string): string => {
         // Handle both YYYY-MM-DD and ISO strings more robustly
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date); // YYYY-MM-DD
+        // return new Intl.DateTimeFormat('en-CA', { year: 'numeric', month: '2-digit', day: '2-digit' }).format(date); // YYYY-MM-DD
+        return format(date, 'PP'); // Use a user-friendly format like 'Jul 15, 2024'
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -109,6 +110,7 @@ export default function TransactionsOverviewPage() {
           if (tx.amount < 0) { // Only consider expenses for spending chart
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
+                 // Convert absolute value of expense to preferred currency
                  const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
                  const category = tx.category || 'Uncategorized'; // Use category name directly
                  categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
@@ -223,10 +225,21 @@ export default function TransactionsOverviewPage() {
               <p className="text-muted-foreground">
                 No transactions found across any accounts yet.
               </p>
+               {/* TODO: Add button to open 'Add Transaction' dialog */}
             </div>
           )}
         </CardContent>
+        {/* Optional: Add button in footer if transactions exist */}
+         {!isLoading && allTransactions.length > 0 && (
+             <CardContent className="pt-4 border-t">
+                  {/* TODO: Add button to open 'Add Transaction' dialog */}
+                  {/* Example: <AddTransactionButton /> */}
+             </CardContent>
+         )}
       </Card>
+       {/* TODO: Add the 'Add Transaction' Dialog component here */}
+       {/* <AddTransactionDialog accounts={accounts} categories={categories} /> */}
     </div>
   );
 }
+
