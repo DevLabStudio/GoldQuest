@@ -65,22 +65,50 @@ export async function getTransactions(accountId: string): Promise<Transaction[]>
 
 /**
  * Simulates adding a new transaction to the in-memory mock data store and updates the account balance.
+ * This attempts to be more atomic by fetching the account *before* adding the transaction to memory.
  *
  * @param transactionData Data for the new transaction (excluding ID). Category name should exist.
  * @returns A promise that resolves to the newly created Transaction object with an ID.
  */
 export async function addTransaction(transactionData: Omit<Transaction, 'id'>): Promise<Transaction> {
-    console.log("Simulating adding transaction to memory:", transactionData);
+    console.log("Attempting to add transaction:", transactionData);
     await new Promise(resolve => setTimeout(resolve, 50)); // Simulate short delay
 
-    // Ensure amount has the correct sign based on context (e.g., import might provide signed amount already)
-    // If adding via UI form, amount might be positive, and sign depends on 'type' (expense/income)
-    const transactionAmount = transactionData.amount; // Use the amount as provided
+    const transactionAmount = transactionData.amount; // Use the amount as provided (can be +/-)
 
+    let accountToUpdate: Account | undefined;
+    let originalBalance: number | undefined;
+
+    // --- Fetch Account and Update Balance FIRST ---
+    try {
+        const accounts = await getAccounts(); // Get current accounts
+        const accountIndex = accounts.findIndex(acc => acc.id === transactionData.accountId);
+        if (accountIndex !== -1) {
+            accountToUpdate = accounts[accountIndex];
+            originalBalance = accountToUpdate.balance;
+            const updatedBalance = originalBalance + transactionAmount;
+            console.log(`Account ${accountToUpdate.name} balance check: Original=${originalBalance}, Adding=${transactionAmount}, New=${updatedBalance}`);
+
+            // Update the account in localStorage
+            await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
+            console.log(`Account ${accountToUpdate.name} balance successfully updated to: ${updatedBalance}`);
+        } else {
+             console.warn(`Account with ID ${transactionData.accountId} not found when trying to update balance. Transaction will be added without balance update.`);
+        }
+    } catch (error) {
+         console.error(`Error updating account balance for new transaction (Account ID: ${transactionData.accountId}):`, error);
+         // If balance update fails, should we proceed? For now, we will, but log the error.
+         // Consider throwing error to prevent adding transaction if balance update fails
+         // throw new Error(`Failed to update balance for account ${transactionData.accountId}. Transaction not added.`);
+    }
+    // -------------------------------------------
+
+    // --- Add Transaction to Session Memory ---
+    // This happens *after* attempting the balance update
     const newTransaction: Transaction = {
         ...transactionData,
         id: `tx-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        amount: transactionAmount, // Use the potentially signed amount
+        amount: transactionAmount,
         category: transactionData.category?.trim() || 'Uncategorized',
         tags: transactionData.tags || [], // Ensure tags is an array
     };
@@ -91,27 +119,9 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     }
 
     sessionTransactions[newTransaction.accountId].push(newTransaction);
+    console.log("Transaction added to session memory:", newTransaction);
+    // --------------------------------------
 
-    // --- Update Account Balance ---
-    try {
-        const accounts = await getAccounts();
-        const accountIndex = accounts.findIndex(acc => acc.id === newTransaction.accountId);
-        if (accountIndex !== -1) {
-            const accountToUpdate = accounts[accountIndex];
-            // Add the transaction amount (which could be positive or negative)
-            const updatedBalance = accountToUpdate.balance + newTransaction.amount;
-            await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
-            console.log(`Account ${accountToUpdate.name} balance updated to: ${updatedBalance} (added ${newTransaction.amount})`);
-        } else {
-             console.warn(`Account with ID ${newTransaction.accountId} not found when trying to update balance.`);
-        }
-    } catch (error) {
-         console.error(`Error updating account balance for transaction ${newTransaction.id}:`, error);
-         // Decide if the transaction should still be considered added or if we should rollback/throw error
-    }
-    // ---------------------------
-
-    console.log("Transaction added to memory (simulated):", newTransaction);
     return newTransaction;
 }
 
@@ -121,7 +131,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
  * @returns A promise resolving to the updated transaction.
  */
 export async function updateTransaction(updatedTransaction: Transaction): Promise<Transaction> {
-     console.log(`Simulating updating transaction in memory: ${updatedTransaction.id}`);
+     console.log(`Attempting to update transaction: ${updatedTransaction.id}`);
      await new Promise(resolve => setTimeout(resolve, 50));
 
      const accountTransactions = sessionTransactions[updatedTransaction.accountId];
@@ -137,35 +147,40 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
      const originalTransaction = accountTransactions[index]; // Get the original transaction before updating
      const amountDifference = updatedTransaction.amount - originalTransaction.amount; // Calculate the change in amount
 
-     // Update the transaction in the session store
-     accountTransactions[index] = {
-         ...updatedTransaction,
-         category: updatedTransaction.category?.trim() || 'Uncategorized',
-         tags: updatedTransaction.tags || [], // Ensure tags is an array
-     };
-
-      // --- Update Account Balance ---
+     // --- Update Account Balance FIRST (if amount changed) ---
      if (amountDifference !== 0) {
          try {
              const accounts = await getAccounts();
              const accountIndex = accounts.findIndex(acc => acc.id === updatedTransaction.accountId);
              if (accountIndex !== -1) {
                  const accountToUpdate = accounts[accountIndex];
-                 const updatedBalance = accountToUpdate.balance + amountDifference; // Adjust by the difference
+                 const originalBalance = accountToUpdate.balance;
+                 const updatedBalance = originalBalance + amountDifference; // Adjust by the difference
+                  console.log(`Account ${accountToUpdate.name} balance adjustment: Original=${originalBalance}, Diff=${amountDifference}, New=${updatedBalance}`);
                  await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
-                 console.log(`Account ${accountToUpdate.name} balance adjusted by ${amountDifference} to: ${updatedBalance}`);
+                 console.log(`Account ${accountToUpdate.name} balance successfully adjusted to: ${updatedBalance}`);
              } else {
-                 console.warn(`Account with ID ${updatedTransaction.accountId} not found when trying to update balance during transaction update.`);
+                 console.warn(`Account with ID ${updatedTransaction.accountId} not found when trying to update balance during transaction update. Balance not adjusted.`);
              }
          } catch (error) {
              console.error(`Error updating account balance for transaction update ${updatedTransaction.id}:`, error);
-             // Consider rollback or error handling strategy
+             // If balance update fails, should we revert the transaction update?
+             // For now, log the error and proceed with updating the transaction in memory.
+             // Consider throwing error to ensure consistency.
+             // throw new Error(`Failed to update balance for account ${updatedTransaction.accountId}. Transaction update failed.`);
          }
      }
-     // ---------------------------
+     // -------------------------------------------
 
+     // --- Update the transaction in the session store ---
+     accountTransactions[index] = {
+         ...updatedTransaction,
+         category: updatedTransaction.category?.trim() || 'Uncategorized',
+         tags: updatedTransaction.tags || [], // Ensure tags is an array
+     };
+     console.log("Transaction updated in session memory:", accountTransactions[index]);
+     // -------------------------------------------
 
-     console.log("Transaction updated in memory (simulated):", accountTransactions[index]);
      return accountTransactions[index];
 }
 
@@ -176,46 +191,50 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
  * @returns A promise resolving when the deletion is complete.
  */
 export async function deleteTransaction(transactionId: string, accountId: string): Promise<void> {
-    console.log(`Simulating deleting transaction from memory: ${transactionId} from account: ${accountId}`);
+    console.log(`Attempting to delete transaction: ${transactionId} from account: ${accountId}`);
     await new Promise(resolve => setTimeout(resolve, 50));
 
     const accountTransactions = sessionTransactions[accountId];
      if (!accountTransactions) {
          console.warn(`No transactions found in memory for account ${accountId} during deletion attempt.`);
-         return;
+         return; // Or throw error?
      }
 
-     const transactionToDelete = accountTransactions.find(tx => tx.id === transactionId);
-     if (!transactionToDelete) {
+     const transactionIndex = accountTransactions.findIndex(tx => tx.id === transactionId);
+     if (transactionIndex === -1) {
          console.warn(`Transaction with ID ${transactionId} not found for deletion in memory.`);
-         return;
+         return; // Or throw error?
      }
 
-     const amountToDelete = transactionToDelete.amount;
+     const transactionToDelete = accountTransactions[transactionIndex];
+     const amountToDelete = transactionToDelete.amount; // The amount to reverse from balance
 
-     // Filter out the transaction
-     sessionTransactions[accountId] = accountTransactions.filter(tx => tx.id !== transactionId);
-
-     // --- Update Account Balance ---
+     // --- Update Account Balance FIRST ---
      try {
          const accounts = await getAccounts();
          const accountIndex = accounts.findIndex(acc => acc.id === accountId);
          if (accountIndex !== -1) {
              const accountToUpdate = accounts[accountIndex];
-             const updatedBalance = accountToUpdate.balance - amountToDelete; // Subtract the deleted amount
+             const originalBalance = accountToUpdate.balance;
+             const updatedBalance = originalBalance - amountToDelete; // Subtract the deleted amount
+             console.log(`Account ${accountToUpdate.name} balance reversal: Original=${originalBalance}, Reversing=${amountToDelete}, New=${updatedBalance}`);
              await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
-             console.log(`Account ${accountToUpdate.name} balance updated after deletion to: ${updatedBalance}`);
+              console.log(`Account ${accountToUpdate.name} balance successfully updated after deletion to: ${updatedBalance}`);
          } else {
-             console.warn(`Account with ID ${accountId} not found when trying to update balance during transaction deletion.`);
+             console.warn(`Account with ID ${accountId} not found when trying to update balance during transaction deletion. Balance not adjusted.`);
          }
      } catch (error) {
          console.error(`Error updating account balance for transaction deletion ${transactionId}:`, error);
-         // Consider rollback or error handling strategy
+         // If balance update fails, should we still delete the transaction from memory?
+         // For now, log error and proceed. Consider throwing error.
+         // throw new Error(`Failed to update balance for account ${accountId}. Transaction deletion failed.`);
      }
-     // ---------------------------
+     // -------------------------------------------
 
-
-     console.log("Transaction deleted from memory (simulated)");
+     // --- Filter out the transaction from session memory ---
+     sessionTransactions[accountId].splice(transactionIndex, 1);
+     console.log("Transaction removed from session memory.");
+     // -------------------------------------------
 }
 
 // Function to clear all transactions from the in-memory store (for testing/reset)
