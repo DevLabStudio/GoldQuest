@@ -75,7 +75,7 @@ export default function AccountsPage() {
      return () => {
        window.removeEventListener('storage', handleStorageChange);
      };
-  }, []);
+  }, []); // Remove toast from dependency array as it doesn't change
 
   const handleAccountAdded = async (newAccountData: Omit<Account, 'id'>) => {
     try {
@@ -174,7 +174,7 @@ export default function AccountsPage() {
         <CardHeader>
           <CardTitle>Your Accounts</CardTitle>
           <CardDescription>
-            View and manage your manually added financial accounts. Balances shown in your preferred currency ({preferredCurrency}).
+             View and manage your manually added accounts. Balances shown in original currency, with conversions to {preferredCurrency} below.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -188,7 +188,8 @@ export default function AccountsPage() {
                    </div>
                    <div className="flex flex-col items-end w-full md:w-auto">
                      <Skeleton className="h-8 w-24 mb-1" />
-                     <Skeleton className="h-3 w-20" />
+                     <Skeleton className="h-3 w-20" /> {/* Placeholder for original balance */}
+                     <Skeleton className="h-3 w-16 mt-1" /> {/* Placeholder for converted balance */}
                      <div className="mt-2 space-x-2">
                         <Skeleton className="h-8 w-16 inline-block" />
                         <Skeleton className="h-8 w-16 inline-block" />
@@ -206,8 +207,15 @@ export default function AccountsPage() {
                     <p className="text-sm text-muted-foreground capitalize">{account.bankName || 'N/A'} - {account.type} ({account.currency})</p>
                   </div>
                   <div className="flex flex-col items-end">
-                     <p className="font-bold text-xl text-primary">{formatCurrency(account.balance, account.currency)}</p>
-                     <p className="text-xs text-muted-foreground">Current Balance</p>
+                     {/* Display original balance prominently */}
+                     <p className="font-bold text-xl text-primary">{formatCurrency(account.balance, account.currency, undefined, false)}</p>
+                     <p className="text-xs text-muted-foreground">Original Balance</p>
+                     {/* Display converted balance less prominently if different from original */}
+                     {account.currency !== preferredCurrency && (
+                         <p className="text-xs text-muted-foreground mt-1">
+                             (≈ {formatCurrency(account.balance, account.currency)})
+                         </p>
+                     )}
                       <div className="mt-2 space-x-2">
                           {/* Enable Edit Button and trigger the dialog */}
                           <Button variant="outline" size="sm" onClick={() => openEditDialog(account)}>
@@ -265,9 +273,13 @@ export default function AccountsPage() {
                   />
               )}
               {/* Optional: Add a footer with a close button if not handled by the form */}
-              {/* <DialogFooter>
-                  <Button variant="outline" onClick={() => setIsEditDialogOpen(false)}>Cancel</Button>
-              </DialogFooter> */}
+               {/*
+               <DialogFooter>
+                   <DialogClose asChild>
+                        <Button variant="outline">Cancel</Button>
+                   </DialogClose>
+              </DialogFooter>
+               */}
           </DialogContent>
       </Dialog>
 

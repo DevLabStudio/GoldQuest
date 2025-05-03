@@ -1,5 +1,3 @@
-// Potentially used in server components later, but the functions themselves are not server actions.
-// Removing 'use server;' to resolve build error.
 
 import { getUserPreferences } from './preferences'; // Import preference getter
 
@@ -23,8 +21,15 @@ export const supportedCurrencies = Object.keys(exchangeRates);
  * @returns The converted amount in the target currency, or the original amount if conversion fails.
  */
 function convertCurrency(amount: number, sourceCurrency: string, targetCurrency: string): number {
-  const sourceRate = exchangeRates[sourceCurrency.toUpperCase()];
-  const targetRate = exchangeRates[targetCurrency.toUpperCase()];
+  const sourceUpper = sourceCurrency.toUpperCase();
+  const targetUpper = targetCurrency.toUpperCase();
+
+  if (sourceUpper === targetUpper) {
+      return amount; // No conversion needed
+  }
+
+  const sourceRate = exchangeRates[sourceUpper];
+  const targetRate = exchangeRates[targetUpper];
 
   if (!sourceRate || !targetRate) {
     console.warn(`Cannot convert currency: Invalid source (${sourceCurrency}) or target (${targetCurrency}) currency.`);
@@ -32,13 +37,29 @@ function convertCurrency(amount: number, sourceCurrency: string, targetCurrency:
   }
 
   // Convert source amount to base currency (BRL in this case)
-  const amountInBase = amount * sourceRate;
+  const amountInBase = amount / sourceRate; // Correction: Divide by source rate to get to base
 
   // Convert base amount to target currency
-  const convertedAmount = amountInBase / targetRate;
+  const convertedAmount = amountInBase * targetRate; // Correction: Multiply by target rate
 
   return convertedAmount;
 }
+
+/**
+ * Determines the appropriate locale string for currency formatting based on the currency code.
+ * @param currencyCode The currency code (e.g., 'BRL', 'USD').
+ * @returns A locale string (e.g., 'pt-BR', 'en-US').
+ */
+function getLocaleForCurrency(currencyCode: string): string {
+    switch (currencyCode.toUpperCase()) {
+        case 'BRL': return 'pt-BR';
+        case 'USD': return 'en-US';
+        case 'EUR': return 'de-DE'; // Example European locale (Germany uses EUR)
+        case 'GBP': return 'en-GB';
+        default: return 'en-US'; // Default fallback locale
+    }
+}
+
 
 /**
  * Formats a number as currency according to the specified currency code and locale.
@@ -46,45 +67,47 @@ function convertCurrency(amount: number, sourceCurrency: string, targetCurrency:
  *
  * @param amount The numeric amount.
  * @param accountCurrency The currency code of the account (e.g., 'USD', 'BRL').
- * @param locale The locale string for formatting (e.g., 'pt-BR', 'en-US'). Defaults based on preferred currency.
+ * @param locale Optional The locale string for formatting (e.g., 'pt-BR', 'en-US'). If omitted, derived from target currency.
+ * @param convertToPreferred Optional If true (default), converts to user's preferred currency. If false, formats in accountCurrency.
  * @returns A formatted currency string (e.g., "R$ 1.234,56", "$1,234.56").
  */
-export function formatCurrency(amount: number, accountCurrency: string, locale?: string): string {
-    const { preferredCurrency } = getUserPreferences(); // Get preferred currency from storage
+export function formatCurrency(
+    amount: number,
+    accountCurrency: string,
+    locale?: string,
+    convertToPreferred: boolean = true // Default to true
+): string {
+    const { preferredCurrency } = getUserPreferences();
 
-    const targetCurrency = preferredCurrency || accountCurrency; // Use preferred or fallback to account's currency
-    const displayAmount = convertCurrency(amount, accountCurrency, targetCurrency);
+    let displayAmount = amount;
+    let displayCurrency = accountCurrency.toUpperCase();
+    let displayLocale = locale;
 
-    // Determine locale based on target currency if not provided
-    let formatLocale = locale;
-    if (!formatLocale) {
-        switch (targetCurrency.toUpperCase()) {
-            case 'BRL':
-                formatLocale = 'pt-BR';
-                break;
-            case 'USD':
-                formatLocale = 'en-US';
-                break;
-            case 'EUR':
-                formatLocale = 'de-DE'; // Example European locale
-                break;
-            case 'GBP':
-                formatLocale = 'en-GB';
-                break;
-            default:
-                formatLocale = 'en-US'; // Default fallback locale
-        }
+    if (convertToPreferred) {
+        const targetCurrency = preferredCurrency || accountCurrency; // Fallback if preference somehow missing
+        displayAmount = convertCurrency(amount, accountCurrency, targetCurrency);
+        displayCurrency = targetCurrency.toUpperCase();
+    } else {
+        // Keep original amount and currency if convertToPreferred is false
+        displayAmount = amount;
+        displayCurrency = accountCurrency.toUpperCase();
     }
 
+    // Determine locale based on the currency being displayed if locale wasn't provided
+    if (!displayLocale) {
+        displayLocale = getLocaleForCurrency(displayCurrency);
+    }
+
+
     try {
-        return new Intl.NumberFormat(formatLocale, {
+        return new Intl.NumberFormat(displayLocale, {
             style: 'currency',
-            currency: targetCurrency.toUpperCase(),
+            currency: displayCurrency,
         }).format(displayAmount);
     } catch (error) {
-        console.error(`Error formatting currency: Amount=${displayAmount}, Currency=${targetCurrency}, Locale=${formatLocale}`, error);
+        console.error(`Error formatting currency: Amount=${displayAmount}, Currency=${displayCurrency}, Locale=${displayLocale}`, error);
         // Fallback formatting
-        return `${targetCurrency.toUpperCase()} ${displayAmount.toFixed(2)}`;
+        return `${displayCurrency} ${displayAmount.toFixed(2)}`;
     }
 }
 
