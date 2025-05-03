@@ -20,6 +20,10 @@ export interface Account {
    */
   balance: number;
   /**
+   * The currency code for the account's balance (e.g., 'BRL', 'USD', 'EUR').
+   */
+  currency: string;
+  /**
    * The name of the bank associated with the account. Optional for flexibility.
    */
   bankName?: string;
@@ -39,13 +43,33 @@ export async function getAccounts(): Promise<Account[]> {
    // Introduce a small delay to simulate network latency
    await new Promise(resolve => setTimeout(resolve, 500));
 
-   // Return mock data representing manually added accounts
-   return [
+   // Retrieve existing accounts from localStorage or default to mock data
+   const storedAccounts = localStorage.getItem('userAccounts');
+   let accounts: Account[];
+
+   if (storedAccounts) {
+     try {
+       accounts = JSON.parse(storedAccounts);
+     } catch (e) {
+       console.error("Failed to parse stored accounts, using default.", e);
+       accounts = getDefaultAccounts();
+     }
+   } else {
+     accounts = getDefaultAccounts();
+     localStorage.setItem('userAccounts', JSON.stringify(accounts)); // Store default if nothing exists
+   }
+
+   return accounts;
+}
+
+function getDefaultAccounts(): Account[] {
+  return [
     {
       id: 'manual-123',
       name: 'My Main Checking',
       type: 'checking',
       balance: 1572.50,
+      currency: 'BRL', // Add currency
       bankName: 'Itaú Unibanco',
     },
     {
@@ -53,50 +77,58 @@ export async function getAccounts(): Promise<Account[]> {
       name: 'Emergency Fund',
       type: 'savings',
       balance: 8350.00,
+      currency: 'BRL', // Add currency
       bankName: 'Nubank',
     },
      {
       id: 'manual-789',
-      name: 'Travel Card',
+      name: 'Travel Card USD',
       type: 'credit card',
       balance: -450.80, // Negative balance for credit card
-      bankName: 'Santander',
+      currency: 'USD', // Add currency
+      bankName: 'Revolut (Europe/Global)',
     },
   ];
 }
 
 
-// Add functions to simulate adding/deleting accounts if needed for local state management
-// These would interact with localStorage or a backend in a real application.
+// Add functions to simulate adding/deleting accounts using localStorage
 
 /**
- * Simulates adding a new account.
- * In a real app, this would send data to a backend API.
+ * Simulates adding a new account to localStorage.
  * @param accountData - The data for the new account (without ID).
  * @returns A promise resolving to the newly created account with an ID.
  */
 export async function addAccount(accountData: Omit<Account, 'id'>): Promise<Account> {
     console.log("Simulating adding account:", accountData);
     await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
+
     const newAccount: Account = {
         ...accountData,
         id: `manual-${Math.random().toString(36).substring(2, 9)}`, // Generate a mock ID
     };
-    // Here you would typically save to localStorage or database
+
+    const currentAccounts = await getAccounts();
+    const updatedAccounts = [...currentAccounts, newAccount];
+    localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
+
     console.log("Account added (simulated):", newAccount);
     return newAccount;
 }
 
 /**
- * Simulates deleting an account by ID.
- * In a real app, this would send a delete request to a backend API.
+ * Simulates deleting an account by ID from localStorage.
  * @param accountId - The ID of the account to delete.
  * @returns A promise resolving when the deletion is complete.
  */
 export async function deleteAccount(accountId: string): Promise<void> {
     console.log("Simulating deleting account:", accountId);
     await new Promise(resolve => setTimeout(resolve, 300)); // Simulate latency
-    // Here you would typically remove from localStorage or database
+
+    const currentAccounts = await getAccounts();
+    const updatedAccounts = currentAccounts.filter(acc => acc.id !== accountId);
+    localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
+
     console.log("Account deleted (simulated):", accountId);
     return;
 }

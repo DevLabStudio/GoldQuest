@@ -16,7 +16,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight } from 'lucide-react';
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings } from 'lucide-react'; // Added Settings icon
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -37,7 +37,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className="dark">{/* Apply dark class here */}
+    <html lang="en" className="dark">
       <body
         className={cn(
           `${oxanium.variable} font-sans antialiased`, // Apply Oxanium font variable and set as default sans font
@@ -96,6 +96,17 @@ export default function RootLayout({
                                 <span>Investments</span>
                             </SidebarMenuButton>
                         </Link>
+                    </SidebarMenuItem>
+                </SidebarGroup>
+                 <SidebarGroup>
+                  <SidebarGroupLabel>Settings</SidebarGroupLabel>
+                    <SidebarMenuItem>
+                      <Link href="/preferences" passHref>
+                        <SidebarMenuButton tooltip="User Preferences">
+                          <Settings />
+                          <span>Preferences</span>
+                        </SidebarMenuButton>
+                      </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
               </SidebarMenu>

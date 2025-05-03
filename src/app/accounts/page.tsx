@@ -4,25 +4,14 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { getAccounts, type Account } from "@/services/account-sync"; // Keep using this for now to display accounts
+import { getAccounts, addAccount, deleteAccount, type Account } from "@/services/account-sync";
 import { PlusCircle, Edit, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import AddAccountForm from '@/components/accounts/add-account-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
-
-
-// Helper function to format currency
-const formatCurrency = (amount: number): string => {
-  // Ensure amount is a number before formatting
-  const numericAmount = typeof amount === 'string' ? parseFloat(amount) : amount;
-  if (isNaN(numericAmount)) {
-    // Handle cases where conversion might fail, maybe return a default or error string
-    console.warn("Invalid amount received for formatting:", amount);
-    return 'R$ --,--';
-  }
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(numericAmount);
-};
+import { formatCurrency } from '@/lib/currency'; // Use the new currency formatter
+import { getUserPreferences } from '@/lib/preferences'; // Get user preferences for display currency
 
 
 export default function AccountsPage() {
@@ -31,22 +20,43 @@ export default function AccountsPage() {
   const [error, setError] = useState<string | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const { toast } = useToast();
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default preference
+
+   // Fetch preferences on mount
+  useEffect(() => {
+    // Need to ensure this runs client-side only as it accesses localStorage
+    if (typeof window !== 'undefined') {
+        const prefs = getUserPreferences();
+        setPreferredCurrency(prefs.preferredCurrency);
+    }
+  }, []);
+
 
   const fetchAccountsData = async () => {
+    // Ensure this runs client-side as getAccounts now might use localStorage
+     if (typeof window === 'undefined') {
+         setIsLoading(false);
+         setError("Account data can only be loaded on the client.");
+         return;
+     }
+
     setIsLoading(true);
     setError(null);
     try {
-      // TODO: Replace with actual data fetching when backend is ready
-      const fetchedAccounts = await getAccounts(); // Simulate fetching
+      const fetchedAccounts = await getAccounts();
       setAccounts(fetchedAccounts);
     } catch (err) {
       console.error("Failed to fetch accounts:", err);
-      setError("Could not load accounts. Please try again later.");
+      setError("Could not load accounts. Please ensure local storage is accessible and try again.");
       toast({
         title: "Error",
         description: "Failed to load accounts.",
         variant: "destructive",
       });
+       // Clear potentially corrupted storage as a recovery mechanism
+      if (typeof window !== 'undefined') {
+          localStorage.removeItem('userAccounts');
+      }
     } finally {
       setIsLoading(false);
     }
@@ -54,34 +64,61 @@ export default function AccountsPage() {
 
   useEffect(() => {
     fetchAccountsData();
+     // Add event listener for storage changes from other tabs/windows
+     const handleStorageChange = (event: StorageEvent) => {
+        if (event.key === 'userAccounts' || event.key === 'userPreferences') {
+            console.log("Storage changed, refetching data...");
+             const prefs = getUserPreferences();
+             setPreferredCurrency(prefs.preferredCurrency);
+             fetchAccountsData();
+        }
+     };
+     window.addEventListener('storage', handleStorageChange);
+
+     // Cleanup listener on component unmount
+     return () => {
+       window.removeEventListener('storage', handleStorageChange);
+     };
   }, []); // Fetch accounts on initial load
 
-  const handleAccountAdded = (newAccount: Omit<Account, 'id'>) => {
-    // Simulate adding account and refetching/updating state
-    // In a real app, you'd call an API to add the account,
-    // then update the state or refetch the list.
-    const accountWithId: Account = {
-        ...newAccount,
-        id: Math.random().toString(36).substring(2, 15) // Simulate ID generation
-    };
-    setAccounts(prev => [...prev, accountWithId]);
-    setIsDialogOpen(false); // Close the dialog
-    toast({
-      title: "Success",
-      description: `Account "${newAccount.name}" added successfully.`,
-    });
-    // Optionally: fetchAccountsData(); // Refetch the full list from backend
+  const handleAccountAdded = async (newAccountData: Omit<Account, 'id'>) => {
+    try {
+      // Use the addAccount service which now handles localStorage
+      await addAccount(newAccountData);
+      await fetchAccountsData(); // Refetch to update the list
+      setIsDialogOpen(false); // Close the dialog
+      toast({
+        title: "Success",
+        description: `Account "${newAccountData.name}" added successfully.`,
+      });
+    } catch (err) {
+       console.error("Failed to add account:", err);
+       toast({
+        title: "Error",
+        description: "Could not add the account.",
+        variant: "destructive",
+      });
+    }
   };
 
-   const handleDeleteAccount = (accountId: string) => {
-    // Simulate deleting account
-    // In a real app, you'd call an API to delete the account
-    setAccounts(prev => prev.filter(acc => acc.id !== accountId));
-     toast({
-      title: "Account Deleted",
-      description: `Account removed successfully.`,
-       variant: "destructive",
-    });
+   const handleDeleteAccount = async (accountId: string) => {
+    try {
+        // Use the deleteAccount service which now handles localStorage
+        await deleteAccount(accountId);
+        await fetchAccountsData(); // Refetch to update the list
+        toast({
+            title: "Account Deleted",
+            description: `Account removed successfully.`,
+            variant: "destructive", // Use "default" or remove variant for less alarming feedback
+        });
+    } catch (err) {
+        console.error("Failed to delete account:", err);
+        toast({
+            title: "Error",
+            description: "Could not delete the account.",
+            variant: "destructive",
+        });
+    }
   };
 
 
@@ -118,7 +155,7 @@ export default function AccountsPage() {
         <CardHeader>
           <CardTitle>Your Accounts</CardTitle>
           <CardDescription>
-            View and manage your manually added financial accounts.
+            View and manage your manually added financial accounts. Balances shown in your preferred currency ({preferredCurrency}).
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -147,13 +184,14 @@ export default function AccountsPage() {
                 <li key={account.id} className="flex flex-col md:flex-row justify-between items-start md:items-center border p-4 rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200">
                   <div className="mb-2 md:mb-0">
                     <p className="font-semibold text-lg">{account.name}</p>
-                    <p className="text-sm text-muted-foreground capitalize">{account.bankName || 'N/A'} - {account.type}</p>
+                    <p className="text-sm text-muted-foreground capitalize">{account.bankName || 'N/A'} - {account.type} ({account.currency})</p>
                   </div>
                   <div className="flex flex-col items-end">
-                     <p className="font-bold text-xl text-primary">{formatCurrency(account.balance)}</p>
+                     {/* Use the new formatCurrency function */}
+                     <p className="font-bold text-xl text-primary">{formatCurrency(account.balance, account.currency)}</p>
                      <p className="text-xs text-muted-foreground">Current Balance</p>
                       <div className="mt-2 space-x-2">
-                          {/* Add Edit/Delete functionality later */}
+                          {/* TODO: Implement Edit functionality */}
                           <Button variant="outline" size="sm" disabled>
                               <Edit className="mr-1 h-3 w-3" /> Edit
                           </Button>

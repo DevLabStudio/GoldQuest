@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -5,24 +6,18 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, type Transaction } from "@/services/transactions";
+import { getTransactions, type Transaction } from "@/services/transactions"; // Assuming this still works
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
-import { ShoppingCart, Home, Car, Utensils, PiggyBank, AlertCircle } from 'lucide-react'; // Example icons
+import { formatCurrency } from '@/lib/currency'; // Use the new currency formatter
+import { getUserPreferences } from '@/lib/preferences'; // Get user preferences
+import { ShoppingCart, Home, Car, Utensils, PiggyBank, AlertCircle } from 'lucide-react';
 
-// Helper function to format currency
-const formatCurrency = (amount: number): string => {
-  return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(amount);
-};
-
-// Helper function to format date
+// Helper function to format date (keep as is)
 const formatDate = (dateString: string): string => {
     try {
-        // Assuming dateString is in 'YYYY-MM-DD' format
-        const date = new Date(dateString + 'T00:00:00'); // Add time to avoid timezone issues
-        if (isNaN(date.getTime())) {
-            throw new Error('Invalid date');
-        }
+        const date = new Date(dateString + 'T00:00:00');
+        if (isNaN(date.getTime())) throw new Error('Invalid date');
         return new Intl.DateTimeFormat('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date);
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
@@ -30,7 +25,7 @@ const formatDate = (dateString: string): string => {
     }
 };
 
-// Map categories to icons and colors (simple example)
+// Category styles (keep as is or adapt if needed)
 const categoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
   groceries: { icon: ShoppingCart, color: 'bg-green-100 text-green-800 border-green-300' },
   rent: { icon: Home, color: 'bg-blue-100 text-blue-800 border-blue-300' },
@@ -39,10 +34,7 @@ const categoryStyles: { [key: string]: { icon: React.ElementType, color: string 
   food: { icon: Utensils, color: 'bg-red-100 text-red-800 border-red-300' },
   default: { icon: AlertCircle, color: 'bg-gray-100 text-gray-800 border-gray-300' },
 };
-
-const getCategoryStyle = (category: string) => {
-  return categoryStyles[category.toLowerCase()] || categoryStyles.default;
-};
+const getCategoryStyle = (category: string) => categoryStyles[category.toLowerCase()] || categoryStyles.default;
 
 
 export default function TransactionsPage() {
@@ -52,17 +44,33 @@ export default function TransactionsPage() {
   const [isLoadingAccounts, setIsLoadingAccounts] = useState(true);
   const [isLoadingTransactions, setIsLoadingTransactions] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default preference
 
+  // Fetch preferences on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+        const prefs = getUserPreferences();
+        setPreferredCurrency(prefs.preferredCurrency);
+    }
+  }, []);
+
+  // Fetch Accounts Effect
   useEffect(() => {
     const fetchAccounts = async () => {
+      if (typeof window === 'undefined') {
+         setIsLoadingAccounts(false);
+         setError("Account data can only be loaded on the client.");
+         return;
+     }
       setIsLoadingAccounts(true);
       setError(null);
       try {
         const fetchedAccounts = await getAccounts();
         setAccounts(fetchedAccounts);
         if (fetchedAccounts.length > 0 && !selectedAccountId) {
-          // Default to the first account if none is selected
            setSelectedAccountId(fetchedAccounts[0].id);
+        } else if (fetchedAccounts.length === 0) {
+           setSelectedAccountId(null); // Clear selection if no accounts
         }
       } catch (err) {
         console.error("Failed to fetch accounts:", err);
@@ -72,37 +80,54 @@ export default function TransactionsPage() {
       }
     };
     fetchAccounts();
+
+     // Add storage listener for preference/account changes
+     const handleStorageChange = (event: StorageEvent) => {
+        if (event.key === 'userAccounts' || event.key === 'userPreferences') {
+             console.log("Storage changed, refetching data...");
+             const prefs = getUserPreferences();
+             setPreferredCurrency(prefs.preferredCurrency);
+             fetchAccounts(); // Refetch accounts too, their balances might display differently
+        }
+     };
+     window.addEventListener('storage', handleStorageChange);
+     return () => window.removeEventListener('storage', handleStorageChange);
+
   }, []); // Run only once on mount
 
+  // Fetch Transactions Effect
  useEffect(() => {
     const fetchTransactions = async () => {
-      if (!selectedAccountId) {
-        setTransactions([]); // Clear transactions if no account is selected
+      const currentAccount = accounts.find(acc => acc.id === selectedAccountId);
+      if (!selectedAccountId || !currentAccount) {
+        setTransactions([]);
+        setIsLoadingTransactions(false);
         return;
       }
       setIsLoadingTransactions(true);
       setError(null);
       try {
+        // Assuming getTransactions returns amounts in the account's original currency
         const fetchedTransactions = await getTransactions(selectedAccountId);
         setTransactions(fetchedTransactions);
       } catch (err) {
         console.error("Failed to fetch transactions:", err);
         setError(`Could not load transactions for the selected account.`);
-        setTransactions([]); // Clear transactions on error
+        setTransactions([]);
       } finally {
         setIsLoadingTransactions(false);
       }
     };
 
     fetchTransactions();
-  }, [selectedAccountId]); // Re-run when selectedAccountId changes
+  }, [selectedAccountId, accounts]); // Re-run when selectedAccountId or accounts list changes
 
   const handleAccountChange = (accountId: string) => {
      setSelectedAccountId(accountId);
   };
 
-  const selectedAccountName = useMemo(() => {
-      return accounts.find(acc => acc.id === selectedAccountId)?.name || 'Selected Account';
+  const selectedAccount = useMemo(() => {
+      return accounts.find(acc => acc.id === selectedAccountId);
   }, [accounts, selectedAccountId]);
 
 
@@ -135,7 +160,8 @@ export default function TransactionsPage() {
             <SelectContent>
               {accounts.map((account) => (
                 <SelectItem key={account.id} value={account.id}>
-                  {account.name} ({formatCurrency(account.balance)})
+                  {/* Display balance in preferred currency */}
+                  {account.name} ({formatCurrency(account.balance, account.currency)})
                 </SelectItem>
               ))}
                {accounts.length === 0 && <SelectItem value="no-accounts" disabled>No accounts available</SelectItem>}
@@ -149,7 +175,9 @@ export default function TransactionsPage() {
         <CardHeader>
           <CardTitle>Transaction History</CardTitle>
            <CardDescription>
-                Showing transactions for: {isLoadingAccounts ? <Skeleton className="h-4 w-32 inline-block" /> : selectedAccountName}
+                {isLoadingAccounts && "Loading accounts..."}
+                {selectedAccount && `Showing transactions for: ${selectedAccount.name} (${selectedAccount.currency}). Amounts in ${preferredCurrency}.`}
+                {!selectedAccount && !isLoadingAccounts && "Select an account to view transactions."}
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -159,31 +187,33 @@ export default function TransactionsPage() {
                   <Skeleton key={i} className="h-12 w-full" />
               ))}
             </div>
-          ) : transactions.length > 0 ? (
+          ) : transactions.length > 0 && selectedAccount ? ( // Ensure selectedAccount exists
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Date</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
+                  <TableHead className="text-right">Amount ({preferredCurrency})</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {transactions.map((transaction) => {
                     const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
+                    // Format transaction amount based on the ACCOUNT's currency, converting to preferred
+                    const formattedAmount = formatCurrency(transaction.amount, selectedAccount.currency);
                     return (
                         <TableRow key={transaction.id}>
                         <TableCell className="whitespace-nowrap">{formatDate(transaction.date)}</TableCell>
                         <TableCell>{transaction.description}</TableCell>
                         <TableCell>
-                            <Badge variant="outline" className={`flex items-center gap-1 ${color}`}>
+                            <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}> {/* Added border for visibility */}
                                 <CategoryIcon className="h-3 w-3" />
                                 <span className="capitalize">{transaction.category}</span>
                             </Badge>
                         </TableCell>
-                        <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(transaction.amount)}
+                        <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                            {formattedAmount}
                         </TableCell>
                         </TableRow>
                     );

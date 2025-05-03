@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { popularBanks } from '@/lib/banks'; // Import bank list
+import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency'; // Import currency utils
 import type { Account } from '@/services/account-sync';
 
 // Define Zod schema for form validation
@@ -20,7 +21,11 @@ const formSchema = z.object({
   accountType: z.enum(['checking', 'savings', 'credit card', 'investment', 'other'], {
     required_error: "Account type is required",
   }),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative"), // Coerce to number
+  currency: z.string().min(3, "Currency is required").refine(
+      (val) => supportedCurrencies.includes(val.toUpperCase()),
+      { message: "Unsupported currency" }
+  ),
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative for initial setup"), // Coerce to number
 });
 
 type AddAccountFormData = z.infer<typeof formSchema>;
@@ -36,6 +41,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
       bankName: "",
       accountName: "",
       accountType: undefined, // Default to no selection
+      currency: "BRL", // Default to BRL
       balance: 0,
     },
   });
@@ -46,11 +52,14 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
-        bankName: values.bankName, // Add bankName if needed in Account type
+        currency: values.currency.toUpperCase(), // Ensure currency is uppercase
+        bankName: values.bankName,
     };
     onAccountAdded(newAccountData);
     form.reset(); // Reset form after successful submission
   }
+
+  const selectedCurrency = form.watch('currency'); // Watch the currency field
 
   return (
     <Form {...form}>
@@ -123,23 +132,51 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
           )}
         />
 
-        <FormField
-          control={form.control}
-          name="balance"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Current Balance (R$)</FormLabel>
-              <FormControl>
-                 {/* Use step="0.01" for currency */}
-                <Input type="number" placeholder="0.00" step="0.01" {...field} />
-              </FormControl>
-              <FormDescription>
-                Enter the current balance of this account.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
+         <div className="grid grid-cols-2 gap-4">
+             <FormField
+              control={form.control}
+              name="currency"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Currency</FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <FormControl>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select currency" />
+                      </SelectTrigger>
+                    </FormControl>
+                    <SelectContent>
+                      {supportedCurrencies.map((curr) => (
+                        <SelectItem key={curr} value={curr}>
+                          {curr} ({getCurrencySymbol(curr)})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="balance"
+              render={({ field }) => (
+                <FormItem>
+                   {/* Dynamically update label with currency symbol */}
+                  <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                  <FormControl>
+                    {/* Use step="0.01" for currency */}
+                    <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+        </div>
+         <FormDescription>
+            Enter the current balance in the selected currency.
+         </FormDescription>
 
         <Button type="submit" className="w-full">Add Account</Button>
       </form>
