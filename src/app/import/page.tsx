@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,6 +21,7 @@ import { format } from 'date-fns';
 import { getCurrencySymbol } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form'; // Import the new mapping form component
 import { AlertCircle } from 'lucide-react';
+import { cn } from '@/lib/utils'; // Import cn utility function
 
 // Define a flexible type for parsed CSV rows
 type CsvRecord = {
@@ -275,7 +277,7 @@ export default function ImportDataPage() {
         const essentialAppFields: AppField[] = ['date', 'amount', 'account']; // Description & Category are now handled more flexibly
         const missingMappings = essentialAppFields.filter(field => !confirmedMappings[field]);
         if (missingMappings.length > 0) {
-            setError(`Missing required column mappings: ${missingMappings.map(f => f.value).join(', ')}. Please map these fields.`);
+            setError(`Missing required column mappings: ${missingMappings.map(f => f).join(', ')}. Please map these fields.`);
             setIsLoading(false);
             setIsMappingDialogOpen(true); // Re-open dialog if validation fails
             return;
@@ -551,7 +553,7 @@ export default function ImportDataPage() {
       // Operate on a mutable copy of the state for status updates
       const updatedData = [...parsedData];
       // Use the latest categories state AFTER the addMissingCategories step
-      const currentCategories = categories; // Capture state
+      let currentCategories = await getCategories(); // Re-fetch categories after potential adds
 
       for (let i = 0; i < updatedData.length; i++) {
           const item = updatedData[i];
@@ -757,5 +759,3 @@ export default function ImportDataPage() {
     </div>
   );
 }
-
-    
