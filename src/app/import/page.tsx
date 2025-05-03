@@ -16,7 +16,7 @@ import { addTransaction, type Transaction, clearAllSessionTransactions, updateTr
 import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync';
 import { getCategories, addCategory, type Category } from '@/services/categories.tsx';
 import { getTags, addTag, type Tag, getTagStyle } from '@/services/tags.tsx'; // Import tag services with .tsx
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog
 import { format } from 'date-fns';
@@ -757,7 +757,7 @@ export default function ImportDataPage() {
                   category: finalCategoryName,
                   tags: finalTags,
               };
-              await addTransaction(transactionPayload);
+              await addTransaction(transactionPayload); // This now updates balance too
               updatedData[i] = { ...item, importStatus: 'success', errorMessage: undefined };
               importedCount++;
           } catch (err: any) {
@@ -783,7 +783,8 @@ export default function ImportDataPage() {
          setError(`Import finished with ${errorCount} errors/skipped rows. Please review the table.`);
       } else {
          setError(null);
-         window.dispatchEvent(new Event('storage')); // Trigger storage event to update other pages
+         // Trigger update for other pages
+         window.dispatchEvent(new Event('storage'));
       }
     };
 
@@ -796,13 +797,13 @@ export default function ImportDataPage() {
     const handleClearAccounts = async () => {
         setIsClearing(true);
         try {
-            // Clear Local Storage
+            // Clear Local Storage for accounts, categories, tags
+            // Preferences are usually kept
             localStorage.removeItem('userAccounts');
             localStorage.removeItem('userCategories');
             localStorage.removeItem('userTags');
 
-            // Clear Session Storage (if transactions were there)
-            // Instead, use the dedicated clear function
+            // Clear Session Storage for transactions
             clearAllSessionTransactions();
 
             // Reset Component State
@@ -999,3 +1000,4 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
