@@ -472,6 +472,8 @@ export default function ImportDataPage() {
                         name: name,
                         currency: existingAcc?.currency || 'BRL', // Use existing or default
                         type: existingAcc?.type || 'checking', // Use existing or default
+                        // Initialize balance from existing if available, otherwise undefined
+                        initialBalance: existingAcc?.balance,
                      };
 
                      // Only set default currency if no currency column mapped or no value for this row
@@ -499,7 +501,9 @@ export default function ImportDataPage() {
                  if (initialBalanceCol && record[initialBalanceCol]) {
                     const balance = parseAmount(record[initialBalanceCol]);
                     if (!isNaN(balance)) {
+                         // Update the balance in the details, overwriting previous value
                         details.initialBalance = balance;
+                        console.log(`Found initial balance ${balance} for account "${name}" from CSV.`);
                     } else {
                         console.warn(`Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}".`);
                     }
@@ -522,33 +526,32 @@ export default function ImportDataPage() {
             const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
             try {
                 if (existingAccount) {
-                    // Update existing account (especially initial balance if provided)
+                    // Update existing account (especially initial balance if provided from CSV)
+                    // Check if CSV provided a balance AND it's different from the current balance
                     if (accDetails.initialBalance !== undefined && accDetails.initialBalance !== existingAccount.balance) {
-                        console.log(`Updating balance for existing account "${accDetails.name}" to ${accDetails.initialBalance}...`);
+                        console.log(`Updating balance for existing account "${accDetails.name}" from ${existingAccount.balance} to ${accDetails.initialBalance}...`);
                         const updatedAccountData: Account = {
                             ...existingAccount,
-                            balance: accDetails.initialBalance, // Update balance
-                            // Update last activity on balance update
+                            balance: accDetails.initialBalance, // Update balance from CSV data
                             lastActivity: new Date().toISOString(),
                         };
-                        await updateAccount(updatedAccountData); // Use the update service function
+                        await updateAccount(updatedAccountData);
                         accountsProcessedCount++;
                     } else {
-                        console.log(`Account "${accDetails.name}" already exists, no balance update needed.`);
+                        console.log(`Account "${accDetails.name}" already exists, no balance update needed or provided.`);
                     }
-                    // Ensure map has the correct ID (already there if existing)
                     workingMap[normalizedName] = existingAccount.id;
                 } else {
-                    // Create new account
-                    console.log(`Attempting to create account "${accDetails.name}" with currency ${accDetails.currency}, type ${accDetails.type}, balance ${accDetails.initialBalance ?? 0}...`);
+                    // Create new account with the balance found (or 0 if none found)
+                    const balanceToSet = accDetails.initialBalance ?? 0;
+                    console.log(`Attempting to create account "${accDetails.name}" with currency ${accDetails.currency}, type ${accDetails.type}, balance ${balanceToSet}...`);
                     const newAccountData: NewAccountData = {
                         name: accDetails.name,
                         type: accDetails.type || 'checking',
-                        balance: accDetails.initialBalance ?? 0, // Use parsed initial balance or 0
+                        balance: balanceToSet, // Use parsed initial balance or 0
                         currency: accDetails.currency,
                         providerName: 'Imported',
                         category: (accDetails.type === 'wallet' || accDetails.type === 'exchange' || accDetails.type === 'staking') ? 'crypto' : 'asset',
-                         // Add default placeholders directly here
                         isActive: true,
                         lastActivity: new Date().toISOString(),
                         balanceDifference: 0,
@@ -556,7 +559,7 @@ export default function ImportDataPage() {
                     const createdAccount = await addAccount(newAccountData);
                     workingMap[normalizedName] = createdAccount.id;
                     accountsProcessedCount++;
-                    console.log(`Successfully created account: ${createdAccount.name} (ID: ${createdAccount.id})`);
+                    console.log(`Successfully created account: ${createdAccount.name} (ID: ${createdAccount.id}) with balance ${balanceToSet}`);
                 }
             } catch (err: any) {
                 console.error(`Failed to process account "${accDetails.name}":`, err);
