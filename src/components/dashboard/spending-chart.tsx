@@ -40,11 +40,11 @@ interface SpendingChartProps {
 }
 
 const SpendingChart: FC<SpendingChartProps> = ({ data, currency }) => {
-  // Updated chartConfig to use the primary gold color and dynamic label
+  // Updated chartConfig to use the primary orange color and dynamic label
     const chartConfig = {
         amount: {
             label: `Amount (${currency})`, // Use dynamic currency label
-            color: 'hsl(var(--primary))', // Use primary color (gold)
+            color: 'hsl(var(--primary))', // Use primary color (orange)
         },
     } satisfies ChartConfig;
 

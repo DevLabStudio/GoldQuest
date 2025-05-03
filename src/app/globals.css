@@ -11,14 +11,14 @@ body {
 
 @layer base {
   :root {
-    /* Light theme defaults (less relevant as we use dark) */
+    /* Light theme defaults */
     --background: 0 0% 100%; /* White */
     --foreground: 0 0% 3.9%; /* Near Black */
     --card: 0 0% 100%; /* White */
     --card-foreground: 0 0% 3.9%; /* Near Black */
     --popover: 0 0% 100%; /* White */
     --popover-foreground: 0 0% 3.9%; /* Near Black */
-    --primary: 45 90% 55%; /* Gold */
+    --primary: 36 100% 50%; /* Bitcoin Orange */
     --primary-foreground: 0 0% 3.9%; /* Near Black */
     --secondary: 0 0% 96.1%; /* Light Gray */
     --secondary-foreground: 0 0% 9%; /* Dark Gray / Near Black */
@@ -30,21 +30,21 @@ body {
     --destructive-foreground: 0 0% 98%; /* White */
     --border: 0 0% 89.8%; /* Light Gray */
     --input: 0 0% 89.8%; /* Light Gray */
-    --ring: 45 90% 55%; /* Gold */
-    --chart-1: 45 90% 55%; /* Gold */
-    --chart-2: 45 80% 65%;
-    --chart-3: 45 70% 75%;
+    --ring: 36 100% 50%; /* Bitcoin Orange */
+    --chart-1: 36 100% 50%; /* Bitcoin Orange */
+    --chart-2: 36 90% 60%; /* Lighter Orange */
+    --chart-3: 36 80% 70%; /* Even Lighter Orange */
     --chart-4: 0 0% 60%; /* Gray */
     --chart-5: 0 0% 40%; /* Darker Gray */
     --radius: 0.5rem;
     --sidebar-background: 0 0% 98%; /* Very Light Gray (almost White) */
     --sidebar-foreground: 0 0% 9%; /* Dark Gray / Near Black */
-    --sidebar-primary: 45 90% 55%; /* Gold */
+    --sidebar-primary: 36 100% 50%; /* Bitcoin Orange */
     --sidebar-primary-foreground: 0 0% 3.9%; /* Near Black */
     --sidebar-accent: 0 0% 90%; /* Slightly darker gray */
     --sidebar-accent-foreground: 0 0% 9%; /* Dark Gray / Near Black */
     --sidebar-border: 0 0% 89.8%; /* Light Gray */
-    --sidebar-ring: 45 90% 55%; /* Gold */
+    --sidebar-ring: 36 100% 50%; /* Bitcoin Orange */
 
     /* Define font variable */
     --font-oxanium: var(--font-oxanium);
@@ -56,7 +56,7 @@ body {
     --card-foreground: 0 0% 98%; /* White */
     --popover: 0 0% 8%; /* Darker Gray */
     --popover-foreground: 0 0% 98%; /* White */
-    --primary: 45 90% 55%; /* Gold */
+    --primary: 36 100% 50%; /* Bitcoin Orange */
     --primary-foreground: 0 0% 3.9%; /* Near Black */
     --secondary: 0 0% 15%; /* Dark Gray */
     --secondary-foreground: 0 0% 98%; /* White */
@@ -68,20 +68,20 @@ body {
     --destructive-foreground: 0 0% 98%; /* White */
     --border: 0 0% 15%; /* Dark Gray */
     --input: 0 0% 15%; /* Dark Gray */
-    --ring: 45 90% 55%; /* Gold */
-    --chart-1: 45 90% 55%; /* Gold */
-    --chart-2: 45 80% 65%;
-    --chart-3: 45 70% 75%;
+    --ring: 36 100% 50%; /* Bitcoin Orange */
+    --chart-1: 36 100% 50%; /* Bitcoin Orange */
+    --chart-2: 36 90% 60%; /* Lighter Orange */
+    --chart-3: 36 80% 70%; /* Even Lighter Orange */
     --chart-4: 0 0% 60%; /* Gray */
     --chart-5: 0 0% 40%; /* Darker Gray */
     --sidebar-background: 0 0% 8%; /* Slightly different dark */
     --sidebar-foreground: 0 0% 98%; /* White */
-    --sidebar-primary: 45 90% 55%; /* Gold */
+    --sidebar-primary: 36 100% 50%; /* Bitcoin Orange */
     --sidebar-primary-foreground: 0 0% 3.9%; /* Near Black */
     --sidebar-accent: 0 0% 20%; /* Hover Gray */
     --sidebar-accent-foreground: 0 0% 98%; /* White */
     --sidebar-border: 0 0% 15%; /* Dark Gray */
-    --sidebar-ring: 45 90% 55%; /* Gold */
+    --sidebar-ring: 36 100% 50%; /* Bitcoin Orange */
 
     /* Define font variable for dark mode */
     --font-oxanium: var(--font-oxanium);
