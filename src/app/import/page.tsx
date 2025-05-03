@@ -230,7 +230,7 @@ export default function ImportDataPage() {
          window.removeEventListener('storage', handleStorageChange);
        }
      };
-  }, []); // Removed toast from dependency array as it's stable
+  }, [toast]); // Include toast in dependency array as it's used in fetchData's catch block
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -774,6 +774,7 @@ export default function ImportDataPage() {
         csvData.forEach((record, index) => {
             const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
             if (typeValue === 'opening balance') {
+                // For opening balance, the account name MUST come from the primary 'account' column
                 const name = accountNameCol ? record[accountNameCol]?.trim() : undefined;
                 if (name) {
                     const normalizedName = name.toLowerCase();
@@ -823,24 +824,32 @@ export default function ImportDataPage() {
 
                     accountUpdates.set(normalizedName, details);
                 } else {
-                     console.warn(`Row ${index + 2}: 'Opening Balance' type found, but could not determine account name.`);
+                     console.warn(`Row ${index + 2}: 'Opening Balance' type found, but could not determine account name from the mapped 'Account Name' column.`);
                 }
             }
         });
 
 
-        // Second pass for other rows, adding details but NOT overwriting initialBalance if set by 'opening balance'
+        // Second pass for other rows (non-opening balance), adding details but NOT overwriting initialBalance if set by 'opening balance'
         csvData.forEach((record, index) => {
              const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
              // Skip 'opening balance' rows as they were handled first
              if (typeValue === 'opening balance') return;
 
-            // Consider account, source_account, destination_account
-             const potentialAccountNames = [
-                 accountNameCol ? record[accountNameCol]?.trim() : undefined,
-                 sourceAccountCol ? record[sourceAccountCol]?.trim() : undefined,
-                 destAccountCol ? record[destAccountCol]?.trim() : undefined
-             ].filter(Boolean) as string[];
+             let potentialAccountNames: string[] = [];
+             // Determine relevant account columns based on transaction type (deposit, withdrawal, transfer)
+             if (typeValue === 'transfer') {
+                 // For transfers, use source and destination columns
+                 potentialAccountNames = [
+                     sourceAccountCol ? record[sourceAccountCol]?.trim() : undefined,
+                     destAccountCol ? record[destAccountCol]?.trim() : undefined
+                 ].filter(Boolean) as string[];
+             } else {
+                  // For deposit/withdrawal, primarily use the 'account' column
+                  potentialAccountNames = [
+                      accountNameCol ? record[accountNameCol]?.trim() : undefined
+                  ].filter(Boolean) as string[];
+             }
 
              potentialAccountNames.forEach(name => {
                  if (name) {
