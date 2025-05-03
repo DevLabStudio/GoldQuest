@@ -156,7 +156,7 @@ export default function AccountsPage() {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Asset accounts</h1> {/* Corrected capitalization */}
+        <h1 className="text-3xl font-bold">Property</h1> {/* Changed title */}
         {/* Add Account Dialog */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
