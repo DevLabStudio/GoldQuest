@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { PlusCircle, Edit, Trash2 } from 'lucide-react'; // For future management actions
-import { getTransactions, type Transaction } from "@/services/transactions"; // Import transactions service
+import { getTransactions, type Transaction } from "@/services/transactions.tsx"; // Import transactions service
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Reuse category styles logic from transactions page

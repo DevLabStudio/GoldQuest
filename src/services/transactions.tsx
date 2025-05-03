@@ -1,5 +1,6 @@
 
 import type { Account } from './account-sync'; // Assuming Account interface is here
+import React from 'react'; // Import React for JSX
 
 /**
  * Represents a financial transaction.
