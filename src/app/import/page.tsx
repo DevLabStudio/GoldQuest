@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -20,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog
 import { format } from 'date-fns';
-import { getCurrencySymbol, supportedCurrencies } from '@/lib/currency'; // Import supportedCurrencies
+import { getCurrencySymbol, supportedCurrencies, formatCurrency } from '@/lib/currency'; // Import supportedCurrencies and formatCurrency
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
 import { AlertCircle, Trash2 } from 'lucide-react'; // Added Trash2 for clear button
 import { cn } from '@/lib/utils';
@@ -44,6 +43,16 @@ type MappedTransaction = Omit<Transaction, 'id'> & {
   errorMessage?: string;
   // Tags are already optional in Transaction interface
 };
+
+// Define interface for account preview data
+interface AccountPreview {
+    name: string;
+    currency: string;
+    initialBalance?: number; // Balance that will be set/updated
+    action: 'create' | 'update' | 'no change'; // What will happen to this account
+    existingId?: string; // ID if it's an update/no change
+}
+
 
 // Helper to find a column name case-insensitively (remains useful)
 const findColumnName = (headers: string[], targetName: string): string | undefined => {
@@ -167,6 +176,7 @@ export default function ImportDataPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]); // Add state for tags
+  const [accountPreviewData, setAccountPreviewData] = useState<AccountPreview[]>([]); // State for account preview
   // No need for accountNameIdMap in state anymore for the import process itself
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping>({});
@@ -224,6 +234,7 @@ export default function ImportDataPage() {
       setFile(event.target.files[0]);
       setError(null);
       setParsedData([]);
+      setAccountPreviewData([]); // Reset account preview on new file
       setRawData([]);
       setCsvHeaders([]);
       setImportProgress(0);
@@ -240,6 +251,7 @@ export default function ImportDataPage() {
     setIsLoading(true);
     setError(null);
     setParsedData([]);
+    setAccountPreviewData([]); // Reset account preview
     setRawData([]);
     setCsvHeaders([]);
 
@@ -334,6 +346,7 @@ export default function ImportDataPage() {
         setIsLoading(true);
         setError(null);
         setParsedData([]);
+        setAccountPreviewData([]); // Clear previous preview
         setColumnMappings(confirmedMappings); // Store the confirmed mappings
 
         // Validate required mappings
@@ -383,30 +396,26 @@ export default function ImportDataPage() {
         }
 
 
-        // --- Create Missing Accounts & Get Updated Map ---
-        // Pass the current map state and updater function
-        const { success: accountCreationSuccess, map: finalAccountMap } = await createMissingAccountsAndGetMap(
+        // --- Preview Account Changes ---
+         const { preview } = await previewAccountChanges(
              rawData,
-             accountNameSourceCol, // Use the determined primary account name column
+             accountNameSourceCol,
              accountCurrencyCol,
-             initialBalanceCol // Pass initial balance column name
+             initialBalanceCol
          );
-
-         if (!accountCreationSuccess) {
-              setError("Failed during account creation or update. Please check console and try again.");
-              setIsLoading(false);
-              setIsMappingDialogOpen(true); // Re-open mapping dialog if account creation failed
-              return;
-          }
-          // Update the main accounts state in the UI after successful creation/update
-          try {
-              setAccounts(await getAccounts());
-          } catch {
-              console.error("Failed to refetch accounts after import preparation.");
-          }
+         setAccountPreviewData(preview);
+         console.log("Account preview generated:", preview);
 
 
         // --- Map Transaction Data using the FINAL map ---
+         // Fetch the map *again* after preview generation to ensure consistency for transaction linking
+        const { map: finalAccountMap } = await createMissingAccountsAndGetMap(
+             rawData,
+             accountNameSourceCol,
+             accountCurrencyCol,
+             initialBalanceCol,
+             true // Indicate it's the final map generation (no actual creation yet)
+        );
         console.log("Using final account map for transaction linking:", finalAccountMap);
 
 
@@ -583,7 +592,7 @@ export default function ImportDataPage() {
              errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., initial balance).`);
         }
         if (errorMessages.length > 0) {
-            setError(`Import Preview Issues: ${errorMessages.join(' ')} Review the table below.`);
+            setError(`Import Preview Issues: ${errorMessages.join(' ')} Review the tables below.`);
         } else {
             setError(null);
         }
@@ -591,9 +600,169 @@ export default function ImportDataPage() {
         setParsedData(mapped);
         setIsLoading(false);
         setIsMappingDialogOpen(false);
-        toast({ title: "Mapping Applied", description: `Previewing ${mapped.filter(m => m.importStatus === 'pending').length} transactions. Review before importing.` });
+        toast({ title: "Mapping Applied", description: `Previewing ${mapped.filter(m => m.importStatus === 'pending').length} transactions and account changes. Review before importing.` });
    }
 
+
+    /**
+     * Previews account changes based on CSV data without actually modifying anything.
+     * @returns A promise resolving to an object containing the preview data.
+     */
+    const previewAccountChanges = async (
+        csvData: CsvRecord[],
+        accountNameCol: string,
+        accountCurrencyCol?: string,
+        initialBalanceCol?: string
+    ): Promise<{ preview: AccountPreview[] }> => {
+        const existingAccounts = await getAccounts();
+        const preview: AccountPreview[] = [];
+        const processedAccountNames = new Set<string>(); // Track processed names
+
+        // Map to store details for accounts found in the CSV (normalizedName -> details)
+        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, existingAccounts);
+
+        accountUpdates.forEach((accDetails, normalizedName) => {
+            const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+            let action: AccountPreview['action'] = 'no change';
+            let initialBalance: number | undefined = undefined;
+
+            if (existingAccount) {
+                // Check if update is needed (currency, type, or balance)
+                let needsUpdate = false;
+                if (accDetails.currency !== existingAccount.currency) needsUpdate = true;
+                if (accDetails.type && accDetails.type !== existingAccount.type) needsUpdate = true;
+                // Balance update check: if CSV provides a balance AND it's different
+                if (accDetails.initialBalance !== undefined && accDetails.initialBalance !== existingAccount.balance) {
+                    needsUpdate = true;
+                    initialBalance = accDetails.initialBalance; // Balance that will be set
+                } else {
+                    initialBalance = existingAccount.balance; // Existing balance if no change
+                }
+
+                if (needsUpdate) {
+                    action = 'update';
+                }
+                 preview.push({
+                    name: accDetails.name,
+                    currency: accDetails.currency,
+                    initialBalance: initialBalance,
+                    action: action,
+                    existingId: existingAccount.id
+                });
+            } else {
+                // New account to be created
+                initialBalance = accDetails.initialBalance ?? 0; // Balance to be set (or 0)
+                preview.push({
+                    name: accDetails.name,
+                    currency: accDetails.currency,
+                    initialBalance: initialBalance,
+                    action: 'create',
+                });
+            }
+             processedAccountNames.add(normalizedName);
+        });
+
+        // Optionally add existing accounts that weren't mentioned in the CSV
+        existingAccounts.forEach(acc => {
+            if (!processedAccountNames.has(acc.name.toLowerCase())) {
+                preview.push({
+                    name: acc.name,
+                    currency: acc.currency,
+                    initialBalance: acc.balance,
+                    action: 'no change',
+                    existingId: acc.id,
+                });
+            }
+        });
+
+        return { preview };
+    };
+
+
+    /**
+     * Builds a map of account details from CSV data, considering existing accounts.
+     * This function is used by both preview and final creation.
+     */
+    const buildAccountUpdateMap = async (
+        csvData: CsvRecord[],
+        accountNameCol: string,
+        accountCurrencyCol?: string,
+        initialBalanceCol?: string,
+        existingAccounts: Account[] // Pass existing accounts to avoid re-fetching
+    ): Promise<Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>> => {
+        const accountUpdates = new Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
+
+        csvData.forEach((record, index) => {
+            // Consider account, source_account, destination_account for finding unique account names
+             const potentialAccountNames = [
+                 record[accountNameCol]?.trim(),
+                 record[columnMappings.source_account || '']?.trim(),
+                 record[columnMappings.destination_account || '']?.trim()
+             ].filter(Boolean) as string[]; // Get all non-empty account names from relevant columns
+
+             potentialAccountNames.forEach(name => {
+                 if (name) {
+                     const normalizedName = name.toLowerCase();
+                     let details = accountUpdates.get(normalizedName);
+
+                      // Initialize details if this account hasn't been seen yet in the CSV
+                      if (!details) {
+                         const existingAcc = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+                         // Infer category based on name heuristics (can be improved)
+                         const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
+                         details = {
+                             name: name,
+                             currency: existingAcc?.currency || 'BRL', // Default if not found/mappable
+                             type: existingAcc?.type, // Use existing type if available
+                             initialBalance: existingAcc?.balance, // Use existing balance initially
+                             category: initialCategory
+                         };
+
+                         // Infer type if not existing and category is known
+                         if (!details.type) {
+                             if (details.category === 'crypto') {
+                                 if (normalizedName.includes('exchange') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken')) details.type = 'exchange';
+                                 else if (normalizedName.includes('wallet') || normalizedName.includes('ledger') || normalizedName.includes('metamask') || normalizedName.includes('phantom')) details.type = 'wallet';
+                                 else if (normalizedName.includes('staking') || normalizedName.includes('yield') || normalizedName.includes('earn')) details.type = 'staking';
+                                 else details.type = 'wallet'; // Default crypto type
+                             } else { // Asset
+                                 if (normalizedName.includes('credit') || normalizedName.includes('card')) details.type = 'credit card';
+                                 else if (normalizedName.includes('saving')) details.type = 'savings';
+                                 else if (normalizedName.includes('invest')) details.type = 'investment';
+                                 else details.type = 'checking'; // Default asset type
+                             }
+                         }
+                      }
+
+                     // Determine currency: Prioritize CSV column > Existing Account > Default
+                     let finalCurrency = details.currency; // Start with existing or default
+                      if (accountCurrencyCol && record[accountCurrencyCol]) {
+                          const potentialCurrency = record[accountCurrencyCol]!.trim().toUpperCase();
+                          if (supportedCurrencies.includes(potentialCurrency)) {
+                              finalCurrency = potentialCurrency;
+                          } else {
+                              console.warn(`Row ${index + 2}: Ignoring invalid currency "${potentialCurrency}" for account "${name}", using default/existing ${finalCurrency}.`);
+                          }
+                      }
+                      details.currency = finalCurrency;
+
+                     // Capture initial balance if mapped and present for *this specific row*
+                     // This updates the balance if found later in the file for the same account
+                     if (initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
+                         const balance = parseAmount(record[initialBalanceCol]);
+                         if (!isNaN(balance)) {
+                             details.initialBalance = balance; // Update the balance
+                             console.log(`Row ${index + 2}: Found potential initial balance ${balance} for account "${name}" from CSV.`);
+                         } else {
+                             console.warn(`Row ${index + 2}: Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}".`);
+                         }
+                     }
+                      accountUpdates.set(normalizedName, details);
+                 }
+             });
+        });
+         return accountUpdates;
+    }
 
     /**
      * Creates missing accounts or updates existing ones with initial balance found in CSV data.
@@ -603,7 +772,8 @@ export default function ImportDataPage() {
         csvData: CsvRecord[],
         accountNameCol: string,
         accountCurrencyCol?: string,
-        initialBalanceCol?: string // Optional column for initial balance
+        initialBalanceCol?: string, // Optional column for initial balance
+        isPreviewOnly: boolean = false // Flag to prevent actual creation/update if true
     ): Promise<{ success: boolean; map: { [key: string]: string } }> => {
         let success = true;
         const existingAccounts = await getAccounts(); // Fetch current accounts
@@ -613,75 +783,24 @@ export default function ImportDataPage() {
         }, {} as { [key: string]: string });
 
         // Map to store details for accounts found in the CSV (normalizedName -> details)
-        const accountUpdates = new Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
+        const accountUpdates = await buildAccountUpdateMap(csvData, accountNameCol, accountCurrencyCol, initialBalanceCol, existingAccounts);
 
-        csvData.forEach((record, index) => {
-            const name = record[accountNameCol]?.trim();
-            if (name) {
-                const normalizedName = name.toLowerCase();
-                let details = accountUpdates.get(normalizedName);
-
-                // Initialize details if this account hasn't been seen yet in the CSV
-                if (!details) {
-                    const existingAcc = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
-                    // Infer category based on name heuristics (can be improved)
-                    const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
-                    details = {
-                        name: name,
-                        currency: existingAcc?.currency || 'BRL', // Default if not found/mappable
-                        type: existingAcc?.type, // Use existing type if available
-                        initialBalance: existingAcc?.balance, // Use existing balance initially
-                        category: initialCategory
-                    };
-
-                     // Infer type if not existing and category is known
-                     if (!details.type) {
-                         if (details.category === 'crypto') {
-                             if (normalizedName.includes('exchange') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken')) details.type = 'exchange';
-                             else if (normalizedName.includes('wallet') || normalizedName.includes('ledger') || normalizedName.includes('metamask') || normalizedName.includes('phantom')) details.type = 'wallet';
-                             else if (normalizedName.includes('staking') || normalizedName.includes('yield') || normalizedName.includes('earn')) details.type = 'staking';
-                             else details.type = 'wallet'; // Default crypto type
-                         } else { // Asset
-                             if (normalizedName.includes('credit') || normalizedName.includes('card')) details.type = 'credit card';
-                             else if (normalizedName.includes('saving')) details.type = 'savings';
-                             else if (normalizedName.includes('invest')) details.type = 'investment';
-                             else details.type = 'checking'; // Default asset type
-                         }
-                     }
-                }
-
-                // Determine currency: Prioritize CSV column > Existing Account > Default
-                let finalCurrency = details.currency; // Start with existing or default
-                 if (accountCurrencyCol && record[accountCurrencyCol]) {
-                     const potentialCurrency = record[accountCurrencyCol]!.trim().toUpperCase();
-                     if (supportedCurrencies.includes(potentialCurrency)) {
-                         finalCurrency = potentialCurrency;
-                     } else {
-                         console.warn(`Row ${index + 2}: Ignoring invalid currency "${potentialCurrency}" for account "${name}", using default/existing ${finalCurrency}.`);
-                     }
-                 }
-                 details.currency = finalCurrency;
-
-                 // Capture initial balance if mapped and present for *this specific row*
-                 // This updates the balance if found later in the file for the same account
-                 if (initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
-                    const balance = parseAmount(record[initialBalanceCol]);
-                    if (!isNaN(balance)) {
-                        details.initialBalance = balance; // Update the balance
-                        console.log(`Row ${index + 2}: Found potential initial balance ${balance} for account "${name}" from CSV.`);
-                    } else {
-                        console.warn(`Row ${index + 2}: Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}".`);
-                    }
-                 }
-
-                accountUpdates.set(normalizedName, details);
-            }
-        });
-
-
-        if (accountUpdates.size === 0) {
+        if (accountUpdates.size === 0 && !isPreviewOnly) {
             console.log("No account updates needed.");
             return { success: true, map: workingMap }; // Return current map
+        }
+        if (isPreviewOnly) {
+             // For preview, just populate the map based on what *would* happen
+             accountUpdates.forEach((accDetails, normalizedName) => {
+                  const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+                  if (existingAccount) {
+                      workingMap[normalizedName] = existingAccount.id;
+                  } else {
+                       // Assign a placeholder ID for preview purposes if it doesn't exist
+                      workingMap[normalizedName] = `preview_create_${normalizedName}`;
+                  }
+             });
+            return { success: true, map: workingMap };
         }
 
         console.log(`Found ${accountUpdates.size} unique accounts in CSV to potentially create or update...`);
@@ -896,7 +1015,8 @@ export default function ImportDataPage() {
           rawData.filter((_, index) => parsedData[index]?.importStatus === 'pending'), // Only process relevant raw data
           accountNameSourceCol,
           columnMappings.accountCurrency,
-          columnMappings.initialBalance
+          columnMappings.initialBalance,
+          false // Set to false to actually perform creation/update
       );
        if (!finalAccountMapSuccess) {
           setError("Error finalizing account mapping before import. Check console.");
@@ -1104,6 +1224,7 @@ export default function ImportDataPage() {
             setCategories([]);
             setTags([]);
             setParsedData([]);
+            setAccountPreviewData([]); // Clear account preview
             setError(null);
             setRawData([]);
             setFile(null);
@@ -1213,11 +1334,51 @@ export default function ImportDataPage() {
         </Dialog>
 
 
+      {/* Account Preview Section */}
+       {accountPreviewData.length > 0 && !isLoading && (
+            <Card className="mb-8">
+                <CardHeader>
+                    <CardTitle>Step 2.5: Account Changes Preview</CardTitle>
+                    <CardDescription>Review the accounts that will be created or updated based on the CSV data and mappings. Initial balances are estimates from the 'Initial Balance' column if mapped.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <div className="max-h-[300px] overflow-y-auto border rounded-md">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Account Name</TableHead>
+                                    <TableHead>Action</TableHead>
+                                    <TableHead>Currency</TableHead>
+                                    <TableHead className="text-right">Initial Balance</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {accountPreviewData.map((acc, index) => (
+                                    <TableRow key={index} className={cn(
+                                         acc.action === 'create' ? 'bg-green-50 dark:bg-green-900/20' :
+                                         acc.action === 'update' ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
+                                    )}>
+                                        <TableCell className="font-medium">{acc.name}</TableCell>
+                                        <TableCell className="capitalize">{acc.action}</TableCell>
+                                        <TableCell>{acc.currency}</TableCell>
+                                        <TableCell className="text-right">
+                                            {acc.initialBalance !== undefined ? formatCurrency(acc.initialBalance, acc.currency, undefined, false) : 'N/A'}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                </CardContent>
+            </Card>
+        )}
+
+
       {parsedData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Step 3: Review & Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
-            <CardDescription>Review the mapped transactions. Rows marked 'Error' or 'Skipped' will not be imported. Adjust mappings if needed by clicking "Parse & Map Columns" again with the same file. Click "Import Transactions" above when ready.</CardDescription>
+            <CardTitle>Step 3: Review &amp; Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
+            <CardDescription>Review the mapped transactions. Rows marked 'Error' or 'Skipped' will not be imported. Adjust mappings if needed by clicking "Parse &amp; Map Columns" again with the same file. Click "Import Transactions" above when ready.</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="max-h-[500px] overflow-y-auto border rounded-md">
@@ -1285,7 +1446,8 @@ export default function ImportDataPage() {
                                     "text-right whitespace-nowrap font-medium",
                                     !isNaN(item.amount) && item.amount >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
                                 )}>
-                                    {currencySymbol}{!isNaN(item.amount) ? item.amount.toFixed(2) : 'ERR'}
+                                    {/* Use formatCurrency for consistency, pass convertToPreferred=false */}
+                                     {formatCurrency(item.amount, accountCurrency, undefined, false)}
                                 </TableCell>
                             )}
                             {columnMappings.amount_income && <TableCell className="text-right whitespace-nowrap">{item.originalRecord[columnMappings.amount_income!]}</TableCell>}
@@ -1306,4 +1468,3 @@ export default function ImportDataPage() {
     </div>
   );
 }
-
