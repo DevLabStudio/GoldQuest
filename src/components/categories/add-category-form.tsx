@@ -8,7 +8,7 @@ import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import type { Category } from '@/services/categories'; // Import Category type if needed later
+import type { Category } from '@/services/categories.tsx'; // Import Category type if needed later (updated extension)
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Category name cannot be empty").max(50, "Category name too long"),

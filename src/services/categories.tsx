@@ -1,4 +1,3 @@
-
 'use client'; // This module interacts with localStorage
 
 import React from 'react'; // Import React for JSX types
