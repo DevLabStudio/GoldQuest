@@ -1,3 +1,4 @@
+
 'use client'; // Required for using state (useState)
 
 import type { Metadata } from 'next';
@@ -19,7 +20,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown } from 'lucide-react'; // Added ChevronDown
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react'; // Added ChevronDown, TrendingUp, TrendingDown
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -143,8 +144,9 @@ export default function RootLayout({
                          </SidebarMenuButton>
                     </SidebarMenuItem>
 
-                    {/* Categories (Conditional Rendering) */}
+                    {/* Conditionally Rendered Transaction Sub-Items */}
                     {isTransactionsOpen && (
+                        <>
                          <SidebarMenuItem className="ml-4"> {/* Keep indentation */}
                              <Link href="/categories" passHref>
                                  <SidebarMenuButton tooltip="Manage Categories" size="sm">
@@ -153,19 +155,25 @@ export default function RootLayout({
                                  </SidebarMenuButton>
                              </Link>
                          </SidebarMenuItem>
+                         <SidebarMenuItem className="ml-4">
+                             <Link href="/revenue" passHref>
+                                 <SidebarMenuButton tooltip="View Revenue/Income" size="sm">
+                                     <TrendingUp />
+                                     <span>Revenue/Income</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
+                         <SidebarMenuItem className="ml-4">
+                             <Link href="/expenses" passHref>
+                                 <SidebarMenuButton tooltip="View Expenses" size="sm">
+                                     <TrendingDown />
+                                     <span>Expenses</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
+                         </>
                     )}
 
-                    {/* TODO: Add Debits link when page is created */}
-                    {/*
-                    <SidebarMenuItem>
-                        <Link href="/debits" passHref>
-                            <SidebarMenuButton tooltip="Manage Debits">
-                                <CreditCard />
-                                <span>Debits</span>
-                            </SidebarMenuButton>
-                        </Link>
-                    </SidebarMenuItem>
-                    */}
                     <SidebarMenuItem>
                         <Link href="/investments" passHref>
                             <SidebarMenuButton tooltip="Manage Investments">
