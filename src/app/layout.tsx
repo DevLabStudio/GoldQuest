@@ -20,7 +20,7 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown } from 'lucide-react'; // Added ChevronDown, TrendingUp, TrendingDown
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList } from 'lucide-react'; // Added LayoutList
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -147,6 +147,14 @@ export default function RootLayout({
                     {/* Conditionally Rendered Transaction Sub-Items */}
                     {isTransactionsOpen && (
                         <>
+                          <SidebarMenuItem className="ml-4"> {/* Indentation */}
+                             <Link href="/transactions" passHref>
+                                 <SidebarMenuButton tooltip="Transactions Overview" size="sm">
+                                     <LayoutList /> {/* Changed Icon */}
+                                     <span>Overview</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
                          <SidebarMenuItem className="ml-4"> {/* Keep indentation */}
                              <Link href="/categories" passHref>
                                  <SidebarMenuButton tooltip="Manage Categories" size="sm">
