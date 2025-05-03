@@ -160,7 +160,7 @@ export default function AccountsPage() {
   const cryptoAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'crypto'), [allAccounts]);
 
 
-  // Reusable Table Component (Simplified for demonstration)
+  // Reusable Table Component
   const AccountTable = ({ accounts, title, category, onAddClick, isAddDialogOpen, onOpenChange, AddFormComponent }: {
       accounts: Account[];
       title: string;
@@ -226,9 +226,11 @@ export default function AccountsPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-semibold text-primary">
+                         {/* Display original balance */}
                         {formatCurrency(account.balance, account.currency, undefined, false)}
                       </span>
-                      {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && ( // Ensure case-insensitive comparison
+                      {/* Conditionally display converted balance */}
+                      {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                         <span className="text-xs text-muted-foreground mt-1">
                             (≈ {formatCurrency(account.balance, account.currency, undefined, true)})
                         </span>
