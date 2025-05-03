@@ -23,7 +23,8 @@ export interface Transaction {
    */
   description: string;
   /**
-   * The category of the transaction (e.g., groceries, rent, utilities, salary).
+   * The category name of the transaction (e.g., groceries, rent, utilities, salary).
+   * Should match the `name` field of a Category object.
    */
   category: string;
   /**
@@ -38,39 +39,21 @@ export interface Transaction {
 const mockTransactions: { [accountId: string]: Transaction[] } = {
   // Add some initial mock data if needed, or leave empty
   'manual-123': [ // Example using a possible default ID from account-sync
-    { id: 'tx-1', date: '2024-07-15', amount: -55.40, description: 'Supermarket Mart', category: 'groceries', accountId: 'manual-123' },
-    { id: 'tx-2', date: '2024-07-10', amount: -1200.00, description: 'Rent Payment July', category: 'rent', accountId: 'manual-123' },
-    { id: 'tx-3', date: '2024-07-05', amount: 2500.00, description: 'Salary Deposit', category: 'salary', accountId: 'manual-123' },
-    { id: 'tx-4', date: '2024-07-18', amount: -30.00, description: 'Coffee Shop', category: 'food', accountId: 'manual-123' },
-    { id: 'tx-5', date: '2024-07-20', amount: -75.80, description: 'Electricity Bill', category: 'utilities', accountId: 'manual-123' },
-     { id: 'tx-6', date: '2024-07-22', amount: -15.00, description: 'Bus Fare', category: 'transportation', accountId: 'manual-123' },
-     { id: 'tx-uncat', date: '2024-07-23', amount: -10.00, description: 'Unknown Vendor', category: 'uncategorized', accountId: 'manual-123' },
+    { id: 'tx-1', date: '2024-07-15', amount: -55.40, description: 'Supermarket Mart', category: 'Groceries', accountId: 'manual-123' }, // Use names matching default categories
+    { id: 'tx-2', date: '2024-07-10', amount: -1200.00, description: 'Rent Payment July', category: 'Rent', accountId: 'manual-123' },
+    { id: 'tx-3', date: '2024-07-05', amount: 2500.00, description: 'Salary Deposit', category: 'Salary', accountId: 'manual-123' },
+    { id: 'tx-4', date: '2024-07-18', amount: -30.00, description: 'Coffee Shop', category: 'Food', accountId: 'manual-123' },
+    { id: 'tx-5', date: '2024-07-20', amount: -75.80, description: 'Electricity Bill', category: 'Utilities', accountId: 'manual-123' },
+     { id: 'tx-6', date: '2024-07-22', amount: -15.00, description: 'Bus Fare', category: 'Transportation', accountId: 'manual-123' },
+     { id: 'tx-uncat', date: '2024-07-23', amount: -10.00, description: 'Unknown Vendor', category: 'Uncategorized', accountId: 'manual-123' },
   ],
   'manual-crypto-abc': [
-     { id: 'tx-crypto-1', date: '2024-07-12', amount: -150.00, description: 'ETH Purchase', category: 'investment', accountId: 'manual-crypto-abc' },
-     { id: 'tx-crypto-2', date: '2024-07-21', amount: 12.50, description: 'Staking Reward', category: 'income', accountId: 'manual-crypto-abc' },
+     { id: 'tx-crypto-1', date: '2024-07-12', amount: -150.00, description: 'ETH Purchase', category: 'Investment', accountId: 'manual-crypto-abc' },
+     { id: 'tx-crypto-2', date: '2024-07-21', amount: 12.50, description: 'Staking Reward', category: 'Income', accountId: 'manual-crypto-abc' },
   ]
   // Add more account IDs and their transactions as accounts are created
 };
 
-// --- Category Styling (Exported for reuse) ---
-export const categoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
-  groceries: { icon: () => <span className="mr-1">🛒</span>, color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
-  rent: { icon: () => <span className="mr-1">🏠</span>, color: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
-  utilities: { icon: () => <span className="mr-1">💡</span>, color: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700' },
-  transportation: { icon: () => <span className="mr-1">🚗</span>, color: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700' },
-  food: { icon: () => <span className="mr-1">🍔</span>, color: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700' },
-  income: { icon: () => <span className="mr-1">💰</span>, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
-  salary: { icon: () => <span className="mr-1">💼</span>, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
-  investment: { icon: () => <span className="mr-1">📈</span>, color: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700' },
-  default: { icon: () => <span className="mr-1">❓</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-  uncategorized: { icon: () => <span className="mr-1">🏷️</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-};
-
-export const getCategoryStyle = (category: string) => {
-    const lowerCategory = category?.toLowerCase() || 'default';
-    return categoryStyles[lowerCategory] || categoryStyles.default;
-}
 
 // --- Mock API Functions ---
 
@@ -95,7 +78,7 @@ export async function getTransactions(accountId: string): Promise<Transaction[]>
  * Simulates adding a new transaction to the mock data store.
  * In a real app, this would send a request to your backend API.
  *
- * @param transactionData Data for the new transaction (excluding ID).
+ * @param transactionData Data for the new transaction (excluding ID). Category name should exist.
  * @returns A promise that resolves to the newly created Transaction object with an ID.
  */
 export async function addTransaction(transactionData: Omit<Transaction, 'id'>): Promise<Transaction> {
@@ -105,8 +88,8 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     const newTransaction: Transaction = {
         ...transactionData,
         id: `tx-${Date.now()}-${Math.random().toString(16).slice(2)}`, // Simple unique ID generation
-        // Ensure category is set, default to 'uncategorized'
-        category: transactionData.category || 'uncategorized',
+        // Ensure category is set, default to 'Uncategorized' if missing or empty
+        category: transactionData.category?.trim() || 'Uncategorized',
     };
 
     // Initialize array if account has no transactions yet
@@ -145,10 +128,10 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
          throw new Error(`Transaction with ID ${updatedTransaction.id} not found in account ${updatedTransaction.accountId}`);
      }
 
-     // Ensure category exists, default to 'uncategorized' if missing
+     // Ensure category exists, default to 'Uncategorized' if missing
      accountTransactions[index] = {
          ...updatedTransaction,
-         category: updatedTransaction.category || 'uncategorized'
+         category: updatedTransaction.category?.trim() || 'Uncategorized'
      };
      // Persist changes if using localStorage
      // localStorage.setItem('userTransactions', JSON.stringify(mockTransactions));

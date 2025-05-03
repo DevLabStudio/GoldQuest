@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, type Transaction, getCategoryStyle } from "@/services/transactions.tsx"; // Use updated service and import getCategoryStyle
+import { getTransactions, type Transaction } from "@/services/transactions.tsx"; // Use updated service
+import { getCategoryStyle } from '@/services/categories'; // Import from categories service
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use formatters and converters
@@ -109,7 +110,7 @@ export default function TransactionsOverviewPage() {
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
                  const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
-                 const category = tx.category?.toLowerCase() || 'uncategorized';
+                 const category = tx.category || 'Uncategorized'; // Use category name directly
                  categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
               }
           }
@@ -193,7 +194,7 @@ export default function TransactionsOverviewPage() {
                     const account = getAccountForTransaction(transaction.accountId);
                     if (!account) return null; // Should not happen if data is consistent
 
-                    // Use getCategoryStyle from the service
+                    // Use getCategoryStyle from the categories service
                     const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
                     // Format transaction amount converting to preferred currency
                     const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true); // Explicitly convert

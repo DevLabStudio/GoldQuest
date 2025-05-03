@@ -5,85 +5,180 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PlusCircle, Edit, Trash2 } from 'lucide-react'; // For future management actions
-import { getTransactions, type Transaction } from "@/services/transactions.tsx"; // Import transactions service
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { PlusCircle, Edit, Trash2 } from 'lucide-react';
+import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories"; // Import new service
+import AddCategoryForm from '@/components/categories/add-category-form'; // Import Add form
+import EditCategoryForm from '@/components/categories/edit-category-form'; // Import Edit form
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from "@/hooks/use-toast";
 
-// Reuse category styles logic from transactions page
-const categoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
-  groceries: { icon: () => <span className="mr-1">🛒</span>, color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
-  rent: { icon: () => <span className="mr-1">🏠</span>, color: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
-  utilities: { icon: () => <span className="mr-1">💡</span>, color: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700' },
-  transportation: { icon: () => <span className="mr-1">🚗</span>, color: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700' },
-  food: { icon: () => <span className="mr-1">🍔</span>, color: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700' },
-  income: { icon: () => <span className="mr-1">💰</span>, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
-  salary: { icon: () => <span className="mr-1">💼</span>, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
-  investment: { icon: () => <span className="mr-1">📈</span>, color: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700' },
-  default: { icon: () => <span className="mr-1">❓</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-  uncategorized: { icon: () => <span className="mr-1">🏷️</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-};
-
-const getCategoryStyle = (category: string) => {
-    const lowerCategory = category?.toLowerCase() || 'default';
-    return categoryStyles[lowerCategory] || categoryStyles.default;
-}
-
-// Get unique categories from the predefined styles object
-const predefinedCategories = Object.keys(categoryStyles).filter(cat => cat !== 'default');
-
+// Removed duplicate categoryStyles and getCategoryStyle as they are now imported from the service
 
 export default function CategoriesPage() {
-  // For now, we'll use the predefined categories.
-  // Later, we could fetch actual unique categories from transactions if needed.
-  const [categories, setCategories] = useState<string[]>(predefinedCategories);
-  const [isLoading, setIsLoading] = useState(false); // Set to false as we use predefined data
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false); // State for delete confirmation
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null); // For edit/delete
+  const [error, setError] = useState<string | null>(null);
+  const { toast } = useToast();
 
-  // Placeholder for future fetch logic
-  // useEffect(() => {
-  //   const fetchCategories = async () => {
-  //     setIsLoading(true);
-  //     try {
-  //       // Option 1: Fetch all transactions and derive categories (can be slow)
-  //       // const allTx = await getAllTransactions(); // Need to implement this in service
-  //       // const uniqueCategories = [...new Set(allTx.map(tx => tx.category || 'uncategorized'))];
-  //       // setCategories(uniqueCategories);
-
-  //       // Option 2: Use predefined categories (faster, less dynamic)
-  //        setCategories(predefinedCategories);
-  //     } catch (error) {
-  //       console.error("Failed to fetch categories:", error);
-  //     } finally {
-  //       setIsLoading(false);
-  //     }
-  //   };
-  //   fetchCategories();
-  // }, []);
-
-
-  // Handlers for future management actions (placeholders)
-  const handleAddCategory = () => {
-    console.log("Add category clicked");
-    // Open Add Category Dialog/Form
+  const fetchCategories = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const fetchedCategories = await getCategories();
+      // Sort categories alphabetically by name for consistent display
+      fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
+      setCategories(fetchedCategories);
+    } catch (err) {
+      console.error("Failed to fetch categories:", err);
+      setError("Could not load categories.");
+      toast({
+        title: "Error",
+        description: "Failed to load categories.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleEditCategory = (category: string) => {
-    console.log("Edit category:", category);
-    // Open Edit Category Dialog/Form
+  useEffect(() => {
+    fetchCategories();
+    // Add storage listener if category service uses localStorage
+     const handleStorageChange = (event: StorageEvent) => {
+        if (typeof window !== 'undefined' && event.key === 'userCategories') {
+            console.log("Category storage changed, refetching...");
+            fetchCategories();
+        }
+     };
+     if (typeof window !== 'undefined') {
+       window.addEventListener('storage', handleStorageChange);
+     }
+     return () => {
+       if (typeof window !== 'undefined') {
+         window.removeEventListener('storage', handleStorageChange);
+       }
+     };
+  }, []); // Fetch on mount and listen for storage changes
+
+  // Add Category Handler
+  const handleAddCategory = async (categoryName: string) => {
+    setIsLoading(true); // Use isLoading for button state during add
+    try {
+      await addCategory(categoryName);
+      await fetchCategories(); // Refetch after adding
+      setIsAddDialogOpen(false);
+      toast({
+        title: "Success",
+        description: `Category "${categoryName}" added.`,
+      });
+    } catch (err: any) {
+      console.error("Failed to add category:", err);
+      toast({
+        title: "Error Adding Category",
+        description: err.message || "Could not add the category.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
-  const handleDeleteCategory = (category: string) => {
-    console.log("Delete category:", category);
-    // Show confirmation and delete
+  // Edit Category Handler
+   const handleUpdateCategory = async (categoryId: string, newName: string) => {
+     setIsLoading(true); // Use isLoading for button state during update
+     try {
+       await updateCategory(categoryId, newName);
+       await fetchCategories(); // Refetch after updating
+       setIsEditDialogOpen(false);
+       setSelectedCategory(null);
+       toast({
+         title: "Success",
+         description: `Category updated to "${newName}".`,
+       });
+     } catch (err: any) {
+       console.error("Failed to update category:", err);
+       toast({
+         title: "Error Updating Category",
+         description: err.message || "Could not update the category.",
+         variant: "destructive",
+       });
+     } finally {
+        setIsLoading(false);
+     }
+   };
+
+   // Delete Category Handler
+   const handleDeleteCategoryConfirm = async () => {
+       if (!selectedCategory) return;
+       setIsDeleting(true); // Show loading/disabled state on confirmation button
+       try {
+           await deleteCategory(selectedCategory.id);
+           await fetchCategories(); // Refetch after deleting
+           toast({
+               title: "Category Deleted",
+               description: `Category "${selectedCategory.name}" removed.`,
+           });
+       } catch (err: any) {
+           console.error("Failed to delete category:", err);
+           toast({
+               title: "Error Deleting Category",
+               description: err.message || "Could not delete the category.",
+               variant: "destructive",
+           });
+       } finally {
+           setIsDeleting(false);
+           setSelectedCategory(null); // Close the confirmation dialog implicitly by resetting selectedCategory
+       }
+   };
+
+
+  // Open Edit Dialog
+  const openEditDialog = (category: Category) => {
+    setSelectedCategory(category);
+    setIsEditDialogOpen(true);
   };
+
+   // Open Delete Confirmation Dialog
+   const openDeleteDialog = (category: Category) => {
+      setSelectedCategory(category);
+      // The AlertDialog trigger will handle opening the dialog
+   };
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Categories</h1>
-        <Button variant="default" size="sm" onClick={handleAddCategory}>
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
-        </Button>
+        {/* Add Category Dialog Trigger */}
+        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+          <DialogTrigger asChild>
+             <Button variant="default" size="sm">
+              <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-[425px]">
+            <DialogHeader>
+              <DialogTitle>Add New Category</DialogTitle>
+              <DialogDescription>
+                Enter the details for your new category.
+              </DialogDescription>
+            </DialogHeader>
+             {/* Pass handler and loading state */}
+             <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoading} />
+          </DialogContent>
+        </Dialog>
       </div>
+
+       {error && (
+          <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">
+              {error}
+          </div>
+       )}
 
       <Card>
         <CardHeader>
@@ -93,36 +188,56 @@ export default function CategoriesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading ? (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-               {[...Array(8)].map((_, i) => (
-                   <Skeleton key={i} className="h-10 w-full" />
+          {isLoading && categories.length === 0 ? ( // Show skeleton only on initial load
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+               {[...Array(10)].map((_, i) => (
+                   <Skeleton key={i} className="h-10 w-full rounded-full" />
                ))}
             </div>
           ) : categories.length > 0 ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
               {categories.map((category) => {
-                const { icon: CategoryIcon, color } = getCategoryStyle(category);
+                const { icon: CategoryIcon, color } = getCategoryStyle(category.name);
                 return (
-                  <div key={category} className="group relative">
-                     <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border`}>
-                       <div className="flex items-center gap-1 overflow-hidden">
+                  <div key={category.id} className="group relative">
+                     <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border items-center`}>
+                       <div className="flex items-center gap-1 overflow-hidden mr-8"> {/* Add margin-right */}
                          <CategoryIcon />
-                         <span className="capitalize truncate">{category}</span>
+                         <span className="capitalize truncate">{category.name}</span>
                        </div>
-                       {/* Action buttons (Initially hidden, shown on hover/focus) */}
-                       {/*
-                       <div className="absolute inset-0 bg-background/80 flex items-center justify-center gap-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => handleEditCategory(category)}>
+                       {/* Action buttons (Positioned absolutely on the right) */}
+                       <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditDialog(category)}>
                               <Edit className="h-4 w-4" />
                               <span className="sr-only">Edit</span>
                           </Button>
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => handleDeleteCategory(category)}>
-                              <Trash2 className="h-4 w-4" />
-                              <span className="sr-only">Delete</span>
-                          </Button>
+                           {/* Use AlertDialog for Delete Confirmation */}
+                          <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => openDeleteDialog(category)}>
+                                  <Trash2 className="h-4 w-4" />
+                                  <span className="sr-only">Delete</span>
+                                </Button>
+                              </AlertDialogTrigger>
+                               {/* Render content only if this specific category is selected for deletion */}
+                              {selectedCategory?.id === category.id && (
+                                  <AlertDialogContent>
+                                      <AlertDialogHeader>
+                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                          This action cannot be undone. This will permanently delete the category "{selectedCategory.name}". Transactions using this category might need recategorization.
+                                        </AlertDialogDescription>
+                                      </AlertDialogHeader>
+                                      <AlertDialogFooter>
+                                        <AlertDialogCancel onClick={() => setSelectedCategory(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction onClick={handleDeleteCategoryConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                          {isDeleting ? "Deleting..." : "Delete"}
+                                        </AlertDialogAction>
+                                      </AlertDialogFooter>
+                                  </AlertDialogContent>
+                              )}
+                          </AlertDialog>
                        </div>
-                       */}
                      </Badge>
                    </div>
                 );
@@ -131,23 +246,73 @@ export default function CategoriesPage() {
           ) : (
             <div className="text-center py-10">
               <p className="text-muted-foreground">
-                No categories found. Add your first category.
+                No categories found.
               </p>
-               <Button variant="link" className="mt-2 px-0 h-auto text-primary" onClick={handleAddCategory}>
-                    Add a Category
-               </Button>
+              {/* Button to open Add Dialog */}
+              <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                 <DialogTrigger asChild>
+                    <Button variant="link" className="mt-2 px-0 h-auto text-primary">
+                         Add your first category
+                    </Button>
+                  </DialogTrigger>
+                 <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                      <DialogTitle>Add New Category</DialogTitle>
+                      <DialogDescription>
+                        Enter the details for your new category.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoading} />
+                 </DialogContent>
+               </Dialog>
             </div>
           )}
         </CardContent>
-        {/* Optional Footer */}
-         {categories.length > 0 && (
-            <CardContent className="pt-4 border-t">
-               <Button variant="default" size="sm" onClick={handleAddCategory}>
-                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
-               </Button>
+        {/* Footer Add Button (visible if categories exist) */}
+         {!isLoading && categories.length > 0 && (
+            <CardContent className="pt-4 border-t flex justify-start">
+                 <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
+                    <DialogTrigger asChild>
+                       <Button variant="default" size="sm">
+                          <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
+                       </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-[425px]">
+                      <DialogHeader>
+                        <DialogTitle>Add New Category</DialogTitle>
+                        <DialogDescription>
+                          Enter the details for your new category.
+                        </DialogDescription>
+                      </DialogHeader>
+                       <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoading} />
+                    </DialogContent>
+                  </Dialog>
             </CardContent>
          )}
       </Card>
+
+        {/* Edit Category Dialog */}
+        <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
+            setIsEditDialogOpen(open);
+            if (!open) setSelectedCategory(null); // Clear selection when closing
+        }}>
+            <DialogContent className="sm:max-w-[425px]">
+                <DialogHeader>
+                    <DialogTitle>Edit Category</DialogTitle>
+                    <DialogDescription>
+                        Modify the name of the category.
+                    </DialogDescription>
+                </DialogHeader>
+                {selectedCategory && (
+                    <EditCategoryForm
+                        category={selectedCategory}
+                        onCategoryUpdated={handleUpdateCategory}
+                        isLoading={isLoading}
+                    />
+                )}
+            </DialogContent>
+        </Dialog>
+
     </div>
   );
 }
