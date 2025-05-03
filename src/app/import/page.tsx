@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // Import useEffect
 import Papa from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,7 @@ const mapFireflyType = (record: FireflyIIIRecord): 'expense' | 'income' | 'trans
     if (record['Transaction type']?.toLowerCase() === 'transfer') {
         return 'transfer';
     }
-    const amount = parseFloat(record['Amount']);
+    const amount = parseAmount(record['Amount']);
     if (amount < 0) {
         return 'expense';
     }
@@ -63,7 +63,7 @@ const parseAmount = (amountStr: string): number => {
 const parseDate = (dateStr: string): string => {
     try {
         // Attempt to parse common formats, default to ISO string if possible
-        const parsedDate = new Date(dateString);
+        const parsedDate = new Date(dateStr); // Use dateStr directly
         if (!isNaN(parsedDate.getTime())) {
              // Firefly usually uses YYYY-MM-DD, ensure correct format for service
              return format(parsedDate, 'yyyy-MM-dd');
