@@ -148,10 +148,11 @@ export default function ImportDataPage() {
                 setCategories(fetchedCategories);
                 setTags(fetchedTags); // Set tags state
 
-                const initialMap: { [key: string]: string } = {};
-                 fetchedAccounts.forEach(acc => {
-                    initialMap[acc.name.toLowerCase()] = acc.id;
-                 });
+                // Initialize the account map with current accounts
+                const initialMap = fetchedAccounts.reduce((map, acc) => {
+                    map[acc.name.toLowerCase().trim()] = acc.id; // Use lowercase and trimmed name
+                    return map;
+                }, {} as { [key: string]: string });
                  setAccountNameIdMap(initialMap);
 
             } catch (err) {
@@ -169,7 +170,7 @@ export default function ImportDataPage() {
      const handleStorageChange = (event: StorageEvent) => {
         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userCategories' || event.key === 'userTags')) { // Add userTags
             console.log("Storage changed, refetching initial data for import...");
-            fetchData();
+            fetchData(); // Refetch accounts, categories, tags, and rebuild map
         }
      };
      if (typeof window !== 'undefined') {
@@ -274,6 +275,7 @@ export default function ImportDataPage() {
         setIsLoading(true);
         setError(null);
         setParsedData([]);
+        setColumnMappings(confirmedMappings); // Store the confirmed mappings
 
         const essentialAppFields: AppField[] = ['date', 'amount', 'account'];
         const missingMappings = essentialAppFields.filter(field => !confirmedMappings[field]);
@@ -293,15 +295,8 @@ export default function ImportDataPage() {
         const tagsCol = confirmedMappings.tags; // Use the new tags mapping
 
         // --- Create Missing Accounts & Update Map ---
-        // Fetch accounts again right before processing to get the most current list
-        let currentAccounts = await getAccounts();
-        let currentAccountNameMap = currentAccounts.reduce((map, acc) => {
-            map[acc.name.toLowerCase()] = acc.id;
-            return map;
-        }, {} as { [key: string]: string });
-
-        // Pass the accountCurrencyCol to the creation function
-        const updatedMap = await createMissingAccountsAndUpdateMap(rawData, accountCol, accountCurrencyCol, currentAccountNameMap);
+        // Pass the current map state to the creation function
+        const updatedMap = await createMissingAccountsAndUpdateMap(rawData, accountCol, accountCurrencyCol, { ...accountNameIdMap }); // Pass a copy
         if (!updatedMap) {
              setError("Failed during account creation. Please check console and try again.");
              setIsLoading(false);
@@ -327,27 +322,30 @@ export default function ImportDataPage() {
               if (amountValue === undefined || amountValue === null) throw new Error(`Row ${index + 2}: Missing mapped 'Amount' data.`);
               if (!accountNameValue) throw new Error(`Row ${index + 2}: Missing mapped 'Account' data.`);
 
-              const amount: number = parseAmount(amountValue);
-              let newAmount = amount
-              if (isNaN(newAmount)) {
-                  // Check if it might be income/expense column scenario
-                  const incomeCol = findColumnName(Object.keys(record), 'Income') || findColumnName(Object.keys(record), 'Deposit');
-                  const expenseCol = findColumnName(Object.keys(record), 'Expense') || findColumnName(Object.keys(record), 'Withdrawal');
-                  const incomeVal = incomeCol ? parseAmount(record[incomeCol]) : 0;
-                  const expenseVal = expenseCol ? parseAmount(record[expenseCol]) : 0;
+              let amount: number = parseAmount(amountValue); // Use let here
+              // Handle Income/Expense columns if 'amount' couldn't be parsed initially
+              if (isNaN(amount) || amount === 0) {
+                  const incomeColHeader = findColumnName(Object.keys(record), 'Income') || findColumnName(Object.keys(record), 'Deposit');
+                  const expenseColHeader = findColumnName(Object.keys(record), 'Expense') || findColumnName(Object.keys(record), 'Withdrawal');
+
+                  const incomeVal = incomeColHeader ? parseAmount(record[incomeColHeader]) : 0;
+                  const expenseVal = expenseColHeader ? parseAmount(record[expenseColHeader]) : 0;
 
                   if (incomeVal > 0 && expenseVal === 0) {
                      console.warn(`Row ${index + 2}: Using 'Income' column value ${incomeVal} as amount.`);
-                     record[amountCol] = record[incomeCol]; // Use income value for the 'amount' mapping
-                     newAmount = incomeVal; // Assign to newAmount (let variable)
+                     amount = incomeVal; // Assign positive income value
                   } else if (expenseVal > 0 && incomeVal === 0) {
-                      console.warn(`Row ${index + 2}: Using 'Expense' column value ${-expenseVal} as newAmount.`);
-                      record[amountCol] = `-${record[expenseCol]}`; // Use negative expense value
-                      newAmount = -expenseVal;
-                  } else {
-                     throw new Error(`Row ${index + 2}: Could not parse 'newAmount' value "${amountValue}".`);
+                      console.warn(`Row ${index + 2}: Using 'Expense' column value ${-expenseVal} as amount.`);
+                      amount = -expenseVal; // Assign negative expense value
+                  } else if (amount === 0 && (incomeVal !== 0 || expenseVal !== 0)) {
+                     // Handle cases where 'Amount' is 0 but Income/Expense exists (less common)
+                     console.warn(`Row ${index + 2}: 'Amount' is 0, but Income/Expense found. Prioritizing Income/Expense: Income=${incomeVal}, Expense=${expenseVal}`);
+                     amount = incomeVal > 0 ? incomeVal : -expenseVal;
+                  } else if (isNaN(amount)) {
+                     throw new Error(`Row ${index + 2}: Could not parse 'amount' value "${amountValue}" and couldn't derive from Income/Expense columns.`);
                   }
               }
+
               const description = descriptionValue?.trim() || 'Imported Transaction';
               let category = categoryValue?.trim() || 'Uncategorized';
               const accountName = accountNameValue.trim();
@@ -356,15 +354,15 @@ export default function ImportDataPage() {
               // Parse tags string (split by comma, trim whitespace)
               const parsedTags = tagsValue?.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) || [];
 
-              // *** Use the updatedMap from the account creation step ***
-              const accountId = updatedMap[normalizedAccountName];
+              // *** Use the UPDATED accountNameIdMap state ***
+              const accountId = accountNameIdMap[normalizedAccountName];
 
               if (!accountId) {
-                 console.error(`Row ${index + 2}: Account "${accountName}" not found in final map AFTER creation attempt. Skipping.`);
+                 console.error(`Row ${index + 2}: Account "${accountName}" (normalized: "${normalizedAccountName}") not found in final map AFTER creation attempt. Map keys: [${Object.keys(accountNameIdMap).join(', ')}]. Skipping.`);
                   return {
                      accountId: 'skipped_account_not_found', // More specific error ID
                      date: parseDate(dateValue),
-                     amount: newAmount,
+                     amount: amount,
                      description: description,
                      category: category,
                      tags: parsedTags, // Include parsed tags even if skipped
@@ -377,7 +375,7 @@ export default function ImportDataPage() {
               return {
                 accountId: accountId,
                 date: parseDate(dateValue),
-                amount: newAmount,
+                amount: amount,
                 description: description,
                 category: category,
                 tags: parsedTags, // Include parsed tags
@@ -431,16 +429,17 @@ export default function ImportDataPage() {
        csvData: CsvRecord[],
        accountNameCol: string,
        accountCurrencyCol?: string, // Use the specific currency column mapping
-       currentMap: { [key: string]: string } // Pass current map
+       initialMap: { [key: string]: string } // Pass current map state copy
    ): Promise<{ [key: string]: string } | null> => {
        const uniqueAccountDetails = new Map<string, { name: string; currency: string; type?: string }>(); // Add type
-       const mapCopy = { ...currentMap }; // Work on a copy
+       const workingMap = { ...initialMap }; // Work on a copy of the map passed in
 
        csvData.forEach(record => {
            const name = record[accountNameCol]?.trim();
            if (name) {
                const normalizedName = name.toLowerCase();
-               if (!mapCopy[normalizedName] && !uniqueAccountDetails.has(normalizedName)) {
+               // Check against the working map if we need to create this account
+               if (!workingMap[normalizedName] && !uniqueAccountDetails.has(normalizedName)) {
                    // Determine currency: Use mapped column > Default
                    let currency = 'BRL'; // Default currency
                    if (accountCurrencyCol && record[accountCurrencyCol]) {
@@ -459,55 +458,63 @@ export default function ImportDataPage() {
                        type = 'savings';
                    } else if (name.toLowerCase().includes('invest')) {
                        type = 'investment';
+                   } else if (name.toLowerCase().includes('wallet') || name.toLowerCase().includes('crypto')) { // Basic crypto inference
+                        type = 'wallet'; // Or default to 'exchange' if preferred
+                        // Cannot determine crypto vs asset category solely from name easily
                    }
 
-                   uniqueAccountDetails.set(normalizedName, { name: name, currency: currency, type: type });
+                   uniqueAccountDetails.set(normalizedName, {
+                       name: name,
+                       currency: currency,
+                       // Infer category based on basic type inference, default asset
+                       type: type
+                   });
                }
            }
        });
 
        if (uniqueAccountDetails.size === 0) {
            console.log("No new accounts to create.");
-           return mapCopy;
+           return workingMap; // Return the map as is (might be the initial or already updated one)
        }
 
        console.log(`Found ${uniqueAccountDetails.size} potential new accounts to create...`);
        let accountsCreatedCount = 0;
 
-       const creationPromises = Array.from(uniqueAccountDetails.values()).map(async (accDetails) => {
+       // Use Promise.all to create accounts concurrently
+       await Promise.all(Array.from(uniqueAccountDetails.values()).map(async (accDetails) => {
            const normalizedName = accDetails.name.toLowerCase();
-           // Double-check map again just before creation
-           if (!mapCopy[normalizedName]) {
+            // Double-check the working map again just before creation
+           if (!workingMap[normalizedName]) {
                 try {
                     console.log(`Attempting to create account "${accDetails.name}" with currency ${accDetails.currency} and type ${accDetails.type}...`);
                     const newAccountData: NewAccountData = {
                         name: accDetails.name,
-                        type: accDetails.type || 'checking', // Use inferred type or default
-                        balance: 0, // Initial balance - Note: Firefly CSV might have opening balances elsewhere
-                        currency: accDetails.currency, // Use determined currency
-                        providerName: 'Imported', // Default provider
-                        // Infer category based on type (basic) - could be improved
-                        category: (accDetails.type === 'investment' || accDetails.type === 'savings') ? 'asset' : 'asset', // Default to 'asset' for now
+                        type: accDetails.type || 'checking',
+                        balance: 0, // Initial balance for imported accounts
+                        currency: accDetails.currency,
+                        providerName: 'Imported',
+                        // Basic category guess - might need refinement or user input
+                        category: (accDetails.type === 'wallet' || accDetails.type === 'exchange' || accDetails.type === 'staking') ? 'crypto' : 'asset',
                     };
                     const createdAccount = await addAccount(newAccountData);
-                    // Update the mapCopy *within* the loop as accounts are created
-                    mapCopy[normalizedName] = createdAccount.id;
+                    // Update the working map *immediately* after successful creation
+                    workingMap[normalizedName] = createdAccount.id;
                     accountsCreatedCount++;
                     console.log(`Successfully created account: ${createdAccount.name} (ID: ${createdAccount.id})`);
                 } catch (err: any) {
                     console.error(`Failed to create account "${accDetails.name}":`, err);
                     toast({ title: "Account Creation Error", description: `Could not create account "${accDetails.name}". Error: ${err.message}`, variant: "destructive", duration: 7000 });
+                    // Do not return null here, let Promise.all handle errors if needed, just log
                 }
-           }
-       });
-
-       await Promise.all(creationPromises);
+            }
+       }));
 
        if (accountsCreatedCount > 0) {
            toast({ title: "Accounts Created", description: `Created ${accountsCreatedCount} new accounts based on CSV data.` });
        }
 
-       return mapCopy; // Return the updated map
+       return workingMap; // Return the potentially updated map
    };
 
 
@@ -628,8 +635,8 @@ export default function ImportDataPage() {
       // Re-fetch categories and tags AFTER potentially adding new ones
       let currentCategories = await getCategories();
       let currentTags = await getTags(); // Get updated tags
-      // Re-fetch accounts map AFTER potential creation in processAndMapData
-       let finalAccountMap = accountNameIdMap; // Use the map updated during processAndMapData
+      // Use the final account map from the state (which was updated in processAndMapData)
+       let finalAccountMap = { ...accountNameIdMap };
 
       const totalToImport = recordsToImport.length;
       let importedCount = 0;
@@ -658,11 +665,13 @@ export default function ImportDataPage() {
                }).filter(Boolean) || [];
 
 
-               // Check account ID again before import using the potentially updated accountNameIdMap
+                // Check account ID again before import using the FINAL map state
                const accountNameFromRecord = item.originalRecord[columnMappings.account!]?.trim().toLowerCase();
                const accountIdForImport = finalAccountMap[accountNameFromRecord || '']; // Use the final map
 
                if (!accountIdForImport || accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_')) {
+                    // Log detailed info about why the account wasn't found
+                    console.error(`Import Error Row ${i + 2}: Invalid or missing account ID for account name "${accountNameFromRecord}". Map contents:`, finalAccountMap);
                     throw new Error(`Invalid or missing account ID for "${item.originalRecord[columnMappings.account!] || 'N/A'}"`);
                }
 
@@ -700,14 +709,12 @@ export default function ImportDataPage() {
          setError(`Import finished with ${errorCount} errors/skipped rows. Please review the table.`);
       } else {
          setError(null);
-         setRawData([]); // Clear raw data after successful import
-         setParsedData([]); // Clear parsed data
-         setFile(null); // Reset file input display
-         setColumnMappings({}); // Reset mappings
-         setImportProgress(0); // Reset progress
-          // Clear session transactions after successful import to avoid duplicates on next page load
-         // clearAllSessionTransactions(); // Might not be needed if state is cleared
-         // Refetch data for other pages if necessary (e.g., trigger via context or event)
+         // Optionally clear data only on fully successful import
+         // setRawData([]);
+         // setParsedData([]);
+         // setFile(null);
+         // setColumnMappings({});
+         // setImportProgress(0);
          window.dispatchEvent(new Event('storage')); // Trigger storage event listener
       }
     };
@@ -862,7 +869,8 @@ export default function ImportDataPage() {
                   {parsedData.map((item, index) => {
                       // Find account using the accountId determined during mapping (might still be an error/skipped ID here)
                       const account = accounts.find(acc => acc.id === item.accountId);
-                      const accountName = account?.name || item.originalRecord[columnMappings.account || ''] || item.accountId;
+                      // Display the name from the original record for clarity, even if the ID was resolved
+                      const accountName = item.originalRecord[columnMappings.account || ''] || item.accountId;
                       // Use account currency if available, otherwise guess from record or default
                        const accountCurrency = account?.currency || (columnMappings.accountCurrency && item.originalRecord[columnMappings.accountCurrency!]?.trim().toUpperCase()) || '?';
                        const currencySymbol = getCurrencySymbol(accountCurrency);
