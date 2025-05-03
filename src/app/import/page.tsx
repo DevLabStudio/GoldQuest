@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react'; // Import useEffect
@@ -39,31 +40,61 @@ const findColumnName = (headers: string[], targetName: string): string | undefin
 
 // Helper to parse amount string - more robust
 const parseAmount = (amountStr: string | undefined): number => {
-    if (typeof amountStr !== 'string') return 0;
-    // Remove currency symbols, thousands separators (common ones), handle comma decimal
-    const cleaned = amountStr.replace(/[^\d.,-]/g, '').replace('.', '').replace(',', '.');
+    if (typeof amountStr !== 'string' || amountStr.trim() === '') return 0;
+
+    // Remove currency symbols and whitespace
+    let cleaned = amountStr.replace(/[^\d.,-]/g, '').trim();
+
+    const lastCommaIndex = cleaned.lastIndexOf(',');
+    const lastPeriodIndex = cleaned.lastIndexOf('.');
+
+    // Determine if comma or period is the likely decimal separator
+    if (lastCommaIndex > lastPeriodIndex) {
+        // Comma is likely the decimal separator (e.g., 1.234,56)
+        // Remove periods (thousands separators), replace comma with period
+        cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    } else if (lastPeriodIndex > lastCommaIndex) {
+        // Period is likely the decimal separator (e.g., 1,234.56)
+        // Remove commas (thousands separators)
+        cleaned = cleaned.replace(/,/g, '');
+    } else {
+        // No separator or only one type exists, assume period is decimal if present
+        cleaned = cleaned.replace(/,/g, ''); // Remove commas just in case
+    }
+
+
     const parsed = parseFloat(cleaned);
     return isNaN(parsed) ? 0 : parsed; // Return 0 if parsing fails
 };
+
 
 // Helper to parse date string - more robust
 const parseDate = (dateStr: string | undefined): string => {
     if (!dateStr) return format(new Date(), 'yyyy-MM-dd'); // Default to today if missing
     try {
-        // Try common formats or direct parsing
-        const supportedFormats = [
-            'yyyy-MM-dd', 'dd/MM/yyyy', 'MM/dd/yyyy', 'yyyyMMdd' // Add more as needed
-            // Consider date-fns-tz if timezones are involved
-        ];
-
-        // Try direct parsing first (handles ISO well)
+        // Try direct parsing first (handles ISO YYYY-MM-DD well)
         let parsedDate = new Date(dateStr);
         if (!isNaN(parsedDate.getTime())) {
              return format(parsedDate, 'yyyy-MM-dd');
         }
 
-         // Add more robust parsing attempts here if needed using date-fns parse function
-         // For now, we rely on the Date constructor's flexibility
+        // Attempt common formats like DD/MM/YYYY or MM/DD/YYYY
+        const parts = dateStr.split(/[\/\-\.]/); // Split by common separators
+        if (parts.length === 3) {
+            const [p1, p2, p3] = parts.map(Number);
+            // Basic heuristics (can be improved with a library like date-fns/parse)
+            // Try DD/MM/YYYY (common in Brazil/Europe)
+             if (p1 > 0 && p1 <= 31 && p2 > 0 && p2 <= 12 && p3 >= 1900 && p3 < 2100) {
+                 parsedDate = new Date(p3, p2 - 1, p1); // Month is 0-indexed
+                 if (!isNaN(parsedDate.getTime())) return format(parsedDate, 'yyyy-MM-dd');
+            }
+             // Try MM/DD/YYYY (common in US)
+            if (p1 > 0 && p1 <= 12 && p2 > 0 && p2 <= 31 && p3 >= 1900 && p3 < 2100) {
+                 parsedDate = new Date(p3, p1 - 1, p2); // Month is 0-indexed
+                 if (!isNaN(parsedDate.getTime())) return format(parsedDate, 'yyyy-MM-dd');
+            }
+        }
+
 
     } catch (e) {
         console.error("Error parsing date:", dateStr, e);
@@ -164,7 +195,7 @@ export default function ImportDataPage() {
              setError("Could not read CSV headers. Ensure the first row contains column names.");
              setIsLoading(false);
              return;
-        }
+         }
 
         // Find actual header names case-insensitively
         const dateCol = findColumnName(headers, 'Date');
@@ -207,7 +238,7 @@ export default function ImportDataPage() {
                   throw new Error(`Row ${index + 2}: Missing required data ('Amount').`);
               }
 
-              const amount = parseAmount(amountValue);
+              const amount = parseAmount(amountValue); // Use updated robust parser
               const description = descriptionValue?.trim() || 'No Description'; // Use default if missing/empty
               let category = categoryValue?.trim() || 'Uncategorized'; // Default if missing/empty
 
@@ -248,7 +279,7 @@ export default function ImportDataPage() {
         // Filter out rows that had mapping errors if necessary, or show them as errors
         const errorMappedData = mapped.filter(item => item.importStatus === 'error');
         if (errorMappedData.length > 0) {
-             setError(`Encountered errors processing ${errorMappedData.length} row(s). Please review the table below. Common issues include missing 'Date' or 'Amount' values.`);
+             setError(`Encountered errors processing ${errorMappedData.length} row(s). Please review the table below. Common issues include missing 'Date' or 'Amount' values, or invalid formats.`);
         } else if (results.errors.length > 0) {
              // If there were PapaParse errors but mapping succeeded, show a general warning
              setError(`Warning: CSV parsing encountered ${results.errors.length} issues, but data was processed. Review carefully before importing.`);
