@@ -1,7 +1,7 @@
 
 'use client';
 
-import type { FC } from 'react';
+import { FC, useMemo } from 'react'; // Import useMemo
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -69,10 +69,12 @@ interface AddTransactionFormProps {
   accounts: Account[];
   categories: Category[];
   // Callback receives data in the format needed by addTransaction or a specific transfer function
-  onTransactionAdded: (data: Omit<Transaction, 'id'>) => Promise<void> | void;
+  onTransactionAdded: (data: Omit<Transaction, 'id'> | Transaction) => Promise<void> | void; // Accept Transaction for update
   onTransferAdded?: (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string }) => Promise<void> | void;
   isLoading: boolean;
   initialType?: typeof transactionTypes[number]; // Optional initial type
+  // Add initialData prop for editing
+  initialData?: Partial<AddTransactionFormData & { date: Date | string }>;
 }
 
 const AddTransactionForm: FC<AddTransactionFormProps> = ({
@@ -81,15 +83,20 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     onTransactionAdded,
     onTransferAdded,
     isLoading,
-    initialType = 'expense' // Default to expense
+    initialType = 'expense', // Default to expense
+    initialData // Receive initial data for editing
 }) => {
   const form = useForm<AddTransactionFormData>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
+    // Use initialData for default values if provided
+    defaultValues: initialData ? {
+        ...initialData,
+        // Ensure date is a Date object
+        date: initialData.date ? new Date(initialData.date) : new Date(),
+    } : {
       type: initialType,
       description: "",
       date: new Date(), // Default to today
-      // Default other fields based on initialType or leave undefined
       accountId: accounts.length > 0 ? accounts[0].id : undefined,
       fromAccountId: accounts.length > 0 ? accounts[0].id : undefined,
       toAccountId: accounts.length > 1 ? accounts[1].id : undefined,
@@ -135,34 +142,47 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
          // TODO: Implement transfer logic (add two transactions)
       } else {
         console.warn("onTransferAdded callback not provided.");
+         toast({
+             title: "Transfer Error",
+             description: "Transfer functionality is not fully implemented.",
+             variant: "destructive",
+         });
       }
     } else {
       // Handle expense or income
       const transactionAmount = values.type === 'expense' ? -Math.abs(values.amount) : Math.abs(values.amount);
-      const transactionData: Omit<Transaction, 'id'> = {
+      // If editing, use the existing ID, otherwise it's handled by onTransactionAdded
+      const transactionData: Omit<Transaction, 'id'> | Transaction = {
         accountId: values.accountId,
         amount: transactionAmount,
         date: format(values.date, 'yyyy-MM-dd'), // Format date to string
         description: values.description || values.category, // Use category if description empty
         category: values.category,
       };
+      // The parent component (RevenuePage, ExpensesPage, etc.) will handle
+      // whether this is an add or update based on the context (add vs edit dialog)
       await onTransactionAdded(transactionData);
-       console.log("Expense/Income data:", transactionData);
+       console.log("Expense/Income data submitted:", transactionData);
     }
-    form.reset(); // Reset form after successful submission
+     // Don't reset if editing? Parent dialog will close. Resetting might clear prematurely.
+     // form.reset();
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-         {/* Transaction Type Selector */}
+         {/* Transaction Type Selector (Disabled if editing) */}
          <FormField
           control={form.control}
           name="type"
           render={({ field }) => (
             <FormItem>
               <FormLabel>Transaction Type</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
+              <Select
+                  onValueChange={field.onChange}
+                  defaultValue={field.value}
+                  disabled={!!initialData} // Disable if editing
+              >
                 <FormControl>
                   <SelectTrigger>
                     <SelectValue placeholder="Select transaction type" />
@@ -190,7 +210,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>From Account</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!!initialData}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select source account" />
@@ -214,7 +234,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>To Account</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!!initialData}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select destination account" />
@@ -242,7 +262,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     {/* Label indicates currency of the 'From' account */}
                     <FormLabel>Amount ({getCurrencySymbol(fromAccountCurrency)})</FormLabel>
                     <FormControl>
-                      <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                      <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''}/>
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -258,7 +278,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Account</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!!initialData}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select account" />
@@ -284,7 +304,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     <FormItem>
                         <FormLabel>Amount ({getCurrencySymbol(selectedAccountCurrency)})</FormLabel>
                         <FormControl>
-                        <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                        {/* Handle potential undefined value on initial load/edit */}
+                        <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
@@ -375,6 +396,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                   placeholder="Add a note or description..."
                   className="resize-none" // Optional: prevent resizing
                   {...field}
+                  value={field.value || ''} // Handle potential undefined value
                 />
               </FormControl>
               <FormMessage />
@@ -384,11 +406,15 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
 
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? "Adding..." : `Add ${transactionType.charAt(0).toUpperCase() + transactionType.slice(1)}`}
+          {isLoading ? (initialData ? "Saving..." : "Adding...") : (initialData ? "Save Changes" : `Add ${transactionType.charAt(0).toUpperCase() + transactionType.slice(1)}`)}
         </Button>
       </form>
     </Form>
   );
 };
 
+// Add toast import if not already present globally
+import { toast } from "@/hooks/use-toast";
+
 export default AddTransactionForm;
+
