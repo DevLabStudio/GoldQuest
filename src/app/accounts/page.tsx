@@ -146,12 +146,12 @@ export default function AccountsPage() {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Asset accounts</h1>
+        <h1 className="text-3xl font-bold">Asset accounts</h1> {/* Corrected capitalization */}
         {/* Add Account Dialog */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
              {/* Updated Button Style */}
-            <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+            <Button variant="default" className="bg-green-600 hover:bg-green-700 text-white"> {/* This might need theme adjustment */}
               <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
             </Button>
           </DialogTrigger>
@@ -186,10 +186,10 @@ export default function AccountsPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Name</TableHead>
-                  <TableHead>Role</TableHead>
+                  {/* Removed Role */}
                   <TableHead>Account number</TableHead>
                   <TableHead>Current balance</TableHead>
-                  <TableHead>Is active?</TableHead>
+                  {/* Removed Is active? */}
                   <TableHead>Last activity</TableHead>
                   <TableHead>Balance difference</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -201,10 +201,10 @@ export default function AccountsPage() {
                   [...Array(3)].map((_, i) => (
                     <TableRow key={`skeleton-${i}`}>
                       <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                      {/* Removed Role Skeleton */}
                       <TableCell><Skeleton className="h-5 w-32" /></TableCell>
                       <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-                      <TableCell><Skeleton className="h-5 w-5 rounded-full" /></TableCell>
+                      {/* Removed Is active? Skeleton */}
                       <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                       <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                       <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
@@ -214,7 +214,7 @@ export default function AccountsPage() {
                   accounts.map((account) => (
                     <TableRow key={account.id} className="hover:bg-muted/50">
                       <TableCell className="font-medium">{account.name}</TableCell>
-                      <TableCell className="text-muted-foreground capitalize">{account.type}</TableCell>
+                      {/* Removed Role Cell */}
                       <TableCell className="text-muted-foreground">{account.bankName || 'N/A'}</TableCell>
                       <TableCell>
                         <div className="flex flex-col">
@@ -228,17 +228,14 @@ export default function AccountsPage() {
                           )}
                         </div>
                       </TableCell>
-                       <TableCell className="text-center">
-                           {/* Placeholder for 'Is active?' - Assuming all are active */}
-                           <Check className="h-4 w-4 text-green-500" />
-                       </TableCell>
+                       {/* Removed Is active? Cell */}
                        <TableCell className="text-muted-foreground">
                            {/* Placeholder for 'Last activity' */}
-                           {format(new Date(), 'PP')} {/* Example: Using current date */}
+                           {format(new Date(account.lastActivity || Date.now()), 'PP')} {/* Format existing date or fallback */}
                        </TableCell>
                        <TableCell className="text-muted-foreground">
                            {/* Placeholder for 'Balance difference' */}
-                           {formatCurrency(0, account.currency)} {/* Example: Zero difference */}
+                           {formatCurrency(account.balanceDifference ?? 0, account.currency)} {/* Format existing diff or fallback */}
                        </TableCell>
                       <TableCell className="text-right">
                         <DropdownMenu>
@@ -268,7 +265,8 @@ export default function AccountsPage() {
                 ) : (
                   // Empty state row
                   <TableRow>
-                    <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
+                    {/* Adjusted colSpan */}
+                    <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
                       No accounts added yet.
                        <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                          <DialogTrigger asChild>
@@ -292,12 +290,13 @@ export default function AccountsPage() {
               </TableBody>
             </Table>
           </CardContent>
-           {/* Add button at the bottom if needed, matching the image */}
+           {/* Add button at the bottom if needed */}
            {!isLoading && accounts.length > 0 && (
               <CardContent className="pt-4 border-t">
                   <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                       <DialogTrigger asChild>
-                          <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700 text-white">
+                           {/* Updated Button Style */}
+                          <Button variant="default" size="sm" className="bg-green-600 hover:bg-green-700 text-white"> {/* This might need theme adjustment */}
                               <PlusCircle className="mr-2 h-4 w-4" /> Create a new asset account
                           </Button>
                       </DialogTrigger>
@@ -316,7 +315,7 @@ export default function AccountsPage() {
         </Card>
 
 
-       {/* Edit Account Dialog (remains the same) */}
+       {/* Edit Account Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
           if (!open) setSelectedAccount(null);
@@ -340,3 +339,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+
