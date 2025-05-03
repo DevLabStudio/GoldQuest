@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, updateTransaction, deleteTransaction, type Transaction } from "@/services/transactions.tsx"; // Use updated service
 import { getCategories, getCategoryStyle, Category } from '@/services/categories.tsx'; // Import from categories service
-import { getTags, type Tag, getTagStyle } from '@/services/tags.tsx'; // Import tag service
+import { getTags, type Tag, getTagStyle } from '@/services/tags.tsx'; // Import tag service with .tsx
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, convertCurrency } from '@/lib/currency'; // Use formatters and converters

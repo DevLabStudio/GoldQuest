@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { format } from 'date-fns';
 import type { Account } from '@/services/account-sync';
 import type { Category } from '@/services/categories.tsx';
-import type { Tag } from '@/services/tags.tsx'; // Import Tag type
+import type { Tag } from '@/services/tags.tsx'; // Import Tag type with .tsx
 import type { Transaction } from '@/services/transactions.tsx';
 import { getCurrencySymbol } from '@/lib/currency';
 import { Textarea } from '@/components/ui/textarea'; // Import Textarea
