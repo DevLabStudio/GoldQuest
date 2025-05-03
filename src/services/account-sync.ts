@@ -1,4 +1,3 @@
-
 import { format } from 'date-fns'; // Import date-fns for formatting
 
 /**
@@ -98,23 +97,7 @@ function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Account>
 
 function getDefaultAccounts(): Account[] {
   // Return an empty array or minimal default accounts
-  return [
-     // Example - can be removed
-    /*
-     {
-        id: 'manual-123',
-        name: 'Nubank',
-        type: 'Default asset account', // Role
-        balance: 2025.46,
-        currency: 'BRL',
-        providerName: '16981076797', // Account number/provider
-        isActive: true,
-        lastActivity: new Date(2025, 3, 30).toISOString(), // April 30th, 2025
-        balanceDifference: 2025.46,
-        category: 'asset',
-      },
-      */
-  ];
+  return [];
 }
 
 
@@ -192,3 +175,6 @@ export async function deleteAccount(accountId: string): Promise<void> {
     console.log("Account deleted (simulated):", accountId);
     return;
 }
+
+// Export updateAccount explicitly if needed elsewhere, though it's already exported.
+// export { updateAccount };

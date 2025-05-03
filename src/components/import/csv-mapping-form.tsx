@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -15,8 +14,9 @@ const APP_FIELDS = [
     { value: 'description', label: 'Description', required: false },
     { value: 'account', label: 'Account Name *', required: true },
     { value: 'category', label: 'Category', required: false },
-    { value: 'accountCurrency', label: 'Account Currency', required: false }, // More specific than just 'currency'
-    { value: 'tags', label: 'Tags (comma-separated)', required: false }, // Added Tags
+    { value: 'accountCurrency', label: 'Account Currency', required: false },
+    { value: 'tags', label: 'Tags (comma-separated)', required: false },
+    { value: 'initialBalance', label: 'Initial Balance', required: false }, // Added Initial Balance
 ] as const;
 
 type AppFieldType = typeof APP_FIELDS[number]['value'];
@@ -100,6 +100,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
         </div>
       ))}
        <p className="text-sm text-muted-foreground pt-2">Fields marked with * are essential for basic import.</p>
+       <p className="text-sm text-muted-foreground">Map 'Initial Balance' if available in your CSV to set starting balances.</p>
        <p className="text-sm text-muted-foreground">Map 'Account Currency' if your CSV has it, otherwise we'll try to guess or use a default.</p>
        <p className="text-sm text-muted-foreground">Map 'Tags' to a column containing comma-separated tags.</p>
 
@@ -117,3 +118,4 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
 };
 
 export default CsvMappingForm;
+
