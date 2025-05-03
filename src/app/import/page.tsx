@@ -137,17 +137,21 @@ export default function ImportDataPage() {
       // `delimiter` can be set if not comma (e.g., ";")
       // `transformHeader` can rename columns if needed
       complete: (results) => {
-        console.log("Parsed CSV Result:", results);
-        // Log all errors reported by PapaParse for debugging
-        if (results.errors.length > 0) {
-            console.error("CSV Parsing Errors:", results.errors);
-        }
+        console.log("Parsed CSV Result Meta:", results.meta);
+        console.log("Parsed CSV Result Errors:", results.errors);
+        console.log("Parsed CSV Result Data (first 5 rows):", results.data.slice(0, 5));
+
 
         // Check for errors reported by PapaParse (e.g., structural issues)
         const structuralError = results.errors.find(e => e.row !== undefined);
         if (structuralError) {
-            // Show a specific error message about file structure
-            setError(`Error parsing CSV on row ${structuralError.row ?? 'unknown'}: ${structuralError.message}. Please check the file's structure, delimiter (ensure it's comma-separated), and quoting.`);
+             // Improved error message guiding the user
+             let detailedMessage = `Error parsing CSV on row ${structuralError.row ?? 'unknown'}: ${structuralError.message}.`;
+             if (structuralError.code === 'TooFewFields' || structuralError.code === 'TooManyFields') {
+                 detailedMessage += ` Expected ${structuralError.expected} fields based on header, but found ${structuralError.actual}.`;
+             }
+             detailedMessage += " Please verify the file's structure, ensure it's correctly comma-separated (or specify the delimiter if different, like semicolon ';'), check quoting around fields, and confirm the header row matches the data rows.";
+            setError(detailedMessage);
             setIsLoading(false);
             return;
         }
@@ -170,13 +174,13 @@ export default function ImportDataPage() {
         const essentialColumns: (keyof FireflyIIIRecord)[] = ['Date', 'Amount', 'Description']; // Category is often optional/derived
         const headers = results.meta.fields;
         if (!headers) {
-             setError("Could not read CSV headers.");
+             setError("Could not read CSV headers. Ensure the first row contains column names.");
              setIsLoading(false);
              return;
         }
         const missingEssentialColumns = essentialColumns.filter(col => !headers.includes(col));
         if (missingEssentialColumns.length > 0) {
-             setError(`Missing essential columns in CSV header: ${missingEssentialColumns.join(', ')}. Required: Date, Amount, Description.`);
+             setError(`Missing essential columns in CSV header: ${missingEssentialColumns.join(', ')}. Required: Date, Amount, Description. Please check the first line of your file.`);
              setIsLoading(false);
              return;
         }
@@ -235,10 +239,11 @@ export default function ImportDataPage() {
         setParsedData(mapped); // Show all rows, including errors
         setIsLoading(false);
       },
-      error: (err) => {
-        // Catch file reading errors
-        console.error("PapaParse File Reading Error:", err);
-        setError(`Failed to read or parse CSV file: ${err.message}`);
+      error: (err, file) => {
+        // Catch file reading errors or other fundamental PapaParse errors
+        console.error("PapaParse File Reading/Parsing Error:", err, file);
+         // Provide a more informative error message
+         setError(`Failed to read or parse CSV file: ${err.message}. Ensure the file is accessible and has a valid structure.`);
         setIsLoading(false);
       }
     });
