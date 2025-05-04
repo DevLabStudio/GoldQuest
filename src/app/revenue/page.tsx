@@ -5,9 +5,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, updateTransaction, deleteTransaction, type Transaction } from "@/services/transactions.tsx"; // Import transaction services
-import { getCategories, getCategoryStyle, Category } from '@/services/categories.tsx'; // Import category services
-import { getTags, type Tag, getTagStyle } from '@/services/tags.tsx'; // Import tag service with .tsx
+import { getTransactions, updateTransaction, deleteTransaction, type Transaction } from "@/services/transactions"; // Removed .tsx
+import { getCategories, getCategoryStyle, Category } from '@/services/categories'; // Removed .tsx
+import { getTags, type Tag, getTagStyle } from '@/services/tags'; // Removed .tsx
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
@@ -20,6 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Edit, Trash2, MoreHorizontal } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form'; // For editing
 import { useToast } from '@/hooks/use-toast';
+import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form'; // Import form data type
 
 // Define the initial limit for transactions
 const INITIAL_TRANSACTION_LIMIT = 50;
@@ -141,15 +142,30 @@ export default function RevenuePage() {
         setIsEditDialogOpen(true);
     };
 
-    const handleUpdateTransaction = async (updatedData: Omit<Transaction, 'id'> | Transaction) => {
+    // Changed parameter type to match form data for type safety
+    const handleUpdateTransaction = async (formData: AddTransactionFormData) => {
         if (!selectedTransaction) return; // Should have a selected transaction
 
+        // Ensure formData corresponds to an expense or income, not transfer
+        if (formData.type === 'transfer') {
+            console.error("Update handler received transfer data. This should not happen.");
+            toast({ title: "Update Error", description: "Cannot update transaction type to transfer.", variant: "destructive" });
+            return;
+        }
+
+        // Determine amount based on type from form data
+        const transactionAmount = formData.type === 'expense' ? -Math.abs(formData.amount) : Math.abs(formData.amount);
+
         const transactionToUpdate: Transaction = {
-            ...selectedTransaction,
-            ...updatedData,
-            date: updatedData.date instanceof Date ? format(updatedData.date, 'yyyy-MM-dd') : updatedData.date,
-            tags: updatedData.tags || [], // Ensure tags is an array
+            ...selectedTransaction, // Keep original ID, accountId etc.
+            // Apply changes from form data
+            amount: transactionAmount,
+            date: format(formData.date, 'yyyy-MM-dd'), // Format the date from form
+            description: formData.description || selectedTransaction.description, // Use new or old description
+            category: formData.category || selectedTransaction.category, // Use new or old category
+            tags: formData.tags || [], // Use new tags
         };
+
 
         setIsLoading(true);
         try {
@@ -362,13 +378,14 @@ export default function RevenuePage() {
                         accounts={accounts}
                         categories={categories}
                         tags={tags} // Pass tags
-                        onTransactionAdded={handleUpdateTransaction}
+                        onTransactionAdded={handleUpdateTransaction} // Use the specialized update handler
                         isLoading={isLoading}
                         initialData={{
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
                             accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
-                            date: selectedTransaction.date,
+                            // Parse the date string into a Date object
+                            date: selectedTransaction.date ? new Date(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,
                             tags: selectedTransaction.tags || []
@@ -388,3 +405,4 @@ export default function RevenuePage() {
     </div>
   );
 }
+
