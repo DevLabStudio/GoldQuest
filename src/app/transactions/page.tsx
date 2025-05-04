@@ -22,6 +22,8 @@ import { Edit, Trash2, MoreHorizontal } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form'; // For editing
 import { useToast } from '@/hooks/use-toast';
 
+// Define the initial limit for transactions
+const INITIAL_TRANSACTION_LIMIT = 50;
 
 // Helper function to format date (consistent with previous implementation)
 const formatDate = (dateString: string): string => {
@@ -79,8 +81,8 @@ export default function TransactionsOverviewPage() {
         const fetchedTags = await getTags();
         setTags(fetchedTags);
 
-        // 5. Fetch Transactions for *all* accounts
-        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+        // 5. Fetch Transactions for *all* accounts with a limit
+        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
         const transactionsByAccount = await Promise.all(transactionPromises);
         const combinedTransactions = transactionsByAccount.flat();
 
@@ -128,6 +130,7 @@ export default function TransactionsOverviewPage() {
   }, []); // Empty dependency array ensures this runs once on mount and handles storage changes
 
   // Calculate spending data for the chart (convert to preferred currency)
+  // Spending chart might need all transactions, consider fetching them separately or accepting the limit
   const spendingData = useMemo(() => {
       if (isLoading || !accounts.length || !allTransactions.length) return [];
 
@@ -240,7 +243,7 @@ export default function TransactionsOverviewPage() {
                <CardHeader>
                    {/* Update Title to reflect preferred currency */}
                    <CardTitle>Spending by Category ({preferredCurrency})</CardTitle>
-                   <CardDescription>Breakdown of expenses across all accounts.</CardDescription>
+                   <CardDescription>Breakdown of expenses across all accounts (based on recent transactions).</CardDescription>
                </CardHeader>
                <CardContent className="h-80">
                  {isLoading ? (
@@ -260,10 +263,10 @@ export default function TransactionsOverviewPage() {
       {/* All Transactions Table */}
       <Card>
         <CardHeader>
-          <CardTitle>All Transactions</CardTitle>
+          <CardTitle>Recent Transactions</CardTitle>
            <CardDescription>
                 {/* Update description to reflect display currency */}
-                Showing recent transactions across all accounts. Amounts displayed in {preferredCurrency}.
+                Showing the latest {INITIAL_TRANSACTION_LIMIT} transactions across all accounts. Amounts displayed in {preferredCurrency}.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -382,11 +385,11 @@ export default function TransactionsOverviewPage() {
             </div>
           )}
         </CardContent>
-        {/* Optional: Add button in footer if transactions exist */}
+        {/* Optional: Add button in footer to load more transactions */}
          {!isLoading && allTransactions.length > 0 && (
              <CardContent className="pt-4 border-t">
-                  {/* TODO: Add button to open 'Add Transaction' dialog */}
-                  {/* Example: <AddTransactionButton accounts={accounts} categories={categories} tags={tags} onTransactionAdded={handleAddTransaction} isLoading={isLoading}/> */}
+                  {/* Placeholder for Load More button */}
+                  {/* <Button variant="outline" disabled>Load More (Coming Soon)</Button> */}
              </CardContent>
          )}
       </Card>

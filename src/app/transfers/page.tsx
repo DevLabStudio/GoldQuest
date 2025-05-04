@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, type Transaction } from "@/services/transactions.tsx";
+import { getTransactions, deleteTransaction, type Transaction } from "@/services/transactions.tsx"; // Import deleteTransaction
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
@@ -15,6 +15,9 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+
+// Define the initial limit for transactions
+const INITIAL_TRANSACTION_LIMIT = 50;
 
 // Helper function to format date
 const formatDate = (dateString: string): string => {
@@ -62,7 +65,8 @@ export default function TransfersPage() {
         const fetchedAccounts = await getAccounts();
         if (isMounted) setAccounts(fetchedAccounts);
 
-        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+        // Fetch transactions with limit
+        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 })); // Fetch more to increase chance of finding pairs
         const transactionsByAccount = await Promise.all(transactionPromises);
         const combinedTransactions = transactionsByAccount.flat();
 
@@ -106,19 +110,22 @@ export default function TransfersPage() {
     const transfers: { from: Transaction, to: Transaction }[] = [];
     const processedIds = new Set<string>();
 
-    // Iterate through potential outgoing transfers (negative amount, 'Transfer' category or similar description)
-    allTransactions.forEach(txOut => {
-      if (txOut.amount < 0 && !processedIds.has(txOut.id) && (txOut.category?.toLowerCase() === 'transfer' || txOut.description?.toLowerCase().includes('transfer'))) {
-        // Find a matching incoming transaction
-        const txIn = allTransactions.find(tx =>
+    // Filter for potential transfer transactions first
+    const potentialTransfers = allTransactions.filter(
+        tx => tx.category?.toLowerCase() === 'transfer' || tx.description?.toLowerCase().includes('transfer')
+    );
+
+    // Iterate through potential outgoing transfers (negative amount)
+    potentialTransfers.forEach(txOut => {
+      if (txOut.amount < 0 && !processedIds.has(txOut.id)) {
+        // Find a matching incoming transaction within the filtered list
+        const txIn = potentialTransfers.find(tx =>
           tx.amount === -txOut.amount && // Opposite amount
           tx.accountId !== txOut.accountId && // Different account
           !processedIds.has(tx.id) &&
-          (tx.category?.toLowerCase() === 'transfer' || tx.description?.toLowerCase().includes('transfer')) &&
-          // Very basic matching: check if descriptions mention each other's account name (could be improved)
-          (txOut.description?.includes(accounts.find(a => a.id === tx.accountId)?.name || '###') ||
-           tx.description?.includes(accounts.find(a => a.id === txOut.accountId)?.name || '###')) &&
-           Math.abs(new Date(tx.date).getTime() - new Date(txOut.date).getTime()) < 1000 * 60 * 5 // Within 5 minutes (heuristic)
+          // Match date and description closely (adjust time tolerance as needed)
+          tx.date === txOut.date && // Exact date match (or close time window)
+          tx.description === txOut.description // Require matching description for this basic approach
         );
 
         if (txIn) {
@@ -159,8 +166,8 @@ export default function TransfersPage() {
                 deleteTransaction(selectedTransactionPair[0].id, selectedTransactionPair[0].accountId),
                 deleteTransaction(selectedTransactionPair[1].id, selectedTransactionPair[1].accountId)
             ]);
-             // Refetch data after deletion (consider a less heavy refetch if possible)
-             await fetchData();
+             // Refetch data after deletion
+             await fetchData(); // Call fetchData to refresh the list
              toast({
                 title: "Transfer Deleted",
                 description: `Transfer record removed successfully.`,
@@ -191,9 +198,9 @@ export default function TransfersPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Transfer History</CardTitle>
+          <CardTitle>Recent Transfer History</CardTitle>
            <CardDescription>
-                Showing recent transfers between your accounts. Amounts displayed in {preferredCurrency}.
+                Showing recent transfers between your accounts (limited results). Amounts displayed in {preferredCurrency}.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -265,7 +272,7 @@ export default function TransfersPage() {
                                                 <AlertDialogHeader>
                                                   <AlertDialogTitle>Are you sure?</AlertDialogTitle>
                                                   <AlertDialogDescription>
-                                                    This action cannot be undone. This will permanently delete both transactions related to this transfer.
+                                                    This action cannot be undone. This will permanently delete both transactions related to this transfer: "{pair.from.description}".
                                                   </AlertDialogDescription>
                                                 </AlertDialogHeader>
                                                 <AlertDialogFooter>
@@ -293,6 +300,13 @@ export default function TransfersPage() {
             </div>
           )}
         </CardContent>
+        {/* Optional: Add button in footer to load more */}
+         {!isLoading && transferTransactionPairs.length > 0 && (
+             <CardContent className="pt-4 border-t">
+                 {/* Placeholder for Load More button */}
+                 {/* <Button variant="outline" disabled>Load More (Coming Soon)</Button> */}
+             </CardContent>
+         )}
       </Card>
       {/* Edit Dialog (Potentially more complex for transfers) - Placeholder */}
       {/* <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}> ... </Dialog> */}

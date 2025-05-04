@@ -21,6 +21,9 @@ import { Edit, Trash2, MoreHorizontal } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form'; // For editing
 import { useToast } from '@/hooks/use-toast';
 
+// Define the initial limit for transactions
+const INITIAL_TRANSACTION_LIMIT = 50;
+
 // Helper function to format date (consistent with revenue page)
 const formatDate = (dateString: string): string => {
     try {
@@ -74,8 +77,8 @@ export default function ExpensesPage() {
       const fetchedTags = await getTags();
       setTags(fetchedTags);
 
-      // 5. Fetch Transactions for *all* accounts
-      const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+      // 5. Fetch Transactions for *all* accounts with limit
+      const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
       const transactionsByAccount = await Promise.all(transactionPromises);
       const combinedTransactions = transactionsByAccount.flat();
 
@@ -215,9 +218,9 @@ export default function ExpensesPage() {
       {/* Expenses Transactions Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Expense Transactions</CardTitle>
+          <CardTitle>Recent Expense Transactions</CardTitle>
            <CardDescription>
-                Showing recent expense transactions across all accounts. Amounts displayed in {preferredCurrency}.
+                Showing the latest {INITIAL_TRANSACTION_LIMIT} expense transactions across all accounts. Amounts displayed in {preferredCurrency}.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -337,11 +340,11 @@ export default function ExpensesPage() {
             </div>
           )}
         </CardContent>
-         {/* TODO: Optional: Add button in footer if transactions exist */}
+         {/* Optional: Add button in footer to load more */}
          {!isLoading && expenseTransactions.length > 0 && (
              <CardContent className="pt-4 border-t">
-                  {/* TODO: Add button to open 'Add Transaction' dialog */}
-                  {/* Example: <AddTransactionButton accounts={accounts} categories={categories} tags={tags} onTransactionAdded={handleAddTransaction} isLoading={isLoading} /> */}
+                  {/* Placeholder for Load More button */}
+                  {/* <Button variant="outline" disabled>Load More (Coming Soon)</Button> */}
              </CardContent>
          )}
       </Card>

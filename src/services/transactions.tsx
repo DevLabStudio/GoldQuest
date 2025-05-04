@@ -48,19 +48,31 @@ const sessionTransactions: { [accountId: string]: Transaction[] } = {};
 
 /**
  * Asynchronously retrieves a list of financial transactions for a given account
- * from the in-memory store.
+ * from the in-memory store, optionally limiting the results.
  *
  * @param accountId The ID of the account for which to retrieve transactions.
+ * @param options Optional parameters, including a limit for the number of transactions.
+ * @param options.limit Optional maximum number of transactions to return.
  * @returns A promise that resolves to an array of Transaction objects.
  */
-export async function getTransactions(accountId: string): Promise<Transaction[]> {
-  console.log(`Simulating fetching transactions for account: ${accountId} from memory`);
+export async function getTransactions(
+    accountId: string,
+    options?: { limit?: number }
+): Promise<Transaction[]> {
+  console.log(`Simulating fetching transactions for account: ${accountId} from memory ${options?.limit ? `(limit: ${options.limit})` : ''}`);
   await new Promise(resolve => setTimeout(resolve, 50 + Math.random() * 100)); // Simulate shorter delay
 
   const transactionsForAccount = sessionTransactions[accountId] || [];
 
-  // Return a copy sorted by date descending (newest first)
-  return [...transactionsForAccount].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  // Return a sorted copy
+  const sortedTransactions = [...transactionsForAccount].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+  // Apply limit if provided
+   if (options?.limit && options.limit > 0) {
+       return sortedTransactions.slice(0, options.limit);
+   }
+
+   return sortedTransactions; // Return all if no limit
 }
 
 /**
@@ -78,7 +90,6 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
 
     let accountToUpdate: Account | undefined;
     let originalBalance: number | undefined;
-    let balanceNeedsUpdate = true; // Assume update is needed initially
 
     // --- Fetch Account and Check/Update Balance ---
     try {
@@ -87,22 +98,6 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         if (accountIndex !== -1) {
             accountToUpdate = accounts[accountIndex];
             originalBalance = accountToUpdate.balance;
-            const expectedFinalBalance = originalBalance + transactionAmount;
-
-            // Check if balance might already be updated (simple heuristic for import scenario)
-            // This is not foolproof. A better approach might involve tracking imported transactions
-            // or passing a flag to skip balance update during import.
-            // For now, we check if the *current* balance seems to *already include* the transaction amount.
-            // This assumes opening balances are handled separately and don't interfere.
-            // Example: Balance is 1000. Transaction is -50. If balance is already 950, maybe skip update.
-            // Example: Balance is 1000. Transaction is +200. If balance is already 1200, maybe skip update.
-            // This check is basic and might skip legitimate updates if amounts are coincidental.
-            // A more robust check might be needed if issues persist.
-
-            // Note: Removed the check as it's unreliable and can cause issues.
-            // We will rely on the import process *not* calling addTransaction if it already set the balance.
-            // If addTransaction *is* called after import's balance setting, it will adjust again,
-            // which should be correct if the import process set the *initial* balance only.
 
             // Perform the update
             const updatedBalance = originalBalance + transactionAmount;
@@ -136,7 +131,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         sessionTransactions[newTransaction.accountId] = [];
     }
 
-    sessionTransactions[newTransaction.accountId].push(newTransaction);
+    sessionTransactions[newTransaction.accountId].unshift(newTransaction); // Add to beginning for default sort
     console.log("Transaction added to session memory:", newTransaction);
     // --------------------------------------
 
