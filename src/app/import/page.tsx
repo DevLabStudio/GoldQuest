@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -12,10 +11,10 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge"; // Import Badge for tags
-import { addTransaction, type Transaction, clearAllSessionTransactions, updateTransaction as updateTxService } from '@/services/transactions.tsx'; // Added clearAllSessionTransactions and updateTxService
+import { addTransaction, type Transaction, clearAllSessionTransactions, updateTransaction as updateTxService } from '@/services/transactions'; // Added clearAllSessionTransactions and updateTxService
 import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync';
-import { getCategories, addCategory, type Category } from '@/services/categories.tsx';
-import { getTags, addTag, type Tag, getTagStyle } from '@/services/tags.tsx'; // Import tag services with .tsx
+import { getCategories, addCategory, type Category } from '@/services/categories';
+import { getTags, addTag, type Tag, getTagStyle } from '@/services/tags'; // Import tag services
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; // Import AlertDialog
@@ -87,7 +86,6 @@ const parseAmount = (amountStr: string | undefined): number => {
          cleaned = cleaned.replace(/,/g, '');
     } else if (numCommas > 1) {
          // Multiple commas, no periods or period is before last comma -> assume EU thousand separators
-          cleaned = cleaned.replace(/\./g, '').replace(/,/g, ''); // Treat all commas as thousand separators initially, decimal logic handled below? No, this is wrong.
           // Let's retry: if multiple commas and last char is comma, assume it's decimal after removing others
           const lastChar = cleaned[cleaned.length - 1];
           const secondLastChar = cleaned[cleaned.length - 2];
@@ -175,7 +173,7 @@ export default function ImportDataPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]); // Use state for accounts
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]); // Add state for tags
   const [accountPreviewData, setAccountPreviewData] = useState<AccountPreview[]>([]); // State for account preview
@@ -198,7 +196,7 @@ export default function ImportDataPage() {
                 getTags()
             ]);
 
-            setAccounts(fetchedAccounts);
+            setAccounts(fetchedAccounts); // Update state
             setCategories(fetchedCategories);
             setTags(fetchedTags);
             console.log("Initial data fetched for import:", { numAccounts: fetchedAccounts.length, numCategories: fetchedCategories.length, numTags: fetchedTags.length });
@@ -414,10 +412,11 @@ export default function ImportDataPage() {
 
 
         // --- Preview Account Changes (No creation yet) ---
+        // Use the accounts state here
          const { preview } = await previewAccountChanges(
              rawData,
              confirmedMappings, // Pass all mappings
-             accounts // Pass current accounts state
+             accounts // Pass current accounts state from component state
          );
          setAccountPreviewData(preview);
          console.log("Account preview generated:", preview);
@@ -425,10 +424,11 @@ export default function ImportDataPage() {
 
         // --- Generate a TEMPORARY Account Map for Transaction Linking (No creation yet) ---
         // This step gets the IDs of existing accounts and placeholders for new ones
+        // Use the accounts state here
         const { map: tempAccountMap } = await createOrUpdateAccountsAndGetMap(
              rawData,
              confirmedMappings, // Pass all mappings
-             accounts, // Pass current accounts state
+             accounts, // Pass current accounts state from component state
              true // Indicate it's a preview/map generation only
         );
         console.log("Generated temporary account map for transaction linking:", tempAccountMap);
@@ -838,14 +838,14 @@ export default function ImportDataPage() {
 
              let potentialAccountNames: string[] = [];
              // Determine relevant account columns based on transaction type (deposit, withdrawal, transfer)
-             if (typeValue === 'transfer') {
+             if (typeValue === 'transfer' || (sourceAccountCol && record[sourceAccountCol] && destAccountCol && record[destAccountCol])) {
                  // For transfers, use source and destination columns
                  potentialAccountNames = [
                      sourceAccountCol ? record[sourceAccountCol]?.trim() : undefined,
                      destAccountCol ? record[destAccountCol]?.trim() : undefined
                  ].filter(Boolean) as string[];
              } else {
-                  // For deposit/withdrawal, primarily use the 'account' column
+                  // For deposit/withdrawal/other, primarily use the 'account' column
                   potentialAccountNames = [
                       accountNameCol ? record[accountNameCol]?.trim() : undefined
                   ].filter(Boolean) as string[];
@@ -1164,26 +1164,27 @@ export default function ImportDataPage() {
 
        // --- Crucial Step: Create/Update Accounts and get FINAL map ---
         console.log("Finalizing account creation/updates before import...");
-        let latestAccounts = await getAccounts(); // Fetch current accounts
-        const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
-            rawData, // Pass ALL raw data to ensure all accounts (even those with only opening balances) are processed
-            columnMappings, // Pass confirmed mappings
-            latestAccounts, // Pass current accounts
-            false // Set to false to actually perform creation/update
-        );
+        try {
+            let latestAccounts = await getAccounts(); // Fetch current accounts
+            const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
+                rawData, // Pass ALL raw data to ensure all accounts (even those with only opening balances) are processed
+                columnMappings, // Pass confirmed mappings
+                latestAccounts, // Pass current accounts
+                false // Set to false to actually perform creation/update
+            );
 
-        if (!finalAccountMapSuccess) {
-            setError("Error finalizing account mapping before import. Check console.");
-            setIsLoading(false);
-            return;
-        }
-        setFinalAccountMapForImport(finalMap); // Save the final map to state for use in transaction loop
-        console.log("Using FINAL account map for import execution:", finalMap);
+            if (!finalAccountMapSuccess) {
+                setError("Error finalizing account mapping before import. Check console.");
+                setIsLoading(false);
+                return;
+            }
+            setFinalAccountMapForImport(finalMap); // Save the final map to state for use in transaction loop
+            console.log("Using FINAL account map for import execution:", finalMap);
 
-        // Refresh accounts state in UI *after* creation/update step
-        latestAccounts = await getAccounts();
-        setAccounts(latestAccounts);
-       // -------------------------------------------------------------
+            // Refresh accounts state in UI *after* creation/update step
+            latestAccounts = await getAccounts();
+            setAccounts(latestAccounts);
+        // -------------------------------------------------------------
 
 
       // Create missing categories and tags
@@ -1263,11 +1264,11 @@ export default function ImportDataPage() {
                 if (sourceName && destName) { // Explicit transfer based on Firefly columns
                      const sourceNameLower = sourceName.toLowerCase();
                      const destNameLower = destName.toLowerCase();
-                     const sourceId = finalMap[sourceNameLower]; // Use the FINAL map
-                     const destId = finalMap[destNameLower]; // Use the FINAL map
+                     const sourceId = finalAccountMapForImport[sourceNameLower]; // Use the FINAL map
+                     const destId = finalAccountMapForImport[destNameLower]; // Use the FINAL map
 
-                     if (!sourceId) throw new Error(`Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(finalMap)}`);
-                     if (!destId) throw new Error(`Transfer Import Error - Could not find final destination account ID for "${destName}". Map: ${JSON.stringify(finalMap)}`);
+                     if (!sourceId) throw new Error(`Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
+                     if (!destId) throw new Error(`Transfer Import Error - Could not find final destination account ID for "${destName}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
                      if (sourceId === destId) throw new Error(`Transfer Import Error - Source and destination accounts are the same ("${sourceName}").`);
 
 
@@ -1316,10 +1317,10 @@ export default function ImportDataPage() {
                          throw new Error(`Row ${rowNumber}: Could not determine account name for transaction.`);
                      }
 
-                     const accountIdForImport = finalMap[accountNameForTx.toLowerCase()]; // Use the FINAL map
+                     const accountIdForImport = finalAccountMapForImport[accountNameForTx.toLowerCase()]; // Use the FINAL map
 
                      if (!accountIdForImport) {
-                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(finalMap)}`);
+                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
                      }
                      if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_') || accountIdForImport.startsWith('preview_')) {
                          throw new Error(`Invalid account ID reference ('${accountIdForImport}') for import.`);
@@ -1382,6 +1383,18 @@ export default function ImportDataPage() {
           console.log("Dispatching storage event to notify other components of potential updates.");
          window.dispatchEvent(new Event('storage'));
       }
+
+     } catch (finalAccountMapError) {
+          console.error("Error finalizing account mapping before import.", finalAccountMapError);
+          setIsLoading(false);
+          setError("Critical error during account preparation. Import aborted.");
+          toast({
+              title: "Import Failed",
+              description: "Could not prepare accounts for import.",
+              variant: "destructive",
+          });
+     }
+
     };
 
 
@@ -1688,4 +1701,3 @@ export default function ImportDataPage() {
     </div>
   );
 }
-
