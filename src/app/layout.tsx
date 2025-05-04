@@ -2,6 +2,7 @@
 'use client'; // Required for using state and hooks
 
 import { useState, useEffect } from 'react'; // Import useEffect
+import { usePathname } from 'next/navigation'; // Import usePathname
 import { Oxanium } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
@@ -69,7 +70,8 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
+  const pathname = usePathname(); // Get current pathname
+  const [isTransactionsOpen, setIsTransactionsOpen] = useState(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
   const { isAuthenticated, logout } = useAuth(); // Use the auth hook
   const [isClient, setIsClient] = useState(false); // State to track client-side rendering
 
@@ -77,6 +79,12 @@ export default function RootLayout({
      // This effect runs only on the client after the initial render
      setIsClient(true);
    }, []);
+
+   // Open transaction group if a child route is active
+   useEffect(() => {
+     setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+   }, [pathname]);
+
 
   // Avoid rendering mismatch during hydration: show loading or default state on server/initial client render
    if (!isClient) {
@@ -111,6 +119,13 @@ export default function RootLayout({
     );
   }
 
+  // Helper function to check if a path is active
+  const isActive = (path: string) => pathname === path;
+
+  // Check if any transaction sub-route is active
+  const isAnyTransactionRouteActive = pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers');
+
+
   // If authenticated, render the main application layout
   return (
     <html lang="en" className="dark">
@@ -140,7 +155,7 @@ export default function RootLayout({
                   <SidebarGroupLabel>Menu</SidebarGroupLabel>
                     <SidebarMenuItem>
                       <Link href="/" passHref>
-                        <SidebarMenuButton tooltip="Dashboard Overview">
+                        <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
                           <PiggyBank />
                           <span>Dashboard</span>
                         </SidebarMenuButton>
@@ -148,7 +163,7 @@ export default function RootLayout({
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <Link href="/accounts" passHref>
-                        <SidebarMenuButton tooltip="Manage Accounts">
+                        <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
                           <Landmark />
                           <span>Accounts</span>
                         </SidebarMenuButton>
@@ -161,6 +176,7 @@ export default function RootLayout({
                             tooltip="Transactions"
                             onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
                             className="justify-between"
+                            isActive={isAnyTransactionRouteActive} // Highlight group if any child is active
                          >
                            <div className="flex items-center gap-2">
                              <ArrowLeftRight />
@@ -180,7 +196,7 @@ export default function RootLayout({
                         <>
                           <SidebarMenuItem className="ml-4">
                              <Link href="/transactions" passHref>
-                                 <SidebarMenuButton tooltip="Transactions Overview" size="sm">
+                                 <SidebarMenuButton tooltip="Transactions Overview" size="sm" isActive={isActive('/transactions')}>
                                      <LayoutList />
                                      <span>Overview</span>
                                  </SidebarMenuButton>
@@ -188,7 +204,7 @@ export default function RootLayout({
                          </SidebarMenuItem>
                          <SidebarMenuItem className="ml-4">
                              <Link href="/revenue" passHref>
-                                 <SidebarMenuButton tooltip="View Revenue/Income" size="sm">
+                                 <SidebarMenuButton tooltip="View Revenue/Income" size="sm" isActive={isActive('/revenue')}>
                                      <TrendingUp />
                                      <span>Revenue/Income</span>
                                  </SidebarMenuButton>
@@ -196,7 +212,7 @@ export default function RootLayout({
                          </SidebarMenuItem>
                          <SidebarMenuItem className="ml-4">
                              <Link href="/expenses" passHref>
-                                 <SidebarMenuButton tooltip="View Expenses" size="sm">
+                                 <SidebarMenuButton tooltip="View Expenses" size="sm" isActive={isActive('/expenses')}>
                                      <TrendingDown />
                                      <span>Expenses</span>
                                  </SidebarMenuButton>
@@ -204,7 +220,7 @@ export default function RootLayout({
                          </SidebarMenuItem>
                           <SidebarMenuItem className="ml-4">
                              <Link href="/transfers" passHref>
-                                 <SidebarMenuButton tooltip="View Transfers" size="sm">
+                                 <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
                                      <ArrowLeftRight />
                                      <span>Transfers</span>
                                  </SidebarMenuButton>
@@ -215,7 +231,7 @@ export default function RootLayout({
 
                     <SidebarMenuItem>
                         <Link href="/investments" passHref>
-                            <SidebarMenuButton tooltip="Manage Investments">
+                            <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
                                 <Wallet />
                                 <span>Investments</span>
                             </SidebarMenuButton>
@@ -227,7 +243,7 @@ export default function RootLayout({
                     <SidebarGroupLabel>Organization</SidebarGroupLabel>
                     <SidebarMenuItem>
                         <Link href="/categories" passHref>
-                            <SidebarMenuButton tooltip="Manage Categories">
+                            <SidebarMenuButton tooltip="Manage Categories" isActive={isActive('/categories')}>
                                 <ListTree />
                                 <span>Categories</span>
                             </SidebarMenuButton>
@@ -235,7 +251,7 @@ export default function RootLayout({
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                         <Link href="/tags" passHref>
-                            <SidebarMenuButton tooltip="Manage Tags">
+                            <SidebarMenuButton tooltip="Manage Tags" isActive={isActive('/tags')}>
                                 <Tag />
                                 <span>Tags</span>
                             </SidebarMenuButton>
@@ -243,7 +259,7 @@ export default function RootLayout({
                     </SidebarMenuItem>
                      <SidebarMenuItem>
                         <Link href="/groups" passHref>
-                            <SidebarMenuButton tooltip="Manage Groups">
+                            <SidebarMenuButton tooltip="Manage Groups" isActive={isActive('/groups')}>
                                 <Users />
                                 <span>Groups</span>
                             </SidebarMenuButton>
@@ -256,7 +272,7 @@ export default function RootLayout({
                   <SidebarGroupLabel>Settings</SidebarGroupLabel>
                     <SidebarMenuItem>
                       <Link href="/preferences" passHref>
-                        <SidebarMenuButton tooltip="User Preferences">
+                        <SidebarMenuButton tooltip="User Preferences" isActive={isActive('/preferences')}>
                           <Settings />
                           <span>Preferences</span>
                         </SidebarMenuButton>
@@ -264,7 +280,7 @@ export default function RootLayout({
                     </SidebarMenuItem>
                     <SidebarMenuItem>
                       <Link href="/import" passHref>
-                        <SidebarMenuButton tooltip="Import Data">
+                        <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
                           <Upload />
                           <span>Import Data</span>
                         </SidebarMenuButton>
