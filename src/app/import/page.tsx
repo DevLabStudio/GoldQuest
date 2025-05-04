@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -450,6 +451,7 @@ export default function ImportDataPage() {
               const tagsValue = tagsCol ? record[tagsCol] : undefined;
               const notesValue = notesCol ? record[notesCol] : undefined;
               const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
+              const descriptionLower = descriptionValue?.toLowerCase();
 
 
               // --- Amount Parsing Logic ---
@@ -486,19 +488,39 @@ export default function ImportDataPage() {
 
                // Additional check if parsedAmount is still NaN
               if (isNaN(parsedAmount)) {
-                  // If type is 'opening balance', try to use the amount from the main amount column
-                  if (typeValue === 'opening balance' && amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
-                     parsedAmount = parseAmount(signedAmountValue);
-                     if (isNaN(parsedAmount)) {
-                         console.error(`Row ${rowNumber}: Could not parse amount for 'opening balance'. Signed='${signedAmountValue}'.`);
-                         throw new Error(`Could not parse amount for 'opening balance'.`);
-                     } else {
-                         console.log(`Row ${rowNumber}: Used amount column for 'opening balance': ${parsedAmount}`);
-                     }
-                  } else {
-                     console.error(`Row ${rowNumber}: Amount could not be determined. Signed='${signedAmountValue}', Income='${incomeAmountValue}', Expense='${expenseAmountValue}'.`);
-                     throw new Error(`Could not determine a valid amount.`);
-                  }
+                   // Check for "Saldo inicial para:" pattern in description
+                   const initialBalanceMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
+                    if (initialBalanceMatch) {
+                        // If description indicates initial balance, try to use amount column
+                        if (amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
+                            parsedAmount = parseAmount(signedAmountValue);
+                            if (isNaN(parsedAmount)) {
+                                console.error(`Row ${rowNumber}: Could not parse amount for 'Saldo inicial para:'. Signed='${signedAmountValue}'.`);
+                                throw new Error(`Could not parse amount for 'Saldo inicial para:'.`);
+                            } else {
+                                console.log(`Row ${rowNumber}: Used amount column for 'Saldo inicial para:': ${parsedAmount}`);
+                            }
+                        } else {
+                            console.error(`Row ${rowNumber}: 'Saldo inicial para:' detected, but amount column ('${amountCol}') is missing or empty. Signed='${signedAmountValue}'.`);
+                            throw new Error(`'Saldo inicial para:' detected, but amount column is missing or empty.`);
+                        }
+                    } else if (typeValue === 'opening balance') { // Also check type column
+                      if (amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
+                           parsedAmount = parseAmount(signedAmountValue);
+                           if (isNaN(parsedAmount)) {
+                               console.error(`Row ${rowNumber}: Could not parse amount for 'opening balance'. Signed='${signedAmountValue}'.`);
+                               throw new Error(`Could not parse amount for 'opening balance'.`);
+                           } else {
+                               console.log(`Row ${rowNumber}: Used amount column for 'opening balance': ${parsedAmount}`);
+                           }
+                       } else {
+                           console.error(`Row ${rowNumber}: 'opening balance' type found, but amount column ('${amountCol}') is missing or empty.`);
+                           throw new Error(`'opening balance' type found, but amount column is missing or empty.`);
+                       }
+                    } else {
+                       console.error(`Row ${rowNumber}: Amount could not be determined. Signed='${signedAmountValue}', Income='${incomeAmountValue}', Expense='${expenseAmountValue}'.`);
+                       throw new Error(`Could not determine a valid amount.`);
+                    }
               }
 
 
@@ -519,9 +541,45 @@ export default function ImportDataPage() {
               let transactionTypeInternal: 'income' | 'expense' | 'transfer' | 'skip' = 'skip';
               let primaryAccountId: string | undefined = undefined; // This will hold the TEMP account ID for linking
               let isTransfer = false;
+              let isOpeningBalance = false;
 
-              // Explicit Transfer Check (using Firefly source/destination columns)
-              if (sourceAccountNameValue && destAccountNameValue) {
+              // Check for "Saldo inicial para:" pattern first
+              const initialBalanceMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
+               if (initialBalanceMatch) {
+                   const accountNameFromDesc = initialBalanceMatch[1].trim();
+                   const accountNameLower = accountNameFromDesc.toLowerCase();
+                   primaryAccountId = tempAccountMap[accountNameLower];
+                    if (!primaryAccountId) {
+                       // This might happen if the account wasn't mapped correctly via accountCol/sourceCol/destCol
+                       // We should still be able to create it based on description. Use placeholder ID for now.
+                       console.warn(`Row ${rowNumber}: Initial balance for account "${accountNameFromDesc}" found in description, but account not in temp map. Using placeholder.`);
+                       primaryAccountId = `preview_create_${accountNameLower}`;
+                       tempAccountMap[accountNameLower] = primaryAccountId; // Add to temp map for consistency
+                   }
+                   if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid amount for 'Saldo inicial para'.`);
+                   isOpeningBalance = true;
+                   transactionTypeInternal = 'skip'; // Skip creating transaction, handle via account balance
+                   description = descriptionValue || `Saldo inicial para: ${accountNameFromDesc}`;
+                   category = 'Opening Balance';
+                   console.log(`Row ${rowNumber}: Identified 'Saldo inicial para:' for account ${accountNameFromDesc}. Amount: ${parsedAmount}. This will set initial account balance.`);
+               } else if (typeValue === 'opening balance') {
+                    // Use 'account' column for 'opening balance' type
+                    const accountNameForOpening = accountCol ? record[accountCol]?.trim() : undefined;
+                     if (accountNameForOpening) {
+                         const accountNameLower = accountNameForOpening.toLowerCase();
+                         primaryAccountId = tempAccountMap[accountNameLower];
+                         if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Opening balance type detected, but Account '${accountNameForOpening}' not found in temp map.`);
+                         if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid amount for 'opening balance'.`);
+                         isOpeningBalance = true;
+                         transactionTypeInternal = 'skip'; // Skip creating transaction
+                         description = descriptionValue || `Opening Balance for ${accountNameForOpening}`;
+                         category = 'Opening Balance';
+                         console.log(`Row ${rowNumber}: Identified 'opening balance' type for account ${accountNameForOpening}. Amount: ${parsedAmount}. This will set initial account balance.`);
+                    } else {
+                         throw new Error(`Row ${rowNumber}: 'opening balance' type detected, but 'Account Name' column is not mapped or empty.`);
+                    }
+               } else if (sourceAccountNameValue && destAccountNameValue) {
+                   // Explicit Transfer Check (using Firefly source/destination columns)
                    isTransfer = true;
                    const sourceNameLower = sourceAccountNameValue.trim().toLowerCase();
                    const destNameLower = destAccountNameValue.trim().toLowerCase();
@@ -557,7 +615,7 @@ export default function ImportDataPage() {
                    description = description || `Transfer from ${sourceAccountNameValue} to ${destAccountNameValue}`;
 
                } else if (accountNameValue) {
-                   // Standard Expense/Income/Opening Balance using 'account' column
+                   // Standard Expense/Income using 'account' column
                    const accountNameLower = accountNameValue.trim().toLowerCase();
                    primaryAccountId = tempAccountMap[accountNameLower]; // Use temp map
                    if (!primaryAccountId) throw new Error(`Row ${rowNumber}: Account '${accountNameValue}' not found in temp map.`);
@@ -572,12 +630,6 @@ export default function ImportDataPage() {
                    } else if (typeValue === 'withdrawal') {
                        parsedAmount = -Math.abs(parsedAmount); // Ensure negative for withdrawal
                        transactionTypeInternal = 'expense';
-                   } else if (typeValue === 'opening balance') {
-                        // This type is primarily used to SET the initial balance during account creation/update.
-                        // We skip creating a *transaction* for it, but the balance is handled elsewhere.
-                        console.log(`Row ${rowNumber}: Identified 'opening balance' type for account ${accountNameValue}. Amount: ${parsedAmount}. This will set initial account balance.`);
-                        transactionTypeInternal = 'skip'; // Skip creating a transaction row for this
-                        description = description + " (Opening Balance Entry)";
                    } else {
                        // Fallback to amount sign if type column is missing or unhelpful
                        transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
@@ -613,20 +665,19 @@ export default function ImportDataPage() {
               // --- Construct Mapped Transaction ---
                if (transactionTypeInternal === 'skip') {
                     return {
-                        accountId: 'skipped', // Special ID for skipped
+                        accountId: primaryAccountId || 'skipped', // Use accountId if opening balance
                         date: parseDate(dateValue),
                         amount: parsedAmount || 0, // Keep amount if available, otherwise 0
                         description: description,
-                        category: typeValue === 'opening balance' ? 'Opening Balance' : 'Skipped',
+                        category: category, // 'Opening Balance' or 'Skipped'
                         tags: parsedTags,
                         originalRecord: record,
                         importStatus: 'skipped',
-                        errorMessage: typeValue === 'opening balance' ? 'Opening Balance (sets initial account value)' : 'Skipped (e.g., non-opening initial balance).',
+                        errorMessage: isOpeningBalance ? 'Opening Balance (sets initial account value)' : 'Skipped (e.g., non-opening initial balance).',
                     };
                } else {
                    // Regular transaction (income, expense, transfer)
                    return {
-                       // Use the determined temporary account ID (could be source, dest, or primary)
                        accountId: primaryAccountId!, // Validated above
                        date: parseDate(dateValue),
                        amount: parsedAmount, // Amount has correct sign or is positive for transfer
@@ -753,7 +804,7 @@ export default function ImportDataPage() {
     /**
      * Builds a map of account details from CSV data, considering existing accounts.
      * This function is used by both preview and final creation.
-     * It prioritizes rows with type 'opening balance' for setting the initial balance.
+     * It prioritizes rows with type 'opening balance' or description "Saldo inicial para:" for setting the initial balance.
      */
     const buildAccountUpdateMap = async (
         csvData: CsvRecord[],
@@ -769,72 +820,95 @@ export default function ImportDataPage() {
         const initialBalanceCol = mappings.initialBalance; // Direct initial balance column
         const typeCol = mappings.transaction_type; // Type column ('opening balance')
         const amountCol = mappings.amount; // Amount column (used by 'opening balance' type)
+        const descCol = mappings.description; // Description column for "Saldo inicial para:"
 
-        // Separate pass to prioritize 'opening balance' rows for initial balance setting
+        // Separate pass to prioritize 'opening balance' rows or "Saldo inicial para:" description for initial balance setting
         csvData.forEach((record, index) => {
             const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
-            if (typeValue === 'opening balance') {
-                // For opening balance, the account name MUST come from the primary 'account' column
-                const name = accountNameCol ? record[accountNameCol]?.trim() : undefined;
-                if (name) {
-                    const normalizedName = name.toLowerCase();
-                    let details = accountUpdates.get(normalizedName);
+            const descValue = descCol ? record[descCol]?.trim() : undefined;
+            const descLower = descValue?.toLowerCase();
+            const initialBalanceMatch = descLower?.match(/^saldo inicial para:\s*(.+)$/);
 
-                    // Initialize details if needed (first time seeing this account)
-                    if (!details) {
-                        const existingAcc = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
-                        const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
-                         details = {
-                             name: name,
-                             currency: existingAcc?.currency || 'BRL',
-                             type: existingAcc?.type,
-                             initialBalance: existingAcc?.balance, // Start with existing balance
-                             category: initialCategory
-                         };
-                         // Infer type if needed
-                         if (!details.type) {
-                             if (details.category === 'crypto') details.type = 'wallet'; // Default
-                             else details.type = 'checking'; // Default
-                         }
-                    }
+            let isOpening = false;
+            let accountNameForBalance: string | undefined = undefined;
 
-                    // Extract currency for this account from the row
-                    let rowCurrency = details.currency; // Default to existing/previous
-                     if (accountCurrencyCol && record[accountCurrencyCol]) {
-                         const potentialCurrency = record[accountCurrencyCol]!.trim().toUpperCase();
-                         if (supportedCurrencies.includes(potentialCurrency)) {
-                             rowCurrency = potentialCurrency;
-                         }
+            if (initialBalanceMatch) {
+                // Prioritize "Saldo inicial para:" description
+                accountNameForBalance = initialBalanceMatch[1].trim();
+                isOpening = true;
+                console.log(`Row ${index + 2}: Found 'Saldo inicial para:' description for account "${accountNameForBalance}".`);
+            } else if (typeValue === 'opening balance') {
+                // Fallback to 'opening balance' type if description doesn't match
+                accountNameForBalance = accountNameCol ? record[accountNameCol]?.trim() : undefined;
+                 if (accountNameForBalance) {
+                    isOpening = true;
+                    console.log(`Row ${index + 2}: Found 'opening balance' type for account "${accountNameForBalance}".`);
+                 } else {
+                     console.warn(`Row ${index + 2}: 'opening balance' type found, but could not determine account name from the mapped 'Account Name' column.`);
+                 }
+            }
+
+            if (isOpening && accountNameForBalance) {
+                 const normalizedName = accountNameForBalance.toLowerCase();
+                 let details = accountUpdates.get(normalizedName);
+
+                 // Initialize details if needed (first time seeing this account)
+                 if (!details) {
+                     const existingAcc = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+                     // Infer category based on name (basic)
+                     const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
+                     details = {
+                         name: accountNameForBalance, // Use the name found
+                         currency: existingAcc?.currency || 'BRL', // Default currency
+                         type: existingAcc?.type,
+                         initialBalance: existingAcc?.balance, // Start with existing balance
+                         category: initialCategory
+                     };
+                     // Infer type if needed
+                     if (!details.type) {
+                         if (details.category === 'crypto') details.type = 'wallet';
+                         else details.type = 'checking';
                      }
-                     details.currency = rowCurrency;
+                 }
 
-                    // Extract opening balance amount from the 'amount' column
-                    const amountValue = amountCol ? record[amountCol] : undefined;
-                    if (amountValue !== undefined && amountValue !== '') {
-                        const balance = parseAmount(amountValue);
-                        if (!isNaN(balance)) {
-                            details.initialBalance = balance; // Set initialBalance from 'amount'
-                             console.log(`Row ${index + 2}: Prioritized 'opening balance' type for account "${name}". Set initial balance to: ${balance}`);
-                        } else {
-                             console.warn(`Row ${index + 2}: Could not parse amount "${amountValue}" for 'Opening Balance' type for account "${name}".`);
-                        }
-                    } else {
-                         console.warn(`Row ${index + 2}: 'Opening Balance' type found for account "${name}", but 'Amount' column is missing or empty.`);
-                    }
+                 // Extract currency for this account from the row
+                 let rowCurrency = details.currency; // Default to existing/previous
+                 if (accountCurrencyCol && record[accountCurrencyCol]) {
+                     const potentialCurrency = record[accountCurrencyCol]!.trim().toUpperCase();
+                     if (supportedCurrencies.includes(potentialCurrency)) {
+                         rowCurrency = potentialCurrency;
+                     }
+                 }
+                 details.currency = rowCurrency;
 
-                    accountUpdates.set(normalizedName, details);
-                } else {
-                     console.warn(`Row ${index + 2}: 'Opening Balance' type found, but could not determine account name from the mapped 'Account Name' column.`);
-                }
+                 // Extract opening balance amount from the 'amount' column
+                 const amountValue = amountCol ? record[amountCol] : undefined;
+                 if (amountValue !== undefined && amountValue !== '') {
+                     const balance = parseAmount(amountValue);
+                     if (!isNaN(balance)) {
+                         details.initialBalance = balance; // Set initialBalance from 'amount'
+                         console.log(`Row ${index + 2}: Prioritized opening balance entry for account "${accountNameForBalance}". Set initial balance to: ${balance}`);
+                     } else {
+                         console.warn(`Row ${index + 2}: Could not parse amount "${amountValue}" for opening balance entry for account "${accountNameForBalance}".`);
+                     }
+                 } else {
+                     console.warn(`Row ${index + 2}: Opening balance entry found for account "${accountNameForBalance}", but 'Amount' column ('${amountCol}') is missing or empty.`);
+                 }
+
+                 accountUpdates.set(normalizedName, details);
             }
         });
 
 
-        // Second pass for other rows (non-opening balance), adding details but NOT overwriting initialBalance if set by 'opening balance'
+        // Second pass for other rows (non-opening balance), adding details but NOT overwriting initialBalance if set by opening entry
         csvData.forEach((record, index) => {
              const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
-             // Skip 'opening balance' rows as they were handled first
-             if (typeValue === 'opening balance') return;
+             const descValue = descCol ? record[descCol]?.trim() : undefined;
+             const descLower = descValue?.toLowerCase();
+             const isOpeningEntry = typeValue === 'opening balance' || descLower?.startsWith('saldo inicial para:');
+
+             // Skip opening balance rows as they were handled first
+             if (isOpeningEntry) return;
 
              let potentialAccountNames: string[] = [];
              // Determine relevant account columns based on transaction type (deposit, withdrawal, transfer)
@@ -864,7 +938,8 @@ export default function ImportDataPage() {
                               name: name,
                               currency: existingAcc?.currency || 'BRL',
                               type: existingAcc?.type,
-                              initialBalance: existingAcc?.balance, // Default to existing balance
+                              // Do NOT set initialBalance here, only opening entries do
+                              // initialBalance: existingAcc?.balance,
                               category: initialCategory
                           };
                           // Infer type if needed
@@ -889,13 +964,13 @@ export default function ImportDataPage() {
                      if (details.initialBalance === undefined && initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
                          const balance = parseAmount(record[initialBalanceCol]);
                          if (!isNaN(balance)) {
+                             // ONLY set this if it wasn't set by an opening entry
                              details.initialBalance = balance;
-                             console.log(`Row ${index + 2}: Set initial balance for account "${name}" from '${initialBalanceCol}' column: ${balance}`);
+                             console.log(`Row ${index + 2}: Set initial balance for account "${name}" from '${initialBalanceCol}' column: ${balance} (as fallback).`);
                          } else {
                              console.warn(`Row ${index + 2}: Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}" from balance column.`);
                          }
                      }
-                     // No 'else' needed - we don't overwrite if already set by 'opening balance'
 
                       accountUpdates.set(normalizedName, details); // Update map with potentially refined details
                  }
@@ -967,10 +1042,10 @@ export default function ImportDataPage() {
                         needsUpdate = true;
                     }
 
-                    // Update balance ONLY if CSV provided a balance AND it's different
-                    // This balance comes from 'opening balance' rows or 'initialBalance' column
+                    // Update balance ONLY if CSV provided an initial balance (from opening entry or initialBalance column)
+                    // AND it's different from the existing balance.
                     if (accDetails.initialBalance !== undefined && accDetails.initialBalance !== existingAccount.balance) {
-                        console.log(`Updating balance for existing account "${accDetails.name}" from ${existingAccount.balance} to ${accDetails.initialBalance} based on CSV (Opening Balance/Initial Column).`);
+                        console.log(`Updating balance for existing account "${accDetails.name}" from ${existingAccount.balance} to ${accDetails.initialBalance} based on CSV (Opening Entry / Initial Column).`);
                         updatedAccountData.balance = accDetails.initialBalance; // Update balance from CSV data
                         needsUpdate = true;
                     }
@@ -1161,11 +1236,12 @@ export default function ImportDataPage() {
       setImportProgress(0);
       setError(null); // Clear previous errors
       let overallError = false;
+      let latestAccounts: Account[] = []; // Variable to hold accounts after creation/update
 
        // --- Crucial Step: Create/Update Accounts and get FINAL map ---
         console.log("Finalizing account creation/updates before import...");
         try {
-            let latestAccounts = await getAccounts(); // Fetch current accounts
+            latestAccounts = await getAccounts(); // Fetch current accounts
             const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
                 rawData, // Pass ALL raw data to ensure all accounts (even those with only opening balances) are processed
                 columnMappings, // Pass confirmed mappings
@@ -1182,8 +1258,20 @@ export default function ImportDataPage() {
             console.log("Using FINAL account map for import execution:", finalMap);
 
             // Refresh accounts state in UI *after* creation/update step
-            latestAccounts = await getAccounts();
-            setAccounts(latestAccounts);
+            latestAccounts = await getAccounts(); // Fetch again to get the absolute latest state
+            setAccounts(latestAccounts); // Update the component's account state
+
+        } catch (finalAccountMapError) {
+            console.error("Error during account preparation phase:", finalAccountMapError);
+            setIsLoading(false);
+            setError("Critical error during account preparation. Import aborted.");
+            toast({
+                title: "Import Failed",
+                description: "Could not prepare accounts for import.",
+                variant: "destructive",
+            });
+           return; // Stop import if account prep fails
+       }
         // -------------------------------------------------------------
 
 
@@ -1225,7 +1313,8 @@ export default function ImportDataPage() {
 
           // Skip rows that were marked as 'opening balance' during mapping, as their balance contribution
           // was handled during the account creation/update phase.
-           if (item.category === 'Opening Balance') { // Check the category set during mapping
+          // Use the category set during mapping to identify these reliably.
+           if (item.category === 'Opening Balance') {
                console.log(`Row ${rowNumber}: Skipping transaction import for opening balance (already handled).`);
                updatedData[i] = { ...item, importStatus: 'skipped', errorMessage: 'Opening Balance (handled via account balance)' };
                // Don't increment errorCount here, it's expected to be skipped
@@ -1384,18 +1473,7 @@ export default function ImportDataPage() {
          window.dispatchEvent(new Event('storage'));
       }
 
-     } catch (finalAccountMapError) {
-          console.error("Error finalizing account mapping before import.", finalAccountMapError);
-          setIsLoading(false);
-          setError("Critical error during account preparation. Import aborted.");
-          toast({
-              title: "Import Failed",
-              description: "Could not prepare accounts for import.",
-              variant: "destructive",
-          });
-     }
-
-    };
+   };
 
 
   const calculateProgress = (processed: number, total: number): number => {
@@ -1516,7 +1594,7 @@ export default function ImportDataPage() {
                     <DialogDescription>
                         Match columns from your CSV (right) to application fields (left).
                         Essential fields: Date, Account Name (or Source/Destination), and Amount (either signed or income/expense pair).
-                        We've tried to guess based on common headers. Map 'Initial Balance' if available. Map 'Transaction Type' if your CSV has it (helps with accuracy).
+                        We've tried to guess based on common headers. Map 'Initial Balance' if available. Map 'Transaction Type' or 'Description' if your CSV uses them to indicate initial balances (e.g., "opening balance", "Saldo inicial para:").
                     </DialogDescription>
                 </DialogHeader>
                 <CsvMappingForm
@@ -1536,7 +1614,7 @@ export default function ImportDataPage() {
             <Card className="mb-8">
                 <CardHeader>
                     <CardTitle>Step 2.5: Account Changes Preview</CardTitle>
-                    <CardDescription>Review the accounts that will be created or updated based on the CSV data and mappings. Initial balances are derived from 'Opening Balance' type rows, 'Initial Balance' columns, or existing data.</CardDescription>
+                    <CardDescription>Review the accounts that will be created or updated based on the CSV data and mappings. Initial balances are derived from 'Opening Balance' type rows, 'Saldo inicial para:' descriptions, 'Initial Balance' columns, or existing data.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="max-h-[300px] overflow-y-auto border rounded-md">

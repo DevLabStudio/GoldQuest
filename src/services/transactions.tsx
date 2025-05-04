@@ -1,4 +1,5 @@
 
+
 import type { Account } from './account-sync'; // Assuming Account interface is here
 import React from 'react'; // Import React for JSX
 import { getAccounts, updateAccount as updateAccountService } from './account-sync'; // Import account service functions
@@ -78,6 +79,7 @@ export async function getTransactions(
 /**
  * Simulates adding a new transaction to the in-memory mock data store and updates the account balance.
  * Checks if the balance update might have already occurred (e.g., during import) before applying it again.
+ * Skips balance update if the category is 'Opening Balance'.
  *
  * @param transactionData Data for the new transaction (excluding ID). Category name should exist.
  * @returns A promise that resolves to the newly created Transaction object with an ID.
@@ -87,32 +89,32 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
     await new Promise(resolve => setTimeout(resolve, 50)); // Simulate short delay
 
     const transactionAmount = transactionData.amount; // Use the amount as provided (can be +/-)
-
-    let accountToUpdate: Account | undefined;
-    let originalBalance: number | undefined;
+    const categoryName = transactionData.category?.trim().toLowerCase() || 'uncategorized';
 
     // --- Fetch Account and Check/Update Balance ---
-    try {
-        const accounts = await getAccounts(); // Get current accounts
-        const accountIndex = accounts.findIndex(acc => acc.id === transactionData.accountId);
-        if (accountIndex !== -1) {
-            accountToUpdate = accounts[accountIndex];
-            originalBalance = accountToUpdate.balance;
-
-            // Perform the update
-            const updatedBalance = originalBalance + transactionAmount;
-            console.log(`Account ${accountToUpdate.name} balance update: Original=${originalBalance}, Adding=${transactionAmount}, New=${updatedBalance}`);
-            await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
-            console.log(`Account ${accountToUpdate.name} balance successfully updated to: ${updatedBalance}`);
-
-        } else {
-             console.warn(`Account with ID ${transactionData.accountId} not found when trying to update balance. Transaction will be added without balance update.`);
+    // Skip balance update if it's an opening balance transaction, as the balance was set during account creation
+    if (categoryName !== 'opening balance') {
+        try {
+            const accounts = await getAccounts(); // Get current accounts
+            const accountIndex = accounts.findIndex(acc => acc.id === transactionData.accountId);
+            if (accountIndex !== -1) {
+                const accountToUpdate = accounts[accountIndex];
+                const originalBalance = accountToUpdate.balance;
+                const updatedBalance = originalBalance + transactionAmount;
+                console.log(`Account ${accountToUpdate.name} balance update: Original=${originalBalance}, Adding=${transactionAmount}, New=${updatedBalance}`);
+                await updateAccountService({ ...accountToUpdate, balance: updatedBalance, lastActivity: new Date().toISOString() });
+                console.log(`Account ${accountToUpdate.name} balance successfully updated to: ${updatedBalance}`);
+            } else {
+                console.warn(`Account with ID ${transactionData.accountId} not found when trying to update balance. Transaction will be added without balance update.`);
+            }
+        } catch (error) {
+            console.error(`Error updating account balance for new transaction (Account ID: ${transactionData.accountId}):`, error);
+            // If balance update fails, should we proceed? For now, we will, but log the error.
+            // Consider throwing error to prevent adding transaction if balance update fails
+            // throw new Error(`Failed to update balance for account ${transactionData.accountId}. Transaction not added.`);
         }
-    } catch (error) {
-         console.error(`Error updating account balance for new transaction (Account ID: ${transactionData.accountId}):`, error);
-         // If balance update fails, should we proceed? For now, we will, but log the error.
-         // Consider throwing error to prevent adding transaction if balance update fails
-         // throw new Error(`Failed to update balance for account ${transactionData.accountId}. Transaction not added.`);
+    } else {
+        console.log(`Skipping balance update for 'Opening Balance' transaction (Account ID: ${transactionData.accountId}).`);
     }
     // -------------------------------------------
 
@@ -122,7 +124,7 @@ export async function addTransaction(transactionData: Omit<Transaction, 'id'>): 
         ...transactionData,
         id: `tx-${Date.now()}-${Math.random().toString(16).slice(2)}`,
         amount: transactionAmount,
-        category: transactionData.category?.trim() || 'Uncategorized',
+        category: transactionData.category?.trim() || 'Uncategorized', // Use original casing for storage
         tags: transactionData.tags || [], // Ensure tags is an array
     };
 
