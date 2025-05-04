@@ -62,11 +62,11 @@ body {
     --secondary-foreground: 0 0% 98%; /* White */
     --muted: 0 0% 15%; /* Dark Gray */
     --muted-foreground: 0 0% 60%; /* Mid Gray */
-    --accent: 0 0% 15%; /* Dark Gray - for hover */
+    --accent: 0 0% 20%; /* Adjusted accent for better visibility */
     --accent-foreground: 0 0% 98%; /* White */
     --destructive: 0 70% 50%; /* Adjusted Red for dark theme */
     --destructive-foreground: 0 0% 98%; /* White */
-    --border: 0 0% 15%; /* Dark Gray */
+    --border: 0 0% 20%; /* Darker border */
     --input: 0 0% 15%; /* Dark Gray */
     --ring: 19 100% 50%; /* New Orange #FF5200 */
     --chart-1: 19 100% 50%; /* New Orange #FF5200 */
@@ -78,9 +78,9 @@ body {
     --sidebar-foreground: 0 0% 98%; /* White */
     --sidebar-primary: 19 100% 50%; /* New Orange #FF5200 */
     --sidebar-primary-foreground: 0 0% 98%; /* White (better contrast) */
-    --sidebar-accent: 0 0% 20%; /* Hover Gray */
+    --sidebar-accent: 0 0% 25%; /* Darker accent for hover/active state */
     --sidebar-accent-foreground: 0 0% 98%; /* White */
-    --sidebar-border: 0 0% 15%; /* Dark Gray */
+    --sidebar-border: 0 0% 20%; /* Darker border matching main border */
     --sidebar-ring: 19 100% 50%; /* New Orange #FF5200 */
 
     /* Define font variable for dark mode */
