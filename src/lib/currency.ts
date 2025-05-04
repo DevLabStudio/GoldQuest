@@ -1,4 +1,4 @@
-
+'use client'; // This module depends on localStorage via getUserPreferences
 
 import { getUserPreferences } from './preferences'; // Import preference getter
 
@@ -82,7 +82,9 @@ export function formatCurrency(
     locale?: string,
     convertToPreferred: boolean = true // Default to true
 ): string {
-    const { preferredCurrency } = getUserPreferences();
+    // getUserPreferences can only be called client-side
+    const { preferredCurrency } = (typeof window !== 'undefined') ? getUserPreferences() : { preferredCurrency: 'BRL' };
+
 
     let displayAmount = amount;
     let displayCurrency = accountCurrency.toUpperCase();
@@ -142,4 +144,5 @@ export function getCurrencySymbol(currencyCode: string): string {
 // async function getRealTimeRates() { ... }
 
 // Export convertCurrency for potential use elsewhere (like dashboard total calculation)
-export { convertCurrency };
+// export { convertCurrency }; // Already implicitly exported by being a top-level function
+
