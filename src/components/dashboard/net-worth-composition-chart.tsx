@@ -1,16 +1,14 @@
 
 'use client';
 
-import { Pie, PieChart, Cell, Legend, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
+import { Pie, PieChart, Cell, Tooltip as RechartsTooltip, ResponsiveContainer } from 'recharts';
 import {
   ChartConfig,
   ChartContainer,
   ChartTooltipContent,
-  ChartLegend,
-  ChartLegendContent,
 } from '@/components/ui/chart';
 import type { FC } from 'react';
-import { formatCurrency } from '@/lib/currency'; // Using the existing formatCurrency
+import { formatCurrency } from '@/lib/currency';
 
 interface NetWorthCompositionChartProps {
   totalAssets: number;
@@ -23,10 +21,20 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
   totalLiabilities,
   currency,
 }) => {
+  const netWorth = totalAssets - totalLiabilities;
+
+  // Data for the chart: Assets and Liabilities
+  // The image shows 4 segments, but we only have Assets and Liabilities.
+  // We will represent Assets with chart-1 (blue) and Liabilities with chart-2 (red-ish, similar to accent color in theme)
+  // If you need more segments, you'll need to break down assets/liabilities further.
   const chartData = [
-    { name: 'Assets', value: totalAssets, fill: 'hsl(var(--chart-1))' },
-    { name: 'Liabilities', value: totalLiabilities, fill: 'hsl(var(--chart-2))' },
-  ].filter(item => item.value > 0);
+    { name: 'Assets', value: totalAssets, fill: 'hsl(var(--chart-1))' }, // Blueish
+    { name: 'Liabilities', value: Math.abs(totalLiabilities), fill: 'hsl(var(--chart-2))' }, // Orange/Red-ish
+    // Add more segments here if needed, e.g., different types of assets or liabilities
+    // { name: 'Equity', value: netWorth > 0 ? netWorth : 0, fill: 'hsl(var(--chart-3))' }, // Yellowish (if net worth is positive)
+    // { name: 'Debt', value: netWorth < 0 ? Math.abs(netWorth) : 0, fill: 'hsl(var(--chart-4))' }, // Grayish (if net worth is negative, representing debt beyond assets)
+  ].filter(item => item.value > 0); // Filter out zero/negative values for display
+
 
   const chartConfig = {
     assets: {
@@ -37,6 +45,14 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
       label: 'Liabilities',
       color: 'hsl(var(--chart-2))',
     },
+    // equity: {
+    //   label: 'Equity',
+    //   color: 'hsl(var(--chart-3))',
+    // },
+    // debt: {
+    //   label: 'Debt',
+    //   color: 'hsl(var(--chart-4))',
+    // },
   } satisfies ChartConfig;
 
   if (chartData.length === 0) {
@@ -47,52 +63,35 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
     );
   }
 
-  const RADIAN = Math.PI / 180;
-  const renderCustomizedLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, percent, index, name, value }: any) => {
-    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
-    const x = cx + (radius + 20) * Math.cos(-midAngle * RADIAN); // Adjust radius for label position
-    const y = cy + (radius + 20) * Math.sin(-midAngle * RADIAN); // Adjust radius for label position
-    const percentage = (percent * 100).toFixed(0);
+  const totalValueForPercentage = chartData.reduce((sum, item) => sum + item.value, 0);
 
-    return (
-      <text
-        x={x}
-        y={y}
-        fill="hsl(var(--foreground))"
-        textAnchor={x > cx ? 'start' : 'end'}
-        dominantBaseline="central"
-        className="text-xs"
-      >
-        {`${name} (${percentage}%)`}
-      </text>
-    );
-  };
 
   return (
     <ChartContainer config={chartConfig} className="h-full w-full">
       <ResponsiveContainer width="100%" height="100%">
         <PieChart>
           <RechartsTooltip
+            cursor={false}
             content={
               <ChartTooltipContent
-                formatter={(value, name) => (
-                  <div className="flex items-center">
-                    <span
-                      className="w-2.5 h-2.5 rounded-full mr-2"
-                      style={{ backgroundColor: name === 'Assets' ? chartConfig.assets.color : chartConfig.liabilities.color }}
-                    />
-                    <span>
-                      {name === 'Assets' ? chartConfig.assets.label : chartConfig.liabilities.label}: {formatCurrency(value as number, currency, undefined, false)}
-                    </span>
-                  </div>
-                )}
-                 labelFormatter={(label, payload) => {
-                    if (payload && payload.length > 0 && payload[0].name) {
-                       const itemKey = payload[0].name.toLowerCase() as keyof typeof chartConfig;
-                       return chartConfig[itemKey]?.label || payload[0].name;
-                    }
-                    return label;
-                 }}
+                hideLabel // Hide default label in tooltip
+                formatter={(value, name, props) => {
+                  const itemKey = props.payload.name.toLowerCase() as keyof typeof chartConfig;
+                  const itemLabel = chartConfig[itemKey]?.label || props.payload.name;
+                  const itemColor = chartConfig[itemKey]?.color || props.payload.fill;
+                  const percentage = totalValueForPercentage > 0 ? ((value as number / totalValueForPercentage) * 100).toFixed(0) : 0;
+                  return (
+                    <div className="flex items-center">
+                      <span
+                        className="w-2.5 h-2.5 rounded-full mr-2"
+                        style={{ backgroundColor: itemColor }}
+                      />
+                      <span>
+                        {itemLabel}: {formatCurrency(value as number, currency, undefined, false)} ({percentage}%)
+                      </span>
+                    </div>
+                  );
+                }}
               />
             }
           />
@@ -102,19 +101,36 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
             nameKey="name"
             cx="50%"
             cy="50%"
-            outerRadius={80} // Adjust as needed
-            labelLine={true} // Show lines to labels
-            label={renderCustomizedLabel}
+            innerRadius="60%" // Makes it a doughnut chart
+            outerRadius="80%"
+            labelLine={false} // No lines to external labels
+            label={false} // No external labels
+            paddingAngle={chartData.length > 1 ? 2 : 0} // Add padding between segments if more than one
           >
             {chartData.map((entry) => (
               <Cell key={`cell-${entry.name}`} fill={entry.fill} stroke={entry.fill} />
             ))}
           </Pie>
-          <ChartLegend
-            content={<ChartLegendContent nameKey="name" />}
-            verticalAlign="bottom"
-            align="center"
-          />
+           {/* Custom center text */}
+           <text
+            x="50%"
+            y="46%" // Adjusted y for two lines of text
+            textAnchor="middle"
+            dominantBaseline="central"
+            className="text-sm fill-muted-foreground"
+          >
+            Total
+          </text>
+          <text
+            x="50%"
+            y="56%" // Adjusted y for two lines of text
+            textAnchor="middle"
+            dominantBaseline="central"
+            className="text-2xl font-bold fill-foreground"
+          >
+            {formatCurrency(netWorth, currency, undefined, false)}
+          </text>
+          {/* Legend removed to match the image */}
         </PieChart>
       </ResponsiveContainer>
     </ChartContainer>
