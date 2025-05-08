@@ -51,12 +51,22 @@ const TableFooter = React.forwardRef<
 ))
 TableFooter.displayName = "TableFooter"
 
-// Ensure no leading/trailing spaces or newlines inside the component definition's JSX tag
-const TableRow = React.forwardRef<HTMLTableRowElement, React.HTMLAttributes<HTMLTableRowElement>>(
-  ({ className, ...props }, ref) => (
-    <tr ref={ref} className={cn("border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted", className)} {...props} />
-  )
-);
+// Ensure TableRow correctly renders children
+const TableRow = React.forwardRef<
+  HTMLTableRowElement,
+  React.HTMLAttributes<HTMLTableRowElement>
+>(({ className, children, ...props }, ref) => ( // Added children to destructuring
+  <tr
+    ref={ref}
+    className={cn(
+      "border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted",
+      className
+    )}
+    {...props}
+  >
+    {children} {/* Render children here */}
+  </tr>
+));
 TableRow.displayName = "TableRow"
 
 const TableHead = React.forwardRef<
