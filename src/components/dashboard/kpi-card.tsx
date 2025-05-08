@@ -1,5 +1,5 @@
 
-import type { FC } from 'react';
+import type { FC, ReactNode } from 'react'; // Import ReactNode
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Info } from "lucide-react";
@@ -11,9 +11,10 @@ interface KpiCardProps {
   tooltip?: string;
   isPercentage?: boolean;
   valueClassName?: string;
+  icon?: ReactNode; // Add icon prop
 }
 
-const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, isPercentage = false, valueClassName }) => {
+const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, isPercentage = false, valueClassName, icon }) => {
   return (
     <Card>
       <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2 pt-4 px-4">
@@ -32,8 +33,11 @@ const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, isPercentage = false
         )}
       </CardHeader>
       <CardContent className="pb-4 px-4">
-        <div className={`text-2xl font-bold ${isPercentage ? 'text-green-600 dark:text-green-500' : 'text-foreground'} ${valueClassName}`}>
-          {value}
+        <div className="flex items-center gap-2"> {/* Flex container for icon and value */}
+          {icon && <div className="shrink-0">{icon}</div>} {/* Display icon if provided */}
+          <div className={`text-2xl font-bold ${isPercentage ? 'text-green-600 dark:text-green-500' : 'text-foreground'} ${valueClassName}`}>
+            {value}
+          </div>
         </div>
       </CardContent>
     </Card>
