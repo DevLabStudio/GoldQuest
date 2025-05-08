@@ -78,13 +78,7 @@ export default function DashboardPage() {
         {/* Header */}
         <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard - Principal</h1>
-          <div className="flex items-center gap-3 mt-2 sm:mt-0">
-            <span className="text-sm text-muted-foreground">Márcio Valim</span>
-            <Avatar className="h-9 w-9">
-              <AvatarImage src="https://picsum.photos/40/40" alt="Márcio Valim" data-ai-hint="male user" />
-              <AvatarFallback>MV</AvatarFallback>
-            </Avatar>
-          </div>
+           {/* User profile removed from here, will be in sidebar footer */}
         </div>
 
         {/* Resumo Card with Filters */}
@@ -202,3 +196,4 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
+

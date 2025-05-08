@@ -20,12 +20,13 @@ import {
   SidebarGroup,
   SidebarGroupLabel,
 } from '@/components/ui/sidebar';
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users, LogOut } from 'lucide-react'; // Added LogOut
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar components
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users, LogOut } from 'lucide-react';
 import Link from 'next/link';
 import { Toaster } from '@/components/ui/toaster';
-import { useAuth } from '@/hooks/useAuth'; // Import the auth hook
-import LoginPage from '@/app/login/page'; // Import the Login page component
-import { Button } from '@/components/ui/button'; // Import Button for logout
+import { useAuth } from '@/hooks/useAuth';
+import LoginPage from '@/app/login/page';
+import { Button } from '@/components/ui/button';
 
 // Configure Oxanium font
 const oxanium = Oxanium({
@@ -60,7 +61,6 @@ const LogoIcon = () => (
     <circle cx="25" cy="75" r="5" fill="currentColor"/>
     <circle cx="25" cy="25" r="5" fill="currentColor"/>
     <circle cx="50" cy="50" r="5" fill="currentColor"/>
-
   </svg>
 );
 
@@ -70,25 +70,21 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const pathname = usePathname(); // Get current pathname
+  const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  const { isAuthenticated, logout } = useAuth(); // Use the auth hook
-  const [isClient, setIsClient] = useState(false); // State to track client-side rendering
+  const { isAuthenticated, logout, user } = useAuth(); // Get user from auth hook
+  const [isClient, setIsClient] = useState(false);
 
    useEffect(() => {
-     // This effect runs only on the client after the initial render
      setIsClient(true);
    }, []);
 
-   // Open transaction group if a child route is active
    useEffect(() => {
      setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
    }, [pathname]);
 
 
-  // Avoid rendering mismatch during hydration: show loading or default state on server/initial client render
    if (!isClient) {
-     // You could return a loading spinner or null here
      return (
         <html lang="en" className="dark">
             <head>
@@ -96,14 +92,12 @@ export default function RootLayout({
                 <meta name="description" content="Simple personal finance management" />
             </head>
             <body className={cn(`${oxanium.variable} font-sans antialiased`, 'min-h-screen flex flex-col')}>
-                {/* Optional: Loading component */}
                 <div className="flex items-center justify-center min-h-screen">Loading...</div>
             </body>
         </html>
      );
    }
 
-  // If not authenticated on the client, render the login page
   if (!isAuthenticated) {
     return (
       <html lang="en" className="dark">
@@ -119,14 +113,10 @@ export default function RootLayout({
     );
   }
 
-  // Helper function to check if a path is active
   const isActive = (path: string) => pathname === path;
-
-  // Check if any transaction sub-route is active
   const isAnyTransactionRouteActive = pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers');
 
 
-  // If authenticated, render the main application layout
   return (
     <html lang="en" className="dark">
       <head>
@@ -150,7 +140,6 @@ export default function RootLayout({
             </SidebarHeader>
             <SidebarContent>
               <SidebarMenu>
-                {/* Existing Menu Items */}
                  <SidebarGroup>
                   <SidebarGroupLabel>Menu</SidebarGroupLabel>
                     <SidebarMenuItem>
@@ -169,14 +158,12 @@ export default function RootLayout({
                         </SidebarMenuButton>
                       </Link>
                     </SidebarMenuItem>
-
-                    {/* Transactions Group (Collapsible) */}
                     <SidebarMenuItem>
                          <SidebarMenuButton
                             tooltip="Transactions"
                             onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
                             className="justify-between"
-                            isActive={isAnyTransactionRouteActive} // Highlight group if any child is active
+                            isActive={isAnyTransactionRouteActive}
                          >
                            <div className="flex items-center gap-2">
                              <ArrowLeftRight />
@@ -190,8 +177,6 @@ export default function RootLayout({
                            />
                          </SidebarMenuButton>
                     </SidebarMenuItem>
-
-                    {/* Conditionally Rendered Transaction Sub-Items */}
                     {isTransactionsOpen && (
                         <>
                           <SidebarMenuItem className="ml-4">
@@ -228,7 +213,6 @@ export default function RootLayout({
                          </SidebarMenuItem>
                          </>
                     )}
-
                     <SidebarMenuItem>
                         <Link href="/investments" passHref>
                             <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
@@ -238,7 +222,6 @@ export default function RootLayout({
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-
                  <SidebarGroup>
                     <SidebarGroupLabel>Organization</SidebarGroupLabel>
                     <SidebarMenuItem>
@@ -266,8 +249,6 @@ export default function RootLayout({
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-
-
                  <SidebarGroup>
                   <SidebarGroupLabel>Settings</SidebarGroupLabel>
                     <SidebarMenuItem>
@@ -287,18 +268,21 @@ export default function RootLayout({
                       </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-                 {/* --- Logout Button --- */}
-                 <SidebarMenuItem>
-                    <SidebarMenuButton tooltip="Logout" onClick={logout}>
-                       <LogOut />
-                       <span>Logout</span>
-                    </SidebarMenuButton>
-                 </SidebarMenuItem>
-                 {/* -------------------- */}
               </SidebarMenu>
             </SidebarContent>
-            <SidebarFooter>
-              {/* Footer content if needed */}
+            <SidebarFooter className="p-2 border-t border-sidebar-border">
+              <div className="flex items-center gap-3 p-2">
+                <Avatar className="h-9 w-9">
+                  <AvatarImage src="https://picsum.photos/40/40" alt={user || "User"} data-ai-hint="user avatar" />
+                  <AvatarFallback>{user ? user.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col">
+                    <span className="text-sm font-medium text-sidebar-foreground">{user || "User"}</span>
+                     <Button variant="link" size="sm" onClick={logout} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
+                        Logout
+                     </Button>
+                </div>
+              </div>
             </SidebarFooter>
           </Sidebar>
           <SidebarInset className="flex-1 overflow-y-auto">
@@ -310,3 +294,4 @@ export default function RootLayout({
     </html>
   );
 }
+
