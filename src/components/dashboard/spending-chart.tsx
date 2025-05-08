@@ -6,10 +6,11 @@ import {
   ChartConfig,
   ChartContainer,
   ChartTooltip,
-  ChartTooltipContent,
+  ChartTooltipContent, // Import ChartTooltipContent
 } from '@/components/ui/chart';
 import type { FC } from 'react';
-import { getUserPreferences } from '@/lib/preferences'; // Import preferences
+// getUserPreferences is not needed here if currency is passed as a prop
+// import { getUserPreferences } from '@/lib/preferences';
 
 // Use the preference-aware formatter if needed, or a simpler one if data is pre-converted
 const formatChartCurrency = (value: number, currencyCode: string) => {
@@ -26,10 +27,12 @@ const formatChartCurrency = (value: number, currencyCode: string) => {
         return new Intl.NumberFormat(formatLocale, {
             style: 'currency',
             currency: currencyCode.toUpperCase(),
+            minimumFractionDigits: 0, // Adjust as needed for cleaner Y-axis
+            maximumFractionDigits: 0, // Adjust as needed
         }).format(value);
     } catch (error) {
         console.error(`Error formatting chart currency: Value=${value}, Currency=${currencyCode}`, error);
-        return `${currencyCode.toUpperCase()} ${value.toFixed(2)}`;
+        return `${currencyCode.toUpperCase()} ${value.toFixed(0)}`;
     }
 };
 
@@ -44,7 +47,7 @@ const SpendingChart: FC<SpendingChartProps> = ({ data, currency }) => {
     const chartConfig = {
         amount: {
             label: `Amount (${currency})`, // Use dynamic currency label
-            color: 'hsl(var(--primary))', // Use primary color (orange)
+            color: 'hsl(var(--chart-1))', // Use primary chart color
         },
     } satisfies ChartConfig;
 
@@ -64,7 +67,7 @@ const SpendingChart: FC<SpendingChartProps> = ({ data, currency }) => {
         margin={{
           top: 20,
           right: 20,
-          left: 20,
+          left: 20, // Adjust left margin if Y-axis labels are long
           bottom: 5,
         }}
       >
@@ -75,21 +78,24 @@ const SpendingChart: FC<SpendingChartProps> = ({ data, currency }) => {
           tickMargin={10}
           axisLine={false}
           stroke="hsl(var(--muted-foreground))" // Ensure axis text is visible
+          interval={0} // Show all category labels if space permits
+          // angle={-30} // Angle labels if they overlap
+          // textAnchor="end" // Adjust text anchor for angled labels
         />
         <YAxis
            // Format Y-axis labels with the passed currency
            tickFormatter={(value) => formatChartCurrency(value, currency)}
            tickLine={false}
            axisLine={false}
-           width={90} // Adjust width if needed for longer currency formats
+           width={80} // Adjust width if needed for longer currency formats
            stroke="hsl(var(--muted-foreground))" // Ensure axis text is visible
         />
         <ChartTooltip
           cursor={false}
           content={
             <ChartTooltipContent
-                labelKey="category"
-                // Format tooltip value with the passed currency
+                nameKey="category" // Use category as the name in tooltip
+                labelKey="amount" // Amount is the primary value being shown
                 formatter={(value) => formatChartCurrency(value as number, currency)}
                 indicator="dot"
             />}
