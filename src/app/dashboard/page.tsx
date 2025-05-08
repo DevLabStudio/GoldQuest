@@ -59,10 +59,11 @@ export default function DashboardPage() {
   };
 
   // Placeholder data for Personal Finance KPIs
+  // For the chart, totalAssets will represent Crypto, totalLiabilities will represent Stocks value
   const personalKpiData = {
     totalNetWorth: 125000.75,
-    totalAssets: 150000.50,
-    totalLiabilities: 24999.75,
+    totalAssets: 80000.50, // Example value for "Crypto"
+    totalLiabilities: 45000.25, // Example value for "Stocks"
     monthlyIncome: 7500.00,
     monthlyExpenses: -4850.25,
     savingsRate: 0.3533,
@@ -163,13 +164,13 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
            <KpiCard
             title="Total de Ativos"
-            value={formatCurrency(personalKpiData.totalAssets, preferredCurrency, undefined, true)}
+            value={formatCurrency(personalKpiData.totalAssets + personalKpiData.totalLiabilities, preferredCurrency, undefined, true)} // Assuming totalAssets here is just one part
             tooltip="Soma de todos os seus ativos (contas, investimentos, etc.)."
             icon={<Landmark className="text-primary" />}
           />
           <KpiCard
-            title="Total de Passivos"
-            value={formatCurrency(personalKpiData.totalLiabilities, preferredCurrency, undefined, true)}
+            title="Total de Passivos" // This might be less relevant if chart shows portfolio breakdown
+            value={formatCurrency(0, preferredCurrency, undefined, true)} // Placeholder if chart is portfolio-focused
             tooltip="Soma de todas as suas dívidas e obrigações."
             icon={<Scale className="text-primary" />}
           />
@@ -186,21 +187,21 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Composição do Patrimônio ({preferredCurrency})</CardTitle>
-              <CardDescription>Distribuição entre ativos e passivos.</CardDescription>
+              <CardTitle>Composição do Portfolio ({preferredCurrency})</CardTitle>
+              <CardDescription>Distribuição entre Crypto e Stocks.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px] sm:h-[350px]">
               {isChartLoading ? (
                 <Skeleton className="h-full w-full" />
               ) : personalKpiData.totalAssets > 0 || personalKpiData.totalLiabilities > 0 ? (
                 <NetWorthCompositionChart
-                  totalAssets={personalKpiData.totalAssets}
-                  totalLiabilities={personalKpiData.totalLiabilities}
+                  totalAssets={personalKpiData.totalAssets} // Pass Crypto value
+                  totalLiabilities={personalKpiData.totalLiabilities} // Pass Stocks value
                   currency={preferredCurrency}
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
-                  Sem dados para exibir a composição do patrimônio.
+                  Sem dados para exibir a composição do portfolio.
                 </div>
               )}
             </CardContent>
@@ -223,4 +224,3 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
-

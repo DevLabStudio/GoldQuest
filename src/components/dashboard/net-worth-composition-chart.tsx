@@ -11,8 +11,8 @@ import type { FC } from 'react';
 import { formatCurrency } from '@/lib/currency';
 
 interface NetWorthCompositionChartProps {
-  totalAssets: number;
-  totalLiabilities: number;
+  totalAssets: number; // Will be used for "Crypto"
+  totalLiabilities: number; // Will be used for "Stocks" (absolute value)
   currency: string;
 }
 
@@ -21,24 +21,26 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
   totalLiabilities,
   currency,
 }) => {
-  const netWorth = totalAssets - totalLiabilities;
+  const cryptoValue = totalAssets;
+  const stocksValue = Math.abs(totalLiabilities); // Assuming liabilities was representing stocks and might be negative
+  const totalPortfolioValue = cryptoValue + stocksValue;
 
-  // Data for the chart: Assets and Liabilities
-  // Assets will use chart-4 (Gray) and Liabilities with chart-5 (Darker Gray)
+  // Data for the chart: Crypto and Stocks
+  // Crypto will use chart-1 (Orange) and Stocks with chart-2 (Lighter Orange)
   const chartData = [
-    { name: 'Assets', value: totalAssets, fill: 'hsl(var(--chart-4))' }, // Gray
-    { name: 'Liabilities', value: Math.abs(totalLiabilities), fill: 'hsl(var(--chart-5))' }, // Darker Gray
+    { name: 'Crypto', value: cryptoValue, fill: 'hsl(var(--chart-1))' }, // Orange
+    { name: 'Stocks', value: stocksValue, fill: 'hsl(var(--chart-2))' }, // Lighter Orange
   ].filter(item => item.value > 0); // Filter out zero/negative values for display
 
 
   const chartConfig = {
-    assets: {
-      label: 'Assets',
-      color: 'hsl(var(--chart-4))', // Gray
+    crypto: {
+      label: 'Crypto',
+      color: 'hsl(var(--chart-1))', // Orange
     },
-    liabilities: {
-      label: 'Liabilities',
-      color: 'hsl(var(--chart-5))', // Darker Gray
+    stocks: {
+      label: 'Stocks',
+      color: 'hsl(var(--chart-2))', // Lighter Orange
     },
   } satisfies ChartConfig;
 
@@ -63,9 +65,13 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
               <ChartTooltipContent
                 hideLabel // Hide default label in tooltip
                 formatter={(value, name, props) => {
-                  const itemKey = props.payload.name.toLowerCase() as keyof typeof chartConfig;
-                  const itemLabel = chartConfig[itemKey]?.label || props.payload.name;
-                  const itemColor = chartConfig[itemKey]?.color || props.payload.fill;
+                  // Ensure props.payload and props.payload.name exist
+                  const itemName = props.payload?.name?.toLowerCase();
+                  if (!itemName) return null;
+
+                  const itemKey = itemName as keyof typeof chartConfig;
+                  const itemLabel = chartConfig[itemKey]?.label || props.payload?.name || 'Unknown';
+                  const itemColor = chartConfig[itemKey]?.color || props.payload?.fill || '#ccc';
                   const percentage = totalValueForPercentage > 0 ? ((value as number / totalValueForPercentage) * 100).toFixed(0) : 0;
                   return (
                     <div className="flex items-center">
@@ -106,7 +112,7 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
             dominantBaseline="central"
             className="text-sm fill-muted-foreground"
           >
-            Total
+            Total Portfolio
           </text>
           <text
             x="50%"
@@ -115,7 +121,7 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
             dominantBaseline="central"
             className="text-2xl font-bold fill-foreground"
           >
-            {formatCurrency(netWorth, currency, undefined, false)}
+            {formatCurrency(totalPortfolioValue, currency, undefined, false)}
           </text>
           {/* Legend removed to match the image */}
         </PieChart>
@@ -125,4 +131,3 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
 };
 
 export default NetWorthCompositionChart;
-
