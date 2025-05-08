@@ -5,33 +5,24 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, TrendingUp, TrendingDown, Wallet, Landmark, Scale, PiggyBank } from "lucide-react";
+import { RefreshCw, TrendingUp, TrendingDown, Wallet, Landmark, Scale, PiggyBank, PieChart as PieChartIcon } from "lucide-react"; // Added PieChartIcon
 import KpiCard from "@/components/dashboard/kpi-card";
-import SpendingChart from "@/components/dashboard/spending-chart"; // Import SpendingChart
+import NetWorthCompositionChart from "@/components/dashboard/net-worth-composition-chart"; // Import new chart
 import { getUserPreferences } from '@/lib/preferences';
 import { formatCurrency } from '@/lib/currency';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function DashboardPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isChartLoading, setIsChartLoading] = useState(true); // Separate loading for chart data
+  const [isChartLoading, setIsChartLoading] = useState(true);
 
   // Placeholder data for accounts and transactions (replace with actual data fetching)
   const [accounts, setAccounts] = useState<any[]>([]);
   const [transactions, setTransactions] = useState<any[]>([]);
 
-  // Mock spending data for the chart
-  const spendingDataForChart = useMemo(() => [
-    { category: "Alimentação", amount: 500 },
-    { category: "Transporte", amount: 250 },
-    { category: "Moradia", amount: 1200 },
-    { category: "Lazer", amount: 300 },
-    { category: "Saúde", amount: 150 },
-    { category: "Outros", amount: 400 },
-  ], []);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -195,31 +186,35 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <Card>
             <CardHeader>
-              <CardTitle>Despesas por Categoria ({preferredCurrency})</CardTitle>
-              <CardDescription>Visualização das suas despesas agrupadas por categoria.</CardDescription>
+              <CardTitle>Composição do Patrimônio ({preferredCurrency})</CardTitle>
+              <CardDescription>Distribuição entre ativos e passivos.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px] sm:h-[350px]">
               {isChartLoading ? (
                 <Skeleton className="h-full w-full" />
-              ) : spendingDataForChart.length > 0 ? (
-                <SpendingChart data={spendingDataForChart} currency={preferredCurrency} />
+              ) : personalKpiData.totalAssets > 0 || personalKpiData.totalLiabilities > 0 ? (
+                <NetWorthCompositionChart
+                  totalAssets={personalKpiData.totalAssets}
+                  totalLiabilities={personalKpiData.totalLiabilities}
+                  currency={preferredCurrency}
+                />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
-                  Sem dados de despesas para exibir.
+                  Sem dados para exibir a composição do patrimônio.
                 </div>
               )}
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Evolução do Patrimônio (Em Breve)</CardTitle>
-              <CardDescription>Acompanhe o crescimento do seu patrimônio líquido ao longo do tempo.</CardDescription>
+              <CardTitle>Fluxo de Caixa Mensal (Em Breve)</CardTitle>
+              <CardDescription>Compare suas receitas e despesas ao longo do tempo.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px] sm:h-[350px] flex items-center justify-center">
                {isChartLoading ? (
                   <Skeleton className="h-full w-full" />
                ) : (
-                 <p className="text-muted-foreground">Gráfico de evolução do patrimônio em desenvolvimento.</p>
+                 <p className="text-muted-foreground">Gráfico de fluxo de caixa em desenvolvimento.</p>
                )}
             </CardContent>
           </Card>
