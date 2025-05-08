@@ -24,35 +24,22 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
   const netWorth = totalAssets - totalLiabilities;
 
   // Data for the chart: Assets and Liabilities
-  // The image shows 4 segments, but we only have Assets and Liabilities.
-  // We will represent Assets with chart-1 (blue) and Liabilities with chart-2 (red-ish, similar to accent color in theme)
-  // If you need more segments, you'll need to break down assets/liabilities further.
+  // Assets will use chart-4 (Gray) and Liabilities with chart-5 (Darker Gray)
   const chartData = [
-    { name: 'Assets', value: totalAssets, fill: 'hsl(var(--chart-1))' }, // Blueish
-    { name: 'Liabilities', value: Math.abs(totalLiabilities), fill: 'hsl(var(--chart-2))' }, // Orange/Red-ish
-    // Add more segments here if needed, e.g., different types of assets or liabilities
-    // { name: 'Equity', value: netWorth > 0 ? netWorth : 0, fill: 'hsl(var(--chart-3))' }, // Yellowish (if net worth is positive)
-    // { name: 'Debt', value: netWorth < 0 ? Math.abs(netWorth) : 0, fill: 'hsl(var(--chart-4))' }, // Grayish (if net worth is negative, representing debt beyond assets)
+    { name: 'Assets', value: totalAssets, fill: 'hsl(var(--chart-4))' }, // Gray
+    { name: 'Liabilities', value: Math.abs(totalLiabilities), fill: 'hsl(var(--chart-5))' }, // Darker Gray
   ].filter(item => item.value > 0); // Filter out zero/negative values for display
 
 
   const chartConfig = {
     assets: {
       label: 'Assets',
-      color: 'hsl(var(--chart-1))',
+      color: 'hsl(var(--chart-4))', // Gray
     },
     liabilities: {
       label: 'Liabilities',
-      color: 'hsl(var(--chart-2))',
+      color: 'hsl(var(--chart-5))', // Darker Gray
     },
-    // equity: {
-    //   label: 'Equity',
-    //   color: 'hsl(var(--chart-3))',
-    // },
-    // debt: {
-    //   label: 'Debt',
-    //   color: 'hsl(var(--chart-4))',
-    // },
   } satisfies ChartConfig;
 
   if (chartData.length === 0) {
@@ -138,3 +125,4 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({
 };
 
 export default NetWorthCompositionChart;
+
