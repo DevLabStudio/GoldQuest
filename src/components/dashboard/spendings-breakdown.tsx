@@ -14,7 +14,7 @@ interface SpendingItem {
 interface SpendingsBreakdownProps {
   title: string;
   data: SpendingItem[];
-  currency: string;
+  currency: string; // Expecting ISO currency code like "USD", "EUR", "BRL"
 }
 
 const SpendingsBreakdown: FC<SpendingsBreakdownProps> = ({ title, data, currency }) => {
@@ -26,12 +26,19 @@ const SpendingsBreakdown: FC<SpendingsBreakdownProps> = ({ title, data, currency
       <CardContent className="pt-2"> {/* Reduced pt from default p-6 (via CardContent default) or specific value to pt-2 */}
         <ul className="space-y-3"> {/* Reduced space-y from 4 to 3 */}
           {data.map((item) => {
-            const formattedAmount = new Intl.NumberFormat('en-US', {
-              style: 'currency',
-              currency: currency === '$' ? 'USD' : currency,
-              minimumFractionDigits: 0,
-              maximumFractionDigits: 0,
-            }).format(item.amount).replace('US$', '$');
+            let formattedAmount;
+            try {
+                formattedAmount = new Intl.NumberFormat(undefined, { // Use user's default locale
+                  style: 'currency',
+                  currency: currency, // Directly use the ISO currency code
+                  minimumFractionDigits: 0,
+                  maximumFractionDigits: 0,
+                }).format(item.amount);
+            } catch (error) {
+                console.error("Error formatting currency in SpendingsBreakdown:", error);
+                formattedAmount = `${currency} ${item.amount.toFixed(0)}`; // Fallback
+            }
+
 
             return (
               <li key={item.name} className="flex items-center justify-between">

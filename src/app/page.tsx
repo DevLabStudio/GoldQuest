@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -13,7 +14,7 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getUserPreferences } from '@/lib/preferences';
-import { formatCurrency, convertCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency'; // Import getCurrencySymbol
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -94,7 +95,7 @@ export default function DashboardPage() {
     fetchData();
     // Add storage listener to refetch data if underlying data changes
     const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key?.startsWith('transactions-') || event.key === 'userCategories') {
+        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key)) && isMounted) {
             console.log("Storage changed on main dashboard, refetching data...");
             if (isMounted) {
                 fetchData();
@@ -233,7 +234,7 @@ export default function DashboardPage() {
           chartType="negative"
           href="/expenses" // Link to expenses page
         />
-        <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={getCurrencySymbol(preferredCurrency)} />
+        <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
 
       {/* Second Row of Cards */}
@@ -260,16 +261,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
-// Helper to get currency symbol - consider moving to currency.ts if used widely
-const getCurrencySymbol = (currencyCode: string): string => {
-    const upperCaseCode = currencyCode?.toUpperCase();
-    switch (upperCaseCode) {
-        case 'BRL': return 'R$';
-        case 'USD': return '$';
-        case 'EUR': return '€';
-        case 'GBP': return '£';
-        default: return upperCaseCode || '$'; // Fallback
-    }
-};
-
