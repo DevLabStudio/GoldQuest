@@ -1533,6 +1533,64 @@ export default function ImportDataPage() {
         }
     };
 
+    const handleTransactionFieldChange = (
+        index: number,
+        field: 'description' | 'category' | 'tags' | 'amount' | 'date',
+        value: string
+    ) => {
+        setParsedData(prevData => {
+            const newData = [...prevData];
+            let transactionToUpdate = { ...newData[index] };
+
+            switch (field) {
+                case 'description':
+                    transactionToUpdate.description = value;
+                    break;
+                case 'category':
+                    transactionToUpdate.category = value;
+                    break;
+                case 'tags':
+                    transactionToUpdate.tags = value.split(',').map(tag => tag.trim()).filter(Boolean);
+                    break;
+                case 'amount':
+                    const parsedAmount = parseFloat(value);
+                    if (!isNaN(parsedAmount)) {
+                        transactionToUpdate.amount = parsedAmount;
+                    } else {
+                        toast({ title: "Invalid Amount", description: "Amount not updated. Please enter a valid number.", variant: "destructive" });
+                        return prevData;
+                    }
+                    break;
+                case 'date':
+                     if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) { // Check format for direct text input
+                        transactionToUpdate.date = value;
+                    } else if (value) { // If value is present but not matching (e.g. from date picker clear)
+                        // Attempt to re-parse if it's a Date object stringified differently
+                        try {
+                            const d = new Date(value);
+                            if (!isNaN(d.getTime())) {
+                                transactionToUpdate.date = format(d, 'yyyy-MM-dd');
+                            } else {
+                                throw new Error("Invalid date object");
+                            }
+                        } catch {
+                            toast({ title: "Invalid Date", description: "Date not updated. Please use YYYY-MM-DD format or select a valid date.", variant: "destructive" });
+                            return prevData;
+                        }
+                    }
+                    else {
+                        toast({ title: "Invalid Date", description: "Date not updated. Please select a valid date.", variant: "destructive" });
+                        return prevData;
+                    }
+                    break;
+                default:
+                    return prevData;
+            }
+            newData[index] = transactionToUpdate;
+            return newData;
+        });
+    };
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -1672,52 +1730,31 @@ export default function ImportDataPage() {
               <Table>
                 <TableHeader>
                   <TableRow>
-                    {/* Dynamically show headers based on what's mapped and relevant */}
-                    {columnMappings.date && <TableHead>Date</TableHead>}
-                    {/* Account Info - show relevant mapped columns */}
-                    {columnMappings.account && <TableHead>Account (CSV)</TableHead>}
-                    {columnMappings.source_account && <TableHead>Source Acc (CSV)</TableHead>}
+                    <TableHead>Date</TableHead>
+                    <TableHead>Account (CSV)</TableHead>
                     {columnMappings.destination_account && <TableHead>Dest Acc (CSV)</TableHead>}
-                     {columnMappings.transaction_type && <TableHead>Type (CSV)</TableHead>} {/* Show Type if mapped */}
-                    {/* Other details */}
-                    {columnMappings.description && <TableHead>Description</TableHead>}
-                    {columnMappings.category && <TableHead>Category</TableHead>}
-                    {columnMappings.tags && <TableHead>Tags</TableHead>}
-                    {/* Amount - show relevant mapped columns */}
-                    {columnMappings.amount && <TableHead className="text-right">Amount (Parsed)</TableHead>}
-                    {columnMappings.amount_income && <TableHead className="text-right">Income Amt (CSV)</TableHead>}
-                    {columnMappings.amount_expense && <TableHead className="text-right">Expense Amt (CSV)</TableHead>}
-                     <TableHead>Status</TableHead>
-                     <TableHead className="min-w-[150px]">Message / Info</TableHead>
+                    {columnMappings.transaction_type && <TableHead>Type (CSV)</TableHead>}
+                    <TableHead>Description</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Tags</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="min-w-[150px]">Message / Info</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {parsedData.map((item, index) => {
-                       // Find account using the component's current `accounts` state based on the FINAL map ID if available
-                       // Check if accountId is a placeholder like 'preview_create_...' or an actual ID
                        let finalAccountId = item.accountId;
                        if (finalAccountId && !finalAccountId.startsWith('error_') && !finalAccountId.startsWith('skipped_')) {
-                            // If it's a preview ID, try to resolve it using the final map based on the name embedded in the preview ID
                             if (finalAccountId.startsWith('preview_create_')) {
                                 const accountName = finalAccountId.replace('preview_create_', '');
-                                finalAccountId = finalAccountMapForImport[accountName] || finalAccountId; // Use final map if available
+                                finalAccountId = finalAccountMapForImport[accountName] || finalAccountId;
                             } else {
-                                // If it's potentially an existing account name used as ID during preview, resolve it
                                 finalAccountId = finalAccountMapForImport[finalAccountId.toLowerCase()] || finalAccountId;
                             }
                        }
-
                        const account = accounts.find(acc => acc.id === finalAccountId);
-
-                       // Get the account name from the original record based on mappings for display
-                       const accountNameFromRecord =
-                           item.originalRecord[columnMappings.account || ''] ||
-                           item.originalRecord[columnMappings.source_account || ''] ||
-                           item.originalRecord[columnMappings.destination_account || ''] ||
-                           (item.accountId && item.accountId.startsWith('preview_create_') ? item.accountId.replace('preview_create_', '') : item.accountId) || // Show name for preview-created accounts
-                           'N/A'; // Fallback
-
-                       // Determine currency - prioritize actual account currency if found, else guess from record
+                       const accountNameFromRecord = item.originalRecord[columnMappings.account || ''] || item.originalRecord[columnMappings.source_account || ''] || item.originalRecord[columnMappings.destination_account || ''] || (item.accountId && item.accountId.startsWith('preview_create_') ? item.accountId.replace('preview_create_', '') : item.accountId) || 'N/A';
                        let displayCurrency = '???';
                        if (account) {
                            displayCurrency = account.currency;
@@ -1727,56 +1764,32 @@ export default function ImportDataPage() {
                                displayCurrency = potentialCurrency;
                            }
                        }
-
-                       const currencySymbol = getCurrencySymbol(displayCurrency);
-
-
                       return (
                           <TableRow key={index} className={cn(
-                              "text-xs", // Smaller text for dense table
+                              "text-xs",
                               item.importStatus === 'success' ? 'bg-green-50 dark:bg-green-900/20' :
                               item.importStatus === 'error' ? 'bg-red-50 dark:bg-red-900/20' :
                               item.importStatus === 'skipped' ? 'bg-yellow-50 dark:bg-yellow-900/20' : ''
                           )}>
-                            {/* Display relevant columns based on mapping */}
-                            {columnMappings.date && <TableCell className="whitespace-nowrap">{item.date}</TableCell>}
-                            {/* CSV Account Names */}
-                            {columnMappings.account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.account!]}>{item.originalRecord[columnMappings.account!]}</TableCell>}
-                            {columnMappings.source_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.source_account!]}>{item.originalRecord[columnMappings.source_account!]}</TableCell>}
+                            <TableCell className="whitespace-nowrap max-w-[120px]">
+                                <Input type="date" value={item.date} onChange={(e) => handleTransactionFieldChange(index, 'date', e.target.value)} className="h-8 text-xs p-1" />
+                            </TableCell>
+                            <TableCell className="max-w-[150px] truncate" title={accountNameFromRecord}>{accountNameFromRecord}</TableCell>
                             {columnMappings.destination_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.destination_account!]}>{item.originalRecord[columnMappings.destination_account!]}</TableCell>}
-                             {columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>} {/* Show Type */}
-
-                            {/* Parsed Details */}
-                            {columnMappings.description && <TableCell className="max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>}
-                            {columnMappings.category && <TableCell className="capitalize max-w-[100px] truncate" title={item.category}>{item.category}</TableCell>}
-                            {columnMappings.tags && (
-                                <TableCell className="max-w-[150px]">
-                                    <div className="flex flex-wrap gap-1">
-                                        {item.tags?.map(tag => {
-                                            const { color: tagColor } = getTagStyle(tag);
-                                            return (
-                                                <Badge key={tag} variant="outline" className={`text-[10px] px-1 py-0 ${tagColor}`}>
-                                                    {tag}
-                                                </Badge>
-                                            );
-                                        })}
-                                    </div>
-                                </TableCell>
-                            )}
-                            {/* Amount Columns */}
-                             {columnMappings.amount && (
-                                <TableCell className={cn(
-                                    "text-right whitespace-nowrap font-medium",
-                                    !isNaN(item.amount) && item.amount >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'
-                                )}>
-                                    {/* Use formatCurrency for consistency, pass convertToPreferred=false */}
-                                     {item.importStatus !== 'skipped' ? formatCurrency(item.amount, displayCurrency, undefined, false) : 'N/A'}
-                                </TableCell>
-                            )}
-                            {columnMappings.amount_income && <TableCell className="text-right whitespace-nowrap">{item.originalRecord[columnMappings.amount_income!]}</TableCell>}
-                            {columnMappings.amount_expense && <TableCell className="text-right whitespace-nowrap">{item.originalRecord[columnMappings.amount_expense!]}</TableCell>}
-
-                            {/* Status and Message */}
+                            {columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>}
+                            <TableCell className="max-w-[200px]">
+                                <Input value={item.description || ''} onChange={(e) => handleTransactionFieldChange(index, 'description', e.target.value)} className="h-8 text-xs p-1" />
+                            </TableCell>
+                            <TableCell className="max-w-[100px]">
+                                <Input value={item.category || ''} onChange={(e) => handleTransactionFieldChange(index, 'category', e.target.value)} className="h-8 text-xs p-1" />
+                            </TableCell>
+                            <TableCell className="max-w-[150px]">
+                                <Input value={item.tags?.join(', ') || ''} onChange={(e) => handleTransactionFieldChange(index, 'tags', e.target.value)} placeholder="tag1, tag2" className="h-8 text-xs p-1" />
+                            </TableCell>
+                            <TableCell className="text-right whitespace-nowrap">
+                                <Input type="number" step="0.01" value={item.amount?.toString() || ''} onChange={(e) => handleTransactionFieldChange(index, 'amount', e.target.value)} className="h-8 text-xs p-1 text-right" />
+                                <span className="ml-1 text-muted-foreground text-[10px]">{displayCurrency}</span>
+                            </TableCell>
                             <TableCell className="font-medium capitalize">{item.importStatus}</TableCell>
                             <TableCell className="text-muted-foreground max-w-[200px] truncate" title={item.errorMessage}>{item.errorMessage}</TableCell>
                           </TableRow>
