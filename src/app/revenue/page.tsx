@@ -22,8 +22,8 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
-// Define the initial limit for transactions
-const INITIAL_TRANSACTION_LIMIT = 50;
+// Define the initial limit for transactions (can be removed if fetching all)
+// const INITIAL_TRANSACTION_LIMIT = 50;
 
 // Helper function to format date
 const formatDate = (dateString: string): string => {
@@ -39,7 +39,7 @@ const formatDate = (dateString: string): string => {
 
 export default function RevenuePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
+  const [categories, setCategories] = useState<Category[]>(([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -83,7 +83,8 @@ export default function RevenuePage() {
             if (isMounted) setTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
-                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                 // Fetch ALL transactions for each account
+                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
                 combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -141,7 +142,8 @@ export default function RevenuePage() {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                // Fetch ALL transactions for each account
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -333,7 +335,7 @@ export default function RevenuePage() {
         <CardHeader>
           <CardTitle>Recent Income Transactions</CardTitle>
            <CardDescription>
-                Showing the latest {INITIAL_TRANSACTION_LIMIT} income transactions across all accounts. Amounts displayed in {preferredCurrency}.
+                Showing recent income transactions across all accounts. Amounts displayed in {preferredCurrency}.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -523,3 +525,4 @@ export default function RevenuePage() {
     </div>
   );
 }
+

@@ -23,8 +23,8 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
 
-// Define the initial limit for transactions
-const INITIAL_TRANSACTION_LIMIT = 50;
+// Define the initial limit for transactions (can be removed if fetching all)
+// const INITIAL_TRANSACTION_LIMIT = 50;
 
 // Helper function to format date (consistent with revenue page)
 const formatDate = (dateString: string): string => {
@@ -84,7 +84,8 @@ export default function ExpensesPage() {
             if(isMounted) setTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
-                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                // Fetch ALL transactions for each account
+                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
                 combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -144,7 +145,8 @@ export default function ExpensesPage() {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                // Fetch ALL transactions for each account
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -336,7 +338,7 @@ export default function ExpensesPage() {
         <CardHeader>
           <CardTitle>Recent Expense Transactions</CardTitle>
            <CardDescription>
-                Showing the latest {INITIAL_TRANSACTION_LIMIT} expense transactions across all accounts. Amounts displayed in {preferredCurrency}.
+                Showing recent expense transactions across all accounts. Amounts displayed in {preferredCurrency}.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -526,3 +528,4 @@ export default function ExpensesPage() {
     </div>
   );
 }
+

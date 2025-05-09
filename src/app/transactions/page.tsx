@@ -23,8 +23,8 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
-// Define the initial limit for transactions
-const INITIAL_TRANSACTION_LIMIT = 50;
+// Define the initial limit for transactions (can be removed if fetching all)
+// const INITIAL_TRANSACTION_LIMIT = 50;
 
 // Helper function to format date (consistent with previous implementation)
 const formatDate = (dateString: string): string => {
@@ -82,7 +82,8 @@ export default function TransactionsOverviewPage() {
             if(isMounted) setTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
-                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                // Fetch ALL transactions for each account for the overview page
+                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
                 combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -160,7 +161,8 @@ export default function TransactionsOverviewPage() {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                 // Fetch ALL transactions for each account
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -371,7 +373,7 @@ export default function TransactionsOverviewPage() {
         <CardHeader>
           <CardTitle>Recent Transactions</CardTitle>
            <CardDescription>
-                Showing the latest {INITIAL_TRANSACTION_LIMIT} transactions across all accounts. Amounts displayed in {preferredCurrency}.
+                Showing recent transactions across all accounts. Amounts displayed in {preferredCurrency}.
            </CardDescription>
         </CardHeader>
         <CardContent>
@@ -559,3 +561,4 @@ export default function TransactionsOverviewPage() {
     </div>
   );
 }
+
