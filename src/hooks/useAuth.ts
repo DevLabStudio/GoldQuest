@@ -7,22 +7,18 @@ const AUTH_KEY = 'isLoggedInGoldenGame'; // Use a unique key
 const USER_KEY = 'loggedInUserGoldenGame'; // Key for storing username
 
 export function useAuth() {
-  // Initialize state from localStorage only on the client
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-      if (typeof window !== 'undefined') {
-          return localStorage.getItem(AUTH_KEY) === 'true';
-      }
-      return false; // Default to false on server
-  });
-  const [user, setUser] = useState<string | null>(() => {
-    if (typeof window !== 'undefined') {
-        return localStorage.getItem(USER_KEY);
-    }
-    return null;
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false); // Start with a default server-compatible state
+  const [user, setUser] = useState<string | null>(null); // Start with a default server-compatible state
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true); // Add a loading state
 
-  // Effect to update state if localStorage changes in another tab/window
   useEffect(() => {
+    // This effect runs only on the client
+    const loggedIn = localStorage.getItem(AUTH_KEY) === 'true';
+    const storedUser = localStorage.getItem(USER_KEY);
+    setIsAuthenticated(loggedIn);
+    setUser(storedUser);
+    setIsLoadingAuth(false); // Auth status loaded
+
     const handleStorageChange = (event: StorageEvent) => {
       if (event.key === AUTH_KEY) {
         setIsAuthenticated(event.newValue === 'true');
@@ -32,19 +28,12 @@ export function useAuth() {
       }
     };
 
-    if (typeof window !== 'undefined') {
-        // Set initial state again in useEffect to ensure client-side consistency
-        setIsAuthenticated(localStorage.getItem(AUTH_KEY) === 'true');
-        setUser(localStorage.getItem(USER_KEY));
-        window.addEventListener('storage', handleStorageChange);
-    }
-
+    window.addEventListener('storage', handleStorageChange);
     return () => {
-       if (typeof window !== 'undefined') {
-            window.removeEventListener('storage', handleStorageChange);
-       }
+      window.removeEventListener('storage', handleStorageChange);
     };
-  }, []);
+  }, []); // Empty dependency array, runs once on mount client-side
+
 
   const login = useCallback((username?: string, password?: string) => {
     // **INSECURE**: In a real app, verify username/password against a backend/service.
@@ -82,6 +71,6 @@ export function useAuth() {
      }
   }, []);
 
-  return { isAuthenticated, user, login, logout };
+  return { isAuthenticated, user, login, logout, isLoadingAuth }; // Return isLoadingAuth
 }
 
