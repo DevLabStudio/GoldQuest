@@ -5,17 +5,13 @@ import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface TotalNetWorthCardProps {
-  amount: number;
-  currency: string;
+  amount: number; // Changed from string to number
+  currency: string; // Expecting currency symbol like "$", "R$"
 }
 
 const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ amount, currency }) => {
-  const formattedAmount = new Intl.NumberFormat('en-US', { 
-    style: 'currency', 
-    currency: currency === '$' ? 'USD' : currency, // Assuming $ is USD
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount).replace('US$', '$'); // Remove USD prefix if present for $
+  // Format the amount directly using the provided currency symbol
+  const formattedAmount = `${currency}${amount.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   return (
     <Card className="bg-primary text-primary-foreground shadow-xl h-full flex flex-col justify-center p-4"> {/* p-6 to p-4 */}

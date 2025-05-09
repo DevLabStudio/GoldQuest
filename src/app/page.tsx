@@ -1,6 +1,7 @@
 
 'use client';
 
+import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
 import SmallStatCard from "@/components/dashboard/small-stat-card";
@@ -9,18 +10,20 @@ import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown";
 import IncomeExpensesChart from "@/components/dashboard/income-expenses-chart";
 import AssetsChart from "@/components/dashboard/assets-chart";
 import { DollarSign, TrendingUp, TrendingDown, Home, Users, Car } from "lucide-react";
+import { getAccounts, type Account } from "@/services/account-sync";
+import { getTransactions, type Transaction } from "@/services/transactions";
+import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
+import { getUserPreferences } from '@/lib/preferences';
+import { formatCurrency, convertCurrency } from '@/lib/currency';
+import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { Skeleton } from '@/components/ui/skeleton';
 
+// Dummy data for charts that are not yet connected to real data
 const incomeSourceData = [
   { source: "E-commerce", amount: 2100, fill: "hsl(var(--chart-1))" },
   { source: "Google Adsense", amount: 950, fill: "hsl(var(--chart-3))" },
   { source: "My Shop", amount: 8000, fill: "hsl(var(--chart-5))" },
   { source: "Salary", amount: 13000, fill: "hsl(var(--chart-2))" },
-];
-
-const spendingsBreakdownData = [
-  { name: "Housing", amount: 3452, icon: <Home className="h-5 w-5 text-white" />,bgColor: "bg-purple-500" }, // Icon size adjusted
-  { name: "Personal", amount: 2200, icon: <Users className="h-5 w-5 text-white" />, bgColor: "bg-pink-500" }, // Icon size adjusted
-  { name: "Transportation", amount: 2190, icon: <Car className="h-5 w-5 text-white" />, bgColor: "bg-orange-500" }, // Icon size adjusted
 ];
 
 const monthlyIncomeExpensesData = [
@@ -35,40 +38,182 @@ const monthlyIncomeExpensesData = [
   { month: "Sep", income: 19000, expenses: 10000 },
   { month: "Oct", income: 21000, expenses: 9000 },
   { month: "Nov", income: 24000, expenses: 11500 },
-  { month: "Dec", income: 20239, expenses: 20239 }, 
+  { month: "Dec", income: 20239, expenses: 20239 },
 ];
 
 const assetsData = [
-  { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" }, 
-  { name: "Stock", value: 22500, fill: "hsl(var(--chart-1))" }, 
-  { name: "Warehouse", value: 120000, fill: "hsl(var(--chart-3))" }, 
-  { name: "Land", value: 135000, fill: "hsl(var(--chart-2))" }, 
+  { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" },
+  { name: "Stock", value: 22500, fill: "hsl(var(--chart-1))" },
+  { name: "Warehouse", value: 120000, fill: "hsl(var(--chart-3))" },
+  { name: "Land", value: 135000, fill: "hsl(var(--chart-2))" },
 ];
 
 
 export default function DashboardPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+
+  useEffect(() => {
+    const fetchData = async () => {
+      if (typeof window === 'undefined') {
+        setIsLoading(false);
+        return;
+      }
+      setIsLoading(true);
+      try {
+        const prefs = getUserPreferences();
+        setPreferredCurrency(prefs.preferredCurrency);
+
+        const fetchedAccounts = await getAccounts();
+        setAccounts(fetchedAccounts);
+
+        const fetchedCategories = await getCategories();
+        setCategories(fetchedCategories);
+
+        // Fetch transactions for all accounts
+        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+        const transactionsByAccount = await Promise.all(transactionPromises);
+        const combinedTransactions = transactionsByAccount.flat();
+        setAllTransactions(combinedTransactions);
+
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  // Calculate Total Net Worth
+  const totalNetWorth = useMemo(() => {
+    if (isLoading || typeof window === 'undefined') return 0;
+    return accounts.reduce((sum, account) => {
+      return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
+    }, 0);
+  }, [accounts, preferredCurrency, isLoading]);
+
+  // Filter current month transactions
+  const currentMonthTransactions = useMemo(() => {
+    if (isLoading) return [];
+    const now = new Date();
+    const monthStart = startOfMonth(now);
+    const monthEnd = endOfMonth(now);
+    return allTransactions.filter(tx => {
+      const txDate = new Date(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+      return isWithinInterval(txDate, { start: monthStart, end: monthEnd });
+    });
+  }, [allTransactions, isLoading]);
+
+  // Calculate Monthly Income
+  const monthlyIncome = useMemo(() => {
+    if (isLoading || typeof window === 'undefined') return 0;
+    return currentMonthTransactions.reduce((sum, tx) => {
+      if (tx.amount > 0) {
+        const account = accounts.find(acc => acc.id === tx.accountId);
+        if (account) {
+          return sum + convertCurrency(tx.amount, account.currency, preferredCurrency);
+        }
+      }
+      return sum;
+    }, 0);
+  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+
+  // Calculate Monthly Expenses (as a positive number)
+  const monthlyExpenses = useMemo(() => {
+    if (isLoading || typeof window === 'undefined') return 0;
+    return currentMonthTransactions.reduce((sum, tx) => {
+      if (tx.amount < 0) {
+        const account = accounts.find(acc => acc.id === tx.accountId);
+        if (account) {
+          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+        }
+      }
+      return sum;
+    }, 0);
+  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+
+  // Generate data for SpendingsBreakdown
+  const spendingsBreakdownDataActual = useMemo(() => {
+    if (isLoading || typeof window === 'undefined') return [];
+    const expenseCategoryTotals: { [key: string]: number } = {};
+
+    currentMonthTransactions.forEach(tx => {
+      if (tx.amount < 0) { // Only expenses
+        const account = accounts.find(acc => acc.id === tx.accountId);
+        if (account) {
+          const categoryName = tx.category || 'Uncategorized';
+          const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+          expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
+        }
+      }
+    });
+
+    return Object.entries(expenseCategoryTotals)
+      .map(([name, amount]) => {
+        const { icon: CategoryIcon, color } = getCategoryStyle(name);
+        // Map the Tailwind color to a bgColor class. This is a simplification.
+        // A more robust solution would involve parsing the HSL color or having predefined bg classes.
+        const bgColor = color.startsWith('bg-') ? color.split(' ')[0] : 'bg-gray-500'; // Basic mapping
+        return {
+          name: name.charAt(0).toUpperCase() + name.slice(1),
+          amount,
+          icon: <CategoryIcon />,
+          bgColor: bgColor,
+        };
+      })
+      .sort((a, b) => b.amount - a.amount) // Sort by amount descending
+      .slice(0, 3); // Take top 3 for display
+  }, [currentMonthTransactions, accounts, categories, preferredCurrency, isLoading]);
+
+
+  if (isLoading && typeof window !== 'undefined') {
+    return (
+      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="xl:col-span-2"><Skeleton className="h-[160px] w-full" /></div>
+          <Skeleton className="h-[160px] w-full" />
+          <Skeleton className="h-[160px] w-full" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          <div className="xl:col-span-2"><Skeleton className="h-[300px] w-full" /></div>
+          <Skeleton className="h-[160px] w-full" />
+        </div>
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+          <Skeleton className="h-[350px] w-full" />
+          <Skeleton className="h-[350px] w-full" />
+        </div>
+      </div>
+    );
+  }
+
+
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      
       {/* First Row of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
-          <TotalNetWorthCard amount={278378} currency="$" />
+          <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
-        <SmallStatCard title="Spendings" amount={9228} currency="$" chartType="negative" />
-        <SpendingsBreakdown title="Spendings" data={spendingsBreakdownData} currency="$" />
+        <SmallStatCard title="Spendings" amount={monthlyExpenses} currency={getCurrencySymbol(preferredCurrency)} chartType="negative" />
+        <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={getCurrencySymbol(preferredCurrency)} />
       </div>
 
       {/* Second Row of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
+           {/* Using dummy data for IncomeSourceChart for now */}
           <IncomeSourceChart data={incomeSourceData} currency="$" />
         </div>
-        <SmallStatCard title="Income" amount={24050} currency="$" chartType="positive" />
+        <SmallStatCard title="Income" amount={monthlyIncome} currency={getCurrencySymbol(preferredCurrency)} chartType="positive" />
         {/* The 4th column in this row is empty as per the visual structure of the image */}
       </div>
 
-      {/* Third Row of Charts */}
+      {/* Third Row of Charts (Using dummy data for now) */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <IncomeExpensesChart data={monthlyIncomeExpensesData} currency="$" />
         <AssetsChart data={assetsData} currency="$" />
@@ -76,3 +221,15 @@ export default function DashboardPage() {
     </div>
   );
 }
+
+// Helper to get currency symbol - consider moving to currency.ts if used widely
+const getCurrencySymbol = (currencyCode: string): string => {
+    const upperCaseCode = currencyCode?.toUpperCase();
+    switch (upperCaseCode) {
+        case 'BRL': return 'R$';
+        case 'USD': return '$';
+        case 'EUR': return '€';
+        case 'GBP': return '£';
+        default: return upperCaseCode || '$'; // Fallback
+    }
+};
