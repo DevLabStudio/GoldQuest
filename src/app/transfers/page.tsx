@@ -1,10 +1,11 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, deleteTransaction, type Transaction, updateTransaction } from "@/services/transactions.tsx"; // Import deleteTransaction and updateTransaction
+import { getTransactions, deleteTransaction, type Transaction, updateTransaction } from "@/services/transactions"; // Import deleteTransaction and updateTransaction
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
@@ -159,7 +160,7 @@ export default function TransfersPage() {
     });
 
     return transfers.sort((a, b) => new Date(b.from.date).getTime() - new Date(a.from.date).getTime());
-  }, [allTransactions]); // Removed accounts dependency as getAccountName is used for display only
+  }, [allTransactions]);
 
    const getAccountName = (accountId: string): string => {
         return accounts.find(acc => acc.id === accountId)?.name || 'Unknown Account';
@@ -300,7 +301,7 @@ export default function TransfersPage() {
                                                 <AlertDialogFooter>
                                                   <AlertDialogCancel onClick={() => setSelectedTransactionPair(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
                                                   <AlertDialogAction onClick={handleDeleteTransferConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                    {isDeleting ? "Deleting Transfer"}
+                                                    {isDeleting ? "Deleting Transfer..." : "Delete Transfer"}
                                                   </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
@@ -335,4 +336,3 @@ export default function TransfersPage() {
     </div>
   );
 }
-
