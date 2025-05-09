@@ -199,7 +199,13 @@ export default function DashboardPage() {
         <div className="xl:col-span-2">
           <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
-        <SmallStatCard title="Spendings" amount={monthlyExpenses} currency={getCurrencySymbol(preferredCurrency)} chartType="negative" />
+        <SmallStatCard
+          title="Spendings"
+          amount={monthlyExpenses}
+          currency={getCurrencySymbol(preferredCurrency)}
+          chartType="negative"
+          href="/expenses" // Link to expenses page
+        />
         <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={getCurrencySymbol(preferredCurrency)} />
       </div>
 
@@ -209,7 +215,13 @@ export default function DashboardPage() {
            {/* Using dummy data for IncomeSourceChart for now */}
           <IncomeSourceChart data={incomeSourceData} currency="$" />
         </div>
-        <SmallStatCard title="Income" amount={monthlyIncome} currency={getCurrencySymbol(preferredCurrency)} chartType="positive" />
+        <SmallStatCard
+          title="Income"
+          amount={monthlyIncome}
+          currency={getCurrencySymbol(preferredCurrency)}
+          chartType="positive"
+          href="/revenue" // Link to revenue page
+        />
         {/* The 4th column in this row is empty as per the visual structure of the image */}
       </div>
 
@@ -233,3 +245,4 @@ const getCurrencySymbol = (currencyCode: string): string => {
         default: return upperCaseCode || '$'; // Fallback
     }
 };
+
