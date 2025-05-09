@@ -117,7 +117,7 @@ export default function TransfersPage() {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, []); // Corrected dependency array
+  }, []); 
 
     const localFetchData = async () => {
         if (typeof window === 'undefined') return;
@@ -220,7 +220,7 @@ export default function TransfersPage() {
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     try {
-      const transferAmount = Math.Abs(data.amount);
+      const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
@@ -338,7 +338,7 @@ export default function TransfersPage() {
                     const fromAccount = accounts.find(acc => acc.id === pair.from.accountId);
                     if (!fromAccount) return null;
 
-                    const formattedAmount = formatCurrency(Math.Abs(pair.from.amount), fromAccount.currency, undefined, true);
+                    const formattedAmount = formatCurrency(Math.abs(pair.from.amount), fromAccount.currency, undefined, true);
 
                     return (
                         <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
@@ -442,4 +442,3 @@ export default function TransfersPage() {
     </div>
   );
 }
-

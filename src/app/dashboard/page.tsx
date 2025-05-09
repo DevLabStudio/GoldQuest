@@ -98,7 +98,7 @@ export default function DashboardPage() {
         window.removeEventListener('storage', handleStorageChange);
       }
     };
-  }, []); // Corrected dependency array
+  }, []); 
 
   const handleRefresh = async () => {
      setIsLoading(true);
@@ -537,4 +537,3 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
-

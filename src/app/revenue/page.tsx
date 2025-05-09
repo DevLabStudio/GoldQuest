@@ -5,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, updateTransaction, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
-import { getCategories, getCategoryStyle, Category } from '@/services/categories.tsx';
-import { getTags, type Tag, getTagStyle } from '@/services/tags.tsx';
+import { getCategories, getCategoryStyle, Category } from '@/services/categories';
+import { getTags, type Tag, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
@@ -116,7 +116,7 @@ export default function RevenuePage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, []); 
 
   const incomeTransactions = useMemo(() => {
     return allTransactions.filter(tx => tx.amount > 0);
@@ -234,7 +234,7 @@ export default function RevenuePage() {
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     try {
-      const transferAmount = Math.Abs(data.amount);
+      const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
@@ -514,4 +514,3 @@ export default function RevenuePage() {
     </div>
   );
 }
-

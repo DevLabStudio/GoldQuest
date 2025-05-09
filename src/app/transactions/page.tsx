@@ -119,7 +119,7 @@ export default function TransactionsOverviewPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, []); 
 
   const spendingData = useMemo(() => {
       if (isLoading || !accounts.length || !allTransactions.length) return [];
@@ -130,7 +130,7 @@ export default function TransactionsOverviewPage() {
           if (tx.amount < 0) {
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
-                 const convertedAmount = convertCurrency(Math.Abs(tx.amount), account.currency, preferredCurrency);
+                 const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
                  const category = tx.category || 'Uncategorized';
                  categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
               }
@@ -181,7 +181,7 @@ export default function TransactionsOverviewPage() {
             return;
         }
 
-        const transactionAmount = formData.type === 'expense' ? -Math.Abs(formData.amount) : Math.Abs(formData.amount);
+        const transactionAmount = formData.type === 'expense' ? -Math.abs(formData.amount) : Math.abs(formData.amount);
 
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
@@ -256,7 +256,7 @@ export default function TransactionsOverviewPage() {
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     try {
-      const transferAmount = Math.Abs(data.amount);
+      const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
@@ -506,7 +506,7 @@ export default function TransactionsOverviewPage() {
                         initialData={{
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
                             accountId: selectedTransaction.accountId,
-                            amount: Math.Abs(selectedTransaction.amount),
+                            amount: Math.abs(selectedTransaction.amount),
                             date: selectedTransaction.date ? new Date(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,
@@ -554,4 +554,3 @@ export default function TransactionsOverviewPage() {
     </div>
   );
 }
-

@@ -113,7 +113,7 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, []); 
 
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
@@ -152,7 +152,7 @@ export default function DashboardPage() {
       if (tx.amount < 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(Math.Abs(tx.amount), account.currency, preferredCurrency);
+          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency); // Corrected Math.Abs to Math.abs
         }
       }
       return sum;
@@ -168,7 +168,7 @@ export default function DashboardPage() {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           const categoryName = tx.category || 'Uncategorized';
-          const convertedAmount = convertCurrency(Math.Abs(tx.amount), account.currency, preferredCurrency);
+          const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency); // Corrected Math.Abs to Math.abs
           expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
         }
       }
@@ -250,4 +250,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

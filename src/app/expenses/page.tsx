@@ -118,7 +118,7 @@ export default function ExpensesPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, []); 
 
   const expenseTransactions = useMemo(() => {
     return allTransactions.filter(tx => tx.amount < 0);
@@ -516,4 +516,3 @@ export default function ExpensesPage() {
     </div>
   );
 }
-
