@@ -1,12 +1,13 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, updateTransaction, deleteTransaction, type Transaction } from "@/services/transactions"; // Removed .tsx
-import { getCategories, getCategoryStyle, Category } from '@/services/categories'; // Removed .tsx
-import { getTags, type Tag, getTagStyle } from '@/services/tags'; // Removed .tsx
+import { getTransactions, updateTransaction, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
+import { getCategories, getCategoryStyle, Category } from '@/services/categories';
+import { getTags, type Tag, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
@@ -14,12 +15,12 @@ import { getUserPreferences } from '@/lib/preferences';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal } from 'lucide-react';
-import AddTransactionForm from '@/components/transactions/add-transaction-form'; // For editing
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
+import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
-import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form'; // Import form data type
+import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
 // Define the initial limit for transactions
 const INITIAL_TRANSACTION_LIMIT = 50;
@@ -38,13 +39,16 @@ const formatDate = (dateString: string): string => {
 
 export default function RevenuePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]); // State for categories
-  const [tags, setTags] = useState<Tag[]>([]); // State for tags
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
+
+  const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
+  const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
   // State for Edit/Delete Modals
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -118,19 +122,18 @@ export default function RevenuePage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); // Added toast to dependency array
+  }, [toast]);
 
   // Filter transactions to only include income (positive amounts)
   const incomeTransactions = useMemo(() => {
     return allTransactions.filter(tx => tx.amount > 0);
   }, [allTransactions]);
 
-  // Find the account for a given transaction ID
    const getAccountForTransaction = (accountId: string): Account | undefined => {
         return accounts.find(acc => acc.id === accountId);
    };
 
-    const localFetchData = async () => { // Define a local refetch for handlers
+    const localFetchData = async () => {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
@@ -148,34 +151,29 @@ export default function RevenuePage() {
         finally { setIsLoading(false); }
     };
 
-    // --- Edit and Delete Handlers ---
     const openEditDialog = (transaction: Transaction) => {
         setSelectedTransaction(transaction);
         setIsEditDialogOpen(true);
     };
 
-    // Changed parameter type to match form data for type safety
     const handleUpdateTransaction = async (formData: AddTransactionFormData) => {
-        if (!selectedTransaction) return; // Should have a selected transaction
+        if (!selectedTransaction) return;
 
-        // Ensure formData corresponds to an expense or income, not transfer
         if (formData.type === 'transfer') {
             console.error("Update handler received transfer data. This should not happen.");
             toast({ title: "Update Error", description: "Cannot update transaction type to transfer.", variant: "destructive" });
             return;
         }
 
-        // Determine amount based on type from form data
         const transactionAmount = formData.type === 'expense' ? -Math.abs(formData.amount) : Math.abs(formData.amount);
 
         const transactionToUpdate: Transaction = {
-            ...selectedTransaction, // Keep original ID, accountId etc.
-            // Apply changes from form data
+            ...selectedTransaction,
             amount: transactionAmount,
-            date: format(formData.date, 'yyyy-MM-dd'), // Format the date from form
-            description: formData.description || selectedTransaction.description, // Use new or old description
-            category: formData.category || selectedTransaction.category, // Use new or old category
-            tags: formData.tags || [], // Use new tags
+            date: format(formData.date, 'yyyy-MM-dd'),
+            description: formData.description || selectedTransaction.description,
+            category: formData.category || selectedTransaction.category,
+            tags: formData.tags || [],
         };
 
 
@@ -229,10 +227,100 @@ export default function RevenuePage() {
        }
    };
 
+  const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
+    try {
+      await addTransaction(data);
+      toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
+      await localFetchData();
+      setIsAddTransactionDialogOpen(false);
+    } catch (error: any) {
+      console.error("Failed to add transaction:", error);
+      toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
+    }
+  };
+
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+    try {
+      const transferAmount = Math.abs(data.amount);
+      const formattedDate = format(data.date, 'yyyy-MM-dd');
+      const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
+
+      await addTransaction({
+        accountId: data.fromAccountId,
+        amount: -transferAmount,
+        date: formattedDate,
+        description: desc,
+        category: 'Transfer',
+        tags: data.tags || [],
+      });
+
+      await addTransaction({
+        accountId: data.toAccountId,
+        amount: transferAmount,
+        date: formattedDate,
+        description: desc,
+        category: 'Transfer',
+        tags: data.tags || [],
+      });
+
+      toast({ title: "Success", description: "Transfer recorded successfully." });
+      await localFetchData();
+      setIsAddTransactionDialogOpen(false);
+    } catch (error: any) {
+      console.error("Failed to add transfer:", error);
+      toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
+    }
+  };
+
+  const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
+    if (accounts.length === 0) {
+        toast({
+            title: "No Accounts",
+            description: "Please add an account first before adding transactions.",
+            variant: "destructive",
+        });
+        return;
+    }
+    if (type === 'transfer' && accounts.length < 2) {
+        toast({
+            title: "Not Enough Accounts for Transfer",
+            description: "You need at least two accounts to make a transfer.",
+            variant: "destructive",
+        });
+        return;
+    }
+    setTransactionTypeToAdd(type);
+    setIsAddTransactionDialogOpen(true);
+  };
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Revenue / Income</h1>
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold">Revenue / Income</h1>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="default" size="sm">
+              <PlusCircle className="mr-2 h-4 w-4" />
+              Add New Transaction
+              <ChevronDown className="ml-2 h-4 w-4" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
+              <ArrowDownCircle className="mr-2 h-4 w-4" />
+              Add Spend
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
+              <ArrowUpCircle className="mr-2 h-4 w-4" />
+              Add Income
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
+              <TransferIcon className="mr-2 h-4 w-4" />
+              Add Transfer
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
 
        {error && (
           <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">
@@ -263,9 +351,9 @@ export default function RevenuePage() {
                   <TableHead>Account</TableHead>
                   <TableHead>Description</TableHead>
                   <TableHead>Category</TableHead>
-                  <TableHead>Tags</TableHead> {/* Added Tags Header */}
+                  <TableHead>Tags</TableHead>
                   <TableHead className="text-right">Amount ({preferredCurrency})</TableHead>
-                   <TableHead className="text-right">Actions</TableHead> {/* Actions Header */}
+                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -282,13 +370,11 @@ export default function RevenuePage() {
                             <TableCell className="text-muted-foreground">{account.name}</TableCell>
                             <TableCell>{transaction.description}</TableCell>
                             <TableCell>
-                                {/* Apply the color class here */}
                                 <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
                                     <CategoryIcon />
                                     <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
                                 </Badge>
                             </TableCell>
-                            {/* Tags Cell */}
                             <TableCell>
                                 <div className="flex flex-wrap gap-1">
                                     {transaction.tags?.map(tag => {
@@ -304,7 +390,6 @@ export default function RevenuePage() {
                             <TableCell className={`text-right font-medium text-green-500 dark:text-green-400`}>
                                 {formattedAmount}
                             </TableCell>
-                            {/* Actions Cell */}
                             <TableCell className="text-right">
                                 <DropdownMenu>
                                   <DropdownMenuTrigger asChild>
@@ -318,7 +403,6 @@ export default function RevenuePage() {
                                       <Edit className="mr-2 h-4 w-4" />
                                       <span>Edit</span>
                                     </DropdownMenuItem>
-                                     {/* Use AlertDialog for Delete Confirmation */}
                                     <AlertDialog>
                                         <AlertDialogTrigger asChild>
                                             <div
@@ -359,20 +443,15 @@ export default function RevenuePage() {
               <p className="text-muted-foreground">
                 No income transactions found yet.
               </p>
-              {/* TODO: Optional: Add a button or link to add transactions */}
             </div>
           )}
         </CardContent>
-         {/* Optional: Add button in footer to load more */}
          {!isLoading && incomeTransactions.length > 0 && (
              <CardContent className="pt-4 border-t">
-                  {/* Placeholder for Load More button */}
-                  {/* <Button variant="outline" disabled>Load More (Coming Soon)</Button> */}
              </CardContent>
          )}
       </Card>
 
-      {/* Edit Transaction Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
             setIsEditDialogOpen(open);
             if (!open) setSelectedTransaction(null);
@@ -384,19 +463,17 @@ export default function RevenuePage() {
                         Modify the details of the transaction.
                     </DialogDescription>
                 </DialogHeader>
-                {/* Pass selected transaction, accounts, categories, and tags */}
                 {selectedTransaction && accounts.length > 0 && categories.length > 0 && tags.length > 0 && (
                     <AddTransactionForm
                         accounts={accounts}
                         categories={categories}
-                        tags={tags} // Pass tags
-                        onTransactionAdded={handleUpdateTransaction} // Use the specialized update handler
+                        tags={tags}
+                        onTransactionAdded={handleUpdateTransaction}
                         isLoading={isLoading}
                         initialData={{
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
                             accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
-                            // Parse the date string into a Date object
                             date: selectedTransaction.date ? new Date(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,
@@ -413,8 +490,36 @@ export default function RevenuePage() {
             </DialogContent>
         </Dialog>
 
-      {/* Future: Could add income charts or summaries here */}
+       {/* Add Transaction Dialog */}
+       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
+        <DialogContent className="sm:max-w-[480px]">
+          <DialogHeader>
+            <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
+            <DialogDescription>
+              Enter the details for your new {transactionTypeToAdd || 'transaction'}.
+            </DialogDescription>
+          </DialogHeader>
+          {accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd && (
+            <AddTransactionForm
+              accounts={accounts}
+              categories={categories}
+              tags={tags}
+              onTransactionAdded={handleTransactionAdded}
+              onTransferAdded={handleTransferAdded}
+              isLoading={isLoading}
+              initialType={transactionTypeToAdd}
+            />
+          )}
+           {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
+               <div className="py-4 text-center text-muted-foreground">
+                 Please ensure you have at least one account, category, and tag set up before adding transactions.
+                   You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.
+               </div>
+            )}
+             {isLoading && <Skeleton className="h-40 w-full" /> }
+        </DialogContent>
+      </Dialog>
+
     </div>
   );
 }
-
