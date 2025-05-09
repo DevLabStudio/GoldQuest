@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -409,8 +410,8 @@ export default function ImportDataPage() {
         const accountCurrencyCol = confirmedMappings.accountCurrency;
         const tagsCol = confirmedMappings.tags;
         const initialBalanceCol = confirmedMappings.initialBalance;
-        const notesCol = mappings.notes;
-        const typeCol = mappings.transaction_type; // Transaction type column
+        const notesCol = confirmedMappings.notes;
+        const typeCol = confirmedMappings.transaction_type; // Transaction type column
 
         // Determine which account column(s) to use for initial account creation pass
         // Prioritize 'account', then 'source', then 'destination'
