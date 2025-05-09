@@ -20,11 +20,11 @@ interface SpendingsBreakdownProps {
 const SpendingsBreakdown: FC<SpendingsBreakdownProps> = ({ title, data, currency }) => {
   return (
     <Card className="shadow-lg bg-card text-card-foreground h-full">
-      <CardHeader className="pb-4">
-        <CardTitle className="text-base font-medium text-muted-foreground">{title}</CardTitle>
+      <CardHeader className="pb-2"> {/* Reduced pb from 4 to 2 */}
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle> {/* text-base to text-sm */}
       </CardHeader>
-      <CardContent>
-        <ul className="space-y-4">
+      <CardContent className="pt-2"> {/* Reduced pt from default p-6 (via CardContent default) or specific value to pt-2 */}
+        <ul className="space-y-3"> {/* Reduced space-y from 4 to 3 */}
           {data.map((item) => {
             const formattedAmount = new Intl.NumberFormat('en-US', {
               style: 'currency',
@@ -35,13 +35,13 @@ const SpendingsBreakdown: FC<SpendingsBreakdownProps> = ({ title, data, currency
 
             return (
               <li key={item.name} className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2.5 rounded-lg ${item.bgColor}`}>
+                <div className="flex items-center gap-2"> {/* Reduced gap from 3 to 2 */}
+                  <div className={`p-2 rounded-md ${item.bgColor}`}> {/* Reduced p from 2.5 to 2, rounded-lg to rounded-md */}
                     {item.icon}
                   </div>
-                  <span className="text-sm font-medium">{item.name}</span>
+                  <span className="text-xs font-medium">{item.name}</span> {/* text-sm to text-xs */}
                 </div>
-                <span className="text-sm font-semibold">{formattedAmount}</span>
+                <span className="text-xs font-semibold">{formattedAmount}</span> {/* text-sm to text-xs */}
               </li>
             );
           })}

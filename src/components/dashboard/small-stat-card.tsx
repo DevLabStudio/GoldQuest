@@ -35,11 +35,11 @@ const SmallStatCard: FC<SmallStatCardProps> = ({ title, amount, currency, chartT
   return (
     <Card className="shadow-lg bg-card text-card-foreground h-full">
       <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
-        <CardTitle className="text-base font-medium text-muted-foreground">{title}</CardTitle>
+        <CardTitle className="text-sm font-medium text-muted-foreground">{title}</CardTitle> {/* text-base to text-sm */}
       </CardHeader>
-      <CardContent>
-        <div className="text-3xl font-bold mb-1">{formattedAmount}</div>
-        <div className="h-16 w-full"> {/* Fixed height for the chart area */}
+      <CardContent className="pt-0 pb-2 px-4"> {/* Adjusted padding */}
+        <div className="text-2xl font-bold mb-1">{formattedAmount}</div> {/* text-3xl to text-2xl */}
+        <div className="h-12 w-full"> {/* Fixed height for the chart area, h-16 to h-12 */}
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={data} margin={{ top: 5, right: 0, left: 0, bottom: 5 }}>
               <Line

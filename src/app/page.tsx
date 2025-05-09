@@ -18,9 +18,9 @@ const incomeSourceData = [
 ];
 
 const spendingsBreakdownData = [
-  { name: "Housing", amount: 3452, icon: <Home className="h-6 w-6 text-white" />,bgColor: "bg-purple-500" },
-  { name: "Personal", amount: 2200, icon: <Users className="h-6 w-6 text-white" />, bgColor: "bg-pink-500" },
-  { name: "Transportation", amount: 2190, icon: <Car className="h-6 w-6 text-white" />, bgColor: "bg-orange-500" },
+  { name: "Housing", amount: 3452, icon: <Home className="h-5 w-5 text-white" />,bgColor: "bg-purple-500" }, // Icon size adjusted
+  { name: "Personal", amount: 2200, icon: <Users className="h-5 w-5 text-white" />, bgColor: "bg-pink-500" }, // Icon size adjusted
+  { name: "Transportation", amount: 2190, icon: <Car className="h-5 w-5 text-white" />, bgColor: "bg-orange-500" }, // Icon size adjusted
 ];
 
 const monthlyIncomeExpensesData = [
@@ -35,49 +35,41 @@ const monthlyIncomeExpensesData = [
   { month: "Sep", income: 19000, expenses: 10000 },
   { month: "Oct", income: 21000, expenses: 9000 },
   { month: "Nov", income: 24000, expenses: 11500 },
-  { month: "Dec", income: 20239, expenses: 20239 }, // Max values from image
+  { month: "Dec", income: 20239, expenses: 20239 }, 
 ];
 
 const assetsData = [
-  { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" }, // Reddish-pink
-  { name: "Stock", value: 22500, fill: "hsl(var(--chart-1))" }, // Blue
-  { name: "Warehouse", value: 120000, fill: "hsl(var(--chart-3))" }, // Purple
-  { name: "Land", value: 135000, fill: "hsl(var(--chart-2))" }, // Teal/Green
+  { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" }, 
+  { name: "Stock", value: 22500, fill: "hsl(var(--chart-1))" }, 
+  { name: "Warehouse", value: 120000, fill: "hsl(var(--chart-3))" }, 
+  { name: "Land", value: 135000, fill: "hsl(var(--chart-2))" }, 
 ];
 
 
 export default function DashboardPage() {
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      {/* Header can be added here if needed, e.g., "Dashboard" title */}
-      {/* <h1 className="text-3xl font-bold text-foreground mb-6">Dashboard</h1> */}
       
+      {/* First Row of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        {/* Row 1 */}
         <div className="xl:col-span-2">
           <TotalNetWorthCard amount={278378} currency="$" />
         </div>
         <SmallStatCard title="Spendings" amount={9228} currency="$" chartType="negative" />
         <SpendingsBreakdown title="Spendings" data={spendingsBreakdownData} currency="$" />
+      </div>
 
-        {/* Row 2 */}
+      {/* Second Row of Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
           <IncomeSourceChart data={incomeSourceData} currency="$" />
         </div>
         <SmallStatCard title="Income" amount={24050} currency="$" chartType="positive" />
-        {/* The image implies assets chart spans to this area or the small income card is shorter. 
-            For a simpler grid, I'll place assets on the next row taking more space.
-            If Assets chart needs to be here, the parent grid needs to be more complex (e.g. grid-template-areas)
-            or this row needs specific col-span adjustments for children.
-            For now, let's assume Assets chart is on its own or with Income & Expenses.
-        */}
-         <div className="xl:col-span-2"> {/* Placeholder for assets if it were here, or could be empty or another small card */}
-          {/* If assets chart were to span to the right of income source, it would be here */}
-         </div>
+        {/* The 4th column in this row is empty as per the visual structure of the image */}
       </div>
 
+      {/* Third Row of Charts */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-         {/* Row 3 */}
         <IncomeExpensesChart data={monthlyIncomeExpensesData} currency="$" />
         <AssetsChart data={assetsData} currency="$" />
       </div>
