@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -17,25 +16,29 @@ export default function PreferencesPage() {
   const { toast } = useToast();
 
   useEffect(() => {
+    let isMounted = true;
     // Load preferences client-side
     if (typeof window !== 'undefined') {
       try {
         const loadedPrefs = getUserPreferences();
-        setPreferences(loadedPrefs);
+        if (isMounted) setPreferences(loadedPrefs);
       } catch (error) {
         console.error("Failed to load preferences:", error);
-        toast({
+        if (isMounted) toast({
           title: "Error",
           description: "Could not load your preferences.",
           variant: "destructive",
         });
         // Set default preferences on error to allow UI interaction
-        setPreferences({ preferredCurrency: 'BRL' });
+        if (isMounted) setPreferences({ preferredCurrency: 'BRL' });
       } finally {
-          setIsLoading(false);
+          if (isMounted) setIsLoading(false);
       }
     } else {
-        setIsLoading(false); // Stop loading if on server
+        if (isMounted) setIsLoading(false); // Stop loading if on server
+    }
+    return () => {
+        isMounted = false;
     }
   }, [toast]);
 
@@ -55,7 +58,7 @@ export default function PreferencesPage() {
         });
          // Optional: Trigger a custom event or slightly delay then reload if absolutely necessary
          // for other components relying heavily on localStorage without listeners.
-         // window.dispatchEvent(new Event('preferencesUpdated'));
+          window.dispatchEvent(new Event('storage')); // Dispatch storage event to notify other components
       } catch (error) {
         console.error("Failed to save preferences:", error);
         toast({
@@ -123,3 +126,4 @@ export default function PreferencesPage() {
     </div>
   );
 }
+

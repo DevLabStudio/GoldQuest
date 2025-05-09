@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -24,52 +23,64 @@ export default function TagsPage() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchTags = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const fetchedTags = await getTags();
-      // Sort tags alphabetically by name for consistent display
-      fetchedTags.sort((a, b) => a.name.localeCompare(b.name));
-      setTags(fetchedTags);
-    } catch (err) {
-      console.error("Failed to fetch tags:", err);
-      setError("Could not load tags.");
-      toast({
-        title: "Error",
-        description: "Failed to load tags.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   useEffect(() => {
+    let isMounted = true;
+    const fetchTags = async () => {
+        if(isMounted) setIsLoading(true);
+        if(isMounted) setError(null);
+        try {
+            const fetchedTags = await getTags();
+            fetchedTags.sort((a, b) => a.name.localeCompare(b.name));
+            if(isMounted) setTags(fetchedTags);
+        } catch (err) {
+            console.error("Failed to fetch tags:", err);
+            if(isMounted) setError("Could not load tags.");
+            if(isMounted) toast({
+                title: "Error",
+                description: "Failed to load tags.",
+                variant: "destructive",
+            });
+        } finally {
+            if(isMounted) setIsLoading(false);
+        }
+    };
+
     fetchTags();
-    // Add storage listener
-     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.key === 'userTags') {
+
+    const handleStorageChange = (event: StorageEvent) => {
+        if (typeof window !== 'undefined' && event.key === 'userTags' && isMounted) {
             console.log("Tag storage changed, refetching...");
             fetchTags();
         }
-     };
-     if (typeof window !== 'undefined') {
-       window.addEventListener('storage', handleStorageChange);
-     }
-     return () => {
-       if (typeof window !== 'undefined') {
-         window.removeEventListener('storage', handleStorageChange);
-       }
-     };
-  }, []); // Fetch on mount and listen for storage changes
+    };
+    if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorageChange);
+    }
+    return () => {
+        isMounted = false;
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('storage', handleStorageChange);
+        }
+    };
+  }, [toast]); // Added toast to dependency array
+
+  const localFetchTags = async () => { // Local refetch function for handlers
+    setIsLoading(true); setError(null);
+    try {
+        const fetched = await getTags();
+        fetched.sort((a, b) => a.name.localeCompare(b.name));
+        setTags(fetched);
+    } catch(e) { console.error(e); setError("Could not reload tags."); toast({title: "Error", description: "Failed to reload tags.", variant: "destructive"});}
+    finally { setIsLoading(false); }
+  };
 
   // Add Tag Handler
   const handleAddTag = async (tagName: string) => {
-    setIsLoading(true); // Use isLoading for button state during add
+    setIsLoading(true);
     try {
       await addTag(tagName);
-      await fetchTags(); // Refetch after adding
+      await localFetchTags(); // Refetch after adding
       setIsAddDialogOpen(false);
       toast({
         title: "Success",
@@ -89,10 +100,10 @@ export default function TagsPage() {
 
   // Edit Tag Handler
    const handleUpdateTag = async (tagId: string, newName: string) => {
-     setIsLoading(true); // Use isLoading for button state during update
+     setIsLoading(true);
      try {
        await updateTag(tagId, newName);
-       await fetchTags(); // Refetch after updating
+       await localFetchTags(); // Refetch after updating
        setIsEditDialogOpen(false);
        setSelectedTag(null);
        toast({
@@ -114,10 +125,10 @@ export default function TagsPage() {
    // Delete Tag Handler
    const handleDeleteTagConfirm = async () => {
        if (!selectedTag) return;
-       setIsDeleting(true); // Show loading/disabled state on confirmation button
+       setIsDeleting(true);
        try {
            await deleteTag(selectedTag.id);
-           await fetchTags(); // Refetch after deleting
+           await localFetchTags(); // Refetch after deleting
            toast({
                title: "Tag Deleted",
                description: `Tag "${selectedTag.name}" removed.`,
@@ -131,7 +142,7 @@ export default function TagsPage() {
            });
        } finally {
            setIsDeleting(false);
-           setSelectedTag(null); // Close the confirmation dialog implicitly by resetting selectedTag
+           setSelectedTag(null);
        }
    };
 
@@ -314,3 +325,4 @@ export default function TagsPage() {
     </div>
   );
 }
+

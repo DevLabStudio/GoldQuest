@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -57,37 +56,63 @@ export default function DashboardPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
 
   useEffect(() => {
+    let isMounted = true;
     const fetchData = async () => {
       if (typeof window === 'undefined') {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
         return;
       }
-      setIsLoading(true);
+      if (isMounted) setIsLoading(true);
       try {
         const prefs = getUserPreferences();
-        setPreferredCurrency(prefs.preferredCurrency);
+        if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
         const fetchedAccounts = await getAccounts();
-        setAccounts(fetchedAccounts);
+        if (isMounted) setAccounts(fetchedAccounts);
 
         const fetchedCategories = await getCategories();
-        setCategories(fetchedCategories);
+        if (isMounted) setCategories(fetchedCategories);
 
         // Fetch transactions for all accounts
-        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-        const transactionsByAccount = await Promise.all(transactionPromises);
-        const combinedTransactions = transactionsByAccount.flat();
-        setAllTransactions(combinedTransactions);
+        if (fetchedAccounts.length > 0) {
+          const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+          const transactionsByAccount = await Promise.all(transactionPromises);
+          const combinedTransactions = transactionsByAccount.flat();
+          if (isMounted) setAllTransactions(combinedTransactions);
+        } else {
+           if (isMounted) setAllTransactions([]);
+        }
+
 
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
       } finally {
-        setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
     fetchData();
-  }, []);
+    // Add storage listener to refetch data if underlying data changes
+    const handleStorageChange = (event: StorageEvent) => {
+        if (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key?.startsWith('transactions-') || event.key === 'userCategories') {
+            console.log("Storage changed on main dashboard, refetching data...");
+            if (isMounted) {
+                fetchData();
+            }
+        }
+    };
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorageChange);
+    }
+
+    return () => {
+        isMounted = false;
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('storage', handleStorageChange);
+        }
+    };
+  }, []); // Empty dependency array, runs once on mount and sets up listener
 
   // Calculate Total Net Worth
   const totalNetWorth = useMemo(() => {
@@ -158,7 +183,9 @@ export default function DashboardPage() {
         const { icon: CategoryIcon, color } = getCategoryStyle(name);
         // Map the Tailwind color to a bgColor class. This is a simplification.
         // A more robust solution would involve parsing the HSL color or having predefined bg classes.
-        const bgColor = color.startsWith('bg-') ? color.split(' ')[0] : 'bg-gray-500'; // Basic mapping
+        const categoryStyle = getCategoryStyle(name);
+        const bgColor = categoryStyle.color.split(' ').find(cls => cls.startsWith('bg-')) || 'bg-gray-500 dark:bg-gray-700';
+
         return {
           name: name.charAt(0).toUpperCase() + name.slice(1),
           amount,
@@ -171,7 +198,7 @@ export default function DashboardPage() {
   }, [currentMonthTransactions, accounts, categories, preferredCurrency, isLoading]);
 
 
-  if (isLoading && typeof window !== 'undefined') {
+  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) { // More specific initial loading
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -213,7 +240,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
            {/* Using dummy data for IncomeSourceChart for now */}
-          <IncomeSourceChart data={incomeSourceData} currency="$" />
+          <IncomeSourceChart data={incomeSourceData} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
         <SmallStatCard
           title="Income"
@@ -227,8 +254,8 @@ export default function DashboardPage() {
 
       {/* Third Row of Charts (Using dummy data for now) */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <IncomeExpensesChart data={monthlyIncomeExpensesData} currency="$" />
-        <AssetsChart data={assetsData} currency="$" />
+        <IncomeExpensesChart data={monthlyIncomeExpensesData} currency={getCurrencySymbol(preferredCurrency)} />
+        <AssetsChart data={assetsData} currency={getCurrencySymbol(preferredCurrency)} />
       </div>
     </div>
   );

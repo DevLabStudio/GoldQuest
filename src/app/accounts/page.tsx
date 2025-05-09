@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -39,65 +38,78 @@ export default function AccountsPage() {
   }, []);
 
 
-  const fetchAccountsData = async () => {
-     // Client-side only check for local storage access
-     if (typeof window === 'undefined') {
-         setIsLoading(false);
-         setError("Account data can only be loaded on the client.");
-         return;
-     }
-
-    setIsLoading(true);
-    setError(null);
-    try {
-      const fetchedAccounts = await getAccounts();
-      setAllAccounts(fetchedAccounts);
-    } catch (err) {
-      console.error("Failed to fetch accounts:", err);
-      setError("Could not load accounts. Please ensure local storage is accessible and try again.");
-      toast({
-        title: "Error",
-        description: "Failed to load accounts.",
-        variant: "destructive",
-      });
-      if (typeof window !== 'undefined') {
-          localStorage.removeItem('userAccounts');
-      }
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
+    let isMounted = true;
+    const fetchAccountsData = async () => {
+        if (typeof window === 'undefined') {
+            if(isMounted) setIsLoading(false);
+            if(isMounted) setError("Account data can only be loaded on the client.");
+            return;
+        }
+
+        if(isMounted) setIsLoading(true);
+        if(isMounted) setError(null);
+        try {
+            const fetchedAccounts = await getAccounts();
+            if(isMounted) setAllAccounts(fetchedAccounts);
+        } catch (err) {
+            console.error("Failed to fetch accounts:", err);
+            if(isMounted) setError("Could not load accounts. Please ensure local storage is accessible and try again.");
+            if(isMounted) toast({
+                title: "Error",
+                description: "Failed to load accounts.",
+                variant: "destructive",
+            });
+            if (typeof window !== 'undefined') {
+                localStorage.removeItem('userAccounts');
+            }
+        } finally {
+            if(isMounted) setIsLoading(false);
+        }
+    };
+
     fetchAccountsData();
-     // Client-side only listener
-     const handleStorageChange = (event: StorageEvent) => {
+
+    const handleStorageChange = (event: StorageEvent) => {
         if (event.key === 'userAccounts' || event.key === 'userPreferences') {
             console.log("Storage changed, refetching data...");
-             if (typeof window !== 'undefined') { // Check again inside listener
-                 const prefs = getUserPreferences();
-                 setPreferredCurrency(prefs.preferredCurrency);
-             }
-             fetchAccountsData();
+            if (typeof window !== 'undefined' && isMounted) {
+                const prefs = getUserPreferences();
+                setPreferredCurrency(prefs.preferredCurrency);
+                fetchAccountsData();
+            }
         }
-     };
-     if (typeof window !== 'undefined') {
+    };
+
+    if (typeof window !== 'undefined') {
         window.addEventListener('storage', handleStorageChange);
-     }
-     return () => {
-       if (typeof window !== 'undefined') {
-         window.removeEventListener('storage', handleStorageChange);
-       }
-     };
-  }, []); // Empty dependency array runs once on mount
+    }
+
+    return () => {
+        isMounted = false;
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('storage', handleStorageChange);
+        }
+    };
+  }, [toast]); // Added toast to dependency array
 
   // Updated handler to use NewAccountData type
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
       await addAccount(newAccountData);
-      await fetchAccountsData();
-      setIsAddAssetDialogOpen(false); // Close respective dialog
-      setIsAddCryptoDialogOpen(false); // Close respective dialog
+      // Directly call fetchAccountsData defined in useEffect's scope is not ideal.
+      // Instead, set a flag or re-trigger the effect that fetches.
+      // For simplicity here, we directly call it, but this can be improved.
+      const fetchAccountsDataFromEffect = async () => {
+        if (typeof window === 'undefined') return;
+        setIsLoading(true); setError(null);
+        try { setAllAccounts(await getAccounts()); }
+        catch (err) { console.error(err); setError("Could not reload accounts."); }
+        finally { setIsLoading(false); }
+      };
+      await fetchAccountsDataFromEffect();
+      setIsAddAssetDialogOpen(false);
+      setIsAddCryptoDialogOpen(false);
       toast({
         title: "Success",
         description: `Account "${newAccountData.name}" added successfully.`,
@@ -115,7 +127,14 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      await fetchAccountsData();
+      const fetchAccountsDataFromEffect = async () => {
+        if (typeof window === 'undefined') return;
+        setIsLoading(true); setError(null);
+        try { setAllAccounts(await getAccounts()); }
+        catch (err) { console.error(err); setError("Could not reload accounts."); }
+        finally { setIsLoading(false); }
+      };
+      await fetchAccountsDataFromEffect();
       setIsEditDialogOpen(false);
       setSelectedAccount(null);
       toast({
@@ -135,7 +154,14 @@ export default function AccountsPage() {
    const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
-        await fetchAccountsData();
+        const fetchAccountsDataFromEffect = async () => {
+            if (typeof window === 'undefined') return;
+            setIsLoading(true); setError(null);
+            try { setAllAccounts(await getAccounts()); }
+            catch (err) { console.error(err); setError("Could not reload accounts."); }
+            finally { setIsLoading(false); }
+        };
+        await fetchAccountsDataFromEffect();
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,

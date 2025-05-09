@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -26,52 +25,66 @@ export default function CategoriesPage() {
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
-  const fetchCategories = async () => {
-    setIsLoading(true);
-    setError(null);
-    try {
-      const fetchedCategories = await getCategories();
-      // Sort categories alphabetically by name for consistent display
-      fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
-      setCategories(fetchedCategories);
-    } catch (err) {
-      console.error("Failed to fetch categories:", err);
-      setError("Could not load categories.");
-      toast({
-        title: "Error",
-        description: "Failed to load categories.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   useEffect(() => {
+    let isMounted = true;
+    const fetchCategories = async () => {
+        if(isMounted) setIsLoading(true);
+        if(isMounted) setError(null);
+        try {
+            const fetchedCategories = await getCategories();
+            fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
+            if(isMounted) setCategories(fetchedCategories);
+        } catch (err) {
+            console.error("Failed to fetch categories:", err);
+            if(isMounted) setError("Could not load categories.");
+            if(isMounted) toast({
+                title: "Error",
+                description: "Failed to load categories.",
+                variant: "destructive",
+            });
+        } finally {
+            if(isMounted) setIsLoading(false);
+        }
+    };
+
     fetchCategories();
-    // Add storage listener if category service uses localStorage
-     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.key === 'userCategories') {
+
+    const handleStorageChange = (event: StorageEvent) => {
+        if (typeof window !== 'undefined' && event.key === 'userCategories' && isMounted) {
             console.log("Category storage changed, refetching...");
             fetchCategories();
         }
-     };
-     if (typeof window !== 'undefined') {
-       window.addEventListener('storage', handleStorageChange);
-     }
-     return () => {
-       if (typeof window !== 'undefined') {
-         window.removeEventListener('storage', handleStorageChange);
-       }
-     };
-  }, []); // Fetch on mount and listen for storage changes
+    };
+
+    if (typeof window !== 'undefined') {
+        window.addEventListener('storage', handleStorageChange);
+    }
+
+    return () => {
+        isMounted = false;
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('storage', handleStorageChange);
+        }
+    };
+  }, [toast]); // Added toast to dependency array
 
   // Add Category Handler
   const handleAddCategory = async (categoryName: string) => {
-    setIsLoading(true); // Use isLoading for button state during add
+    setIsLoading(true);
     try {
       await addCategory(categoryName);
-      await fetchCategories(); // Refetch after adding
+      // Refetch after adding by calling the local fetch function if needed
+      const fetchCategoriesEffect = async () => {
+        setIsLoading(true); setError(null);
+        try {
+            const fetched = await getCategories();
+            fetched.sort((a, b) => a.name.localeCompare(b.name));
+            setCategories(fetched);
+        } catch (e) { console.error(e); setError("Could not reload categories.");}
+        finally { setIsLoading(false); }
+      };
+      await fetchCategoriesEffect();
       setIsAddDialogOpen(false);
       toast({
         title: "Success",
@@ -91,10 +104,19 @@ export default function CategoriesPage() {
 
   // Edit Category Handler
    const handleUpdateCategory = async (categoryId: string, newName: string) => {
-     setIsLoading(true); // Use isLoading for button state during update
+     setIsLoading(true);
      try {
        await updateCategory(categoryId, newName);
-       await fetchCategories(); // Refetch after updating
+       const fetchCategoriesEffect = async () => {
+        setIsLoading(true); setError(null);
+        try {
+            const fetched = await getCategories();
+            fetched.sort((a, b) => a.name.localeCompare(b.name));
+            setCategories(fetched);
+        } catch (e) { console.error(e); setError("Could not reload categories.");}
+        finally { setIsLoading(false); }
+      };
+      await fetchCategoriesEffect();
        setIsEditDialogOpen(false);
        setSelectedCategory(null);
        toast({
@@ -116,10 +138,19 @@ export default function CategoriesPage() {
    // Delete Category Handler
    const handleDeleteCategoryConfirm = async () => {
        if (!selectedCategory) return;
-       setIsDeleting(true); // Show loading/disabled state on confirmation button
+       setIsDeleting(true);
        try {
            await deleteCategory(selectedCategory.id);
-           await fetchCategories(); // Refetch after deleting
+           const fetchCategoriesEffect = async () => {
+            setIsLoading(true); setError(null);
+            try {
+                const fetched = await getCategories();
+                fetched.sort((a, b) => a.name.localeCompare(b.name));
+                setCategories(fetched);
+            } catch (e) { console.error(e); setError("Could not reload categories.");}
+            finally { setIsLoading(false); }
+          };
+          await fetchCategoriesEffect();
            toast({
                title: "Category Deleted",
                description: `Category "${selectedCategory.name}" removed.`,
@@ -133,7 +164,7 @@ export default function CategoriesPage() {
            });
        } finally {
            setIsDeleting(false);
-           setSelectedCategory(null); // Close the confirmation dialog implicitly by resetting selectedCategory
+           setSelectedCategory(null);
        }
    };
 
@@ -316,3 +347,4 @@ export default function CategoriesPage() {
     </div>
   );
 }
+

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -56,79 +55,75 @@ export default function TransactionsOverviewPage() {
   const [isDeleting, setIsDeleting] = useState(false);
 
 
-   const fetchData = async () => {
-       if (typeof window === 'undefined') {
-           setIsLoading(false);
-           setError("Transaction data can only be loaded on the client.");
-           return;
-       }
-
-      setIsLoading(true);
-      setError(null);
-      try {
-        // 1. Get Preferences
-        const prefs = getUserPreferences();
-        setPreferredCurrency(prefs.preferredCurrency);
-
-        // 2. Fetch Accounts
-        const fetchedAccounts = await getAccounts();
-        setAccounts(fetchedAccounts);
-
-         // 3. Fetch Categories
-        const fetchedCategories = await getCategories();
-        setCategories(fetchedCategories);
-
-        // 4. Fetch Tags
-        const fetchedTags = await getTags();
-        setTags(fetchedTags);
-
-        // 5. Fetch Transactions for *all* accounts with a limit
-        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
-        const transactionsByAccount = await Promise.all(transactionPromises);
-        const combinedTransactions = transactionsByAccount.flat();
-
-        // Sort transactions by date (newest first)
-        combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-         setAllTransactions(combinedTransactions);
-
-      } catch (err) {
-        console.error("Failed to fetch transaction data:", err);
-        setError("Could not load transaction data. Please try again later.");
-          toast({
-            title: "Error",
-            description: "Failed to load required data.",
-            variant: "destructive",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
   // Fetch data on mount and listen for storage changes
   useEffect(() => {
     let isMounted = true;
+    const fetchData = async () => {
+        if (typeof window === 'undefined') {
+            if(isMounted) setIsLoading(false);
+            if(isMounted) setError("Transaction data can only be loaded on the client.");
+            return;
+        }
+
+        if(isMounted) setIsLoading(true);
+        if(isMounted) setError(null);
+        try {
+            const prefs = getUserPreferences();
+            if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
+
+            const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
+                getAccounts(),
+                getCategories(),
+                getTags()
+            ]);
+
+            if(isMounted) setAccounts(fetchedAccounts);
+            if(isMounted) setCategories(fetchedCategories);
+            if(isMounted) setTags(fetchedTags);
+
+            if (fetchedAccounts.length > 0) {
+                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                const transactionsByAccount = await Promise.all(transactionPromises);
+                const combinedTransactions = transactionsByAccount.flat();
+                combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                if(isMounted) setAllTransactions(combinedTransactions);
+            } else {
+                if(isMounted) setAllTransactions([]);
+            }
+
+        } catch (err) {
+            console.error("Failed to fetch transaction data:", err);
+            if(isMounted) setError("Could not load transaction data. Please try again later.");
+            if(isMounted) toast({
+                title: "Error",
+                description: "Failed to load required data.",
+                variant: "destructive",
+            });
+        } finally {
+            if(isMounted) setIsLoading(false);
+        }
+    };
+
     fetchData();
 
-     const handleStorageChange = (event: StorageEvent) => {
-         // Check for accounts, preferences, categories, or tags changes
-         if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags'].includes(event.key || '')) {
-             console.log("Storage changed, refetching transaction overview data...");
-             if (isMounted) fetchData(); // Refetch all data on change
-         }
-     };
-     if (typeof window !== 'undefined') {
+    const handleStorageChange = (event: StorageEvent) => {
+        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key)) && isMounted) {
+            console.log("Storage changed, refetching transaction overview data...");
+            fetchData();
+        }
+    };
+
+    if (typeof window !== 'undefined') {
         window.addEventListener('storage', handleStorageChange);
-     }
+    }
 
-     return () => {
-         isMounted = false;
-         if (typeof window !== 'undefined') {
+    return () => {
+        isMounted = false;
+        if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
-         }
-     }
-
-  }, []); // Empty dependency array ensures this runs once on mount and handles storage changes
+        }
+    };
+  }, [toast]); // Added toast to dependency array
 
   // Calculate spending data for the chart (convert to preferred currency)
   // Spending chart might need all transactions, consider fetching them separately or accepting the limit
@@ -160,6 +155,25 @@ export default function TransactionsOverviewPage() {
    const getAccountForTransaction = (accountId: string): Account | undefined => {
         return accounts.find(acc => acc.id === accountId);
    };
+
+    const localFetchData = async () => { // Define a local refetch for handlers
+        if (typeof window === 'undefined') return;
+        setIsLoading(true); setError(null);
+        try {
+            const prefs = getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
+            const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
+            setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
+            if (fetchedAccounts.length > 0) {
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT }));
+                const txsByAcc = await Promise.all(tPromises);
+                const combinedTxs = txsByAcc.flat();
+                combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setAllTransactions(combinedTxs);
+            } else { setAllTransactions([]); }
+        } catch (e) { console.error(e); setError("Could not reload transaction data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
+        finally { setIsLoading(false); }
+    };
+
 
    // --- Edit and Delete Handlers ---
     const openEditDialog = (transaction: Transaction) => {
@@ -193,7 +207,7 @@ export default function TransactionsOverviewPage() {
         setIsLoading(true);
         try {
             await updateTransaction(transactionToUpdate);
-            await fetchData();
+            await localFetchData();
             setIsEditDialogOpen(false);
             setSelectedTransaction(null);
             toast({
@@ -222,7 +236,7 @@ export default function TransactionsOverviewPage() {
        setIsDeleting(true);
        try {
            await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-           await fetchData();
+           await localFetchData();
            toast({
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
@@ -455,3 +469,4 @@ export default function TransactionsOverviewPage() {
     </div>
   );
 }
+

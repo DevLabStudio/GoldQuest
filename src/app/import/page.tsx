@@ -184,11 +184,16 @@ export default function ImportDataPage() {
   const [isClearing, setIsClearing] = useState(false); // State for clearing confirmation
   const { toast } = useToast();
 
-  // Fetch accounts, categories, and tags on mount
-  const fetchData = async () => {
-        if (typeof window === 'undefined') return;
-        setIsLoading(true);
-        setError(null);
+
+  useEffect(() => {
+    let isMounted = true;
+    const fetchData = async () => {
+        if (typeof window === 'undefined') {
+            if (isMounted) setIsLoading(false);
+            return;
+        }
+        if (isMounted) setIsLoading(true);
+        if (isMounted) setError(null);
         try {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
                 getAccounts(),
@@ -196,39 +201,46 @@ export default function ImportDataPage() {
                 getTags()
             ]);
 
-            setAccounts(fetchedAccounts); // Update state
-            setCategories(fetchedCategories);
-            setTags(fetchedTags);
+            if (isMounted) {
+                setAccounts(fetchedAccounts);
+                setCategories(fetchedCategories);
+                setTags(fetchedTags);
+            }
             console.log("Initial data fetched for import:", { numAccounts: fetchedAccounts.length, numCategories: fetchedCategories.length, numTags: fetchedTags.length });
 
         } catch (err) {
             console.error("Failed to fetch initial data for import:", err);
-            setError("Could not load accounts, categories, or tags.");
-            toast({ title: "Initialization Error", description: "Failed to load data.", variant: "destructive" });
+            if (isMounted) {
+                setError("Could not load accounts, categories, or tags.");
+                toast({ title: "Initialization Error", description: "Failed to load data.", variant: "destructive" });
+            }
         } finally {
-            setIsLoading(false);
+            if (isMounted) setIsLoading(false);
         }
-   };
+    };
 
-  useEffect(() => {
     fetchData();
 
-     // Add listener for storage changes
-     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userCategories' || event.key === 'userTags')) {
-            console.log("Storage changed, refetching initial data for import...");
-            fetchData(); // Refetch accounts, categories, tags
+    const handleStorageChange = (event: StorageEvent) => {
+        if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key === 'userTags')) {
+            if (isMounted) {
+                console.log("Storage changed, refetching initial data for import...");
+                fetchData();
+            }
         }
-     };
-     if (typeof window !== 'undefined') {
+    };
+
+    if (typeof window !== 'undefined') {
         window.addEventListener('storage', handleStorageChange);
-     }
-     return () => {
-       if (typeof window !== 'undefined') {
-         window.removeEventListener('storage', handleStorageChange);
-       }
-     };
-  }, [toast]); // Include toast in dependency array as it's used in fetchData's catch block
+    }
+
+    return () => {
+        isMounted = false;
+        if (typeof window !== 'undefined') {
+            window.removeEventListener('storage', handleStorageChange);
+        }
+    };
+  }, [toast]); // toast is a dependency
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -397,8 +409,8 @@ export default function ImportDataPage() {
         const accountCurrencyCol = confirmedMappings.accountCurrency;
         const tagsCol = confirmedMappings.tags;
         const initialBalanceCol = confirmedMappings.initialBalance;
-        const notesCol = confirmedMappings.notes;
-        const typeCol = confirmedMappings.transaction_type; // Transaction type column
+        const notesCol = mappings.notes;
+        const typeCol = mappings.transaction_type; // Transaction type column
 
         // Determine which account column(s) to use for initial account creation pass
         // Prioritize 'account', then 'source', then 'destination'
@@ -734,16 +746,16 @@ export default function ImportDataPage() {
     const previewAccountChanges = async (
         csvData: CsvRecord[],
         mappings: ColumnMapping, // Pass full mappings
-        existingAccounts: Account[] // Pass existing accounts
+        existingAccountsParam: Account[] // Pass existing accounts (renamed to avoid conflict)
     ): Promise<{ preview: AccountPreview[] }> => {
         const preview: AccountPreview[] = [];
         const processedAccountNames = new Set<string>(); // Track processed names
 
         // Map to store details for accounts found in the CSV (normalizedName -> details)
-        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccounts); // Pass mappings
+        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccountsParam); // Pass mappings
 
         accountUpdates.forEach((accDetails, normalizedName) => {
-            const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+            const existingAccount = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
             let action: AccountPreview['action'] = 'no change';
             let initialBalance: number | undefined = undefined;
 
@@ -784,7 +796,7 @@ export default function ImportDataPage() {
         });
 
         // Optionally add existing accounts that weren't mentioned in the CSV
-        existingAccounts.forEach(acc => {
+        existingAccountsParam.forEach(acc => {
             if (!processedAccountNames.has(acc.name.toLowerCase())) {
                 preview.push({
                     name: acc.name,
@@ -808,7 +820,7 @@ export default function ImportDataPage() {
     const buildAccountUpdateMap = async (
         csvData: CsvRecord[],
         mappings: ColumnMapping, // Pass full mappings
-        existingAccounts: Account[] // Pass existing accounts to avoid re-fetching
+        existingAccountsParam: Account[] // Pass existing accounts to avoid re-fetching (renamed)
     ): Promise<Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>> => {
         const accountUpdates = new Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
 
@@ -853,7 +865,7 @@ export default function ImportDataPage() {
 
                  // Initialize details if needed (first time seeing this account)
                  if (!details) {
-                     const existingAcc = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+                     const existingAcc = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
                      // Infer category based on name (basic)
                      const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
                      details = {
@@ -931,7 +943,7 @@ export default function ImportDataPage() {
 
                      // Initialize if not seen before (even in opening balance pass)
                      if (!details) {
-                         const existingAcc = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+                         const existingAcc = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
                          const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
                           details = {
                               name: name,
@@ -986,18 +998,18 @@ export default function ImportDataPage() {
     const createOrUpdateAccountsAndGetMap = async (
         csvData: CsvRecord[],
         mappings: ColumnMapping, // Pass all mappings
-        existingAccounts: Account[], // Pass current accounts
+        existingAccountsParam: Account[], // Pass current accounts (renamed)
         isPreviewOnly: boolean = false // Flag to prevent actual creation/update if true
     ): Promise<{ success: boolean; map: { [key: string]: string } }> => {
         let success = true;
         // Initialize the working map with existing accounts
-        const workingMap = existingAccounts.reduce((map, acc) => {
+        const workingMap = existingAccountsParam.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
              return map;
         }, {} as { [key: string]: string });
 
         // Build the map of required account changes based on the CSV
-        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccounts);
+        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccountsParam);
 
         if (accountUpdates.size === 0 && !isPreviewOnly) {
             console.log("No account updates needed.");
@@ -1009,7 +1021,7 @@ export default function ImportDataPage() {
 
         // Process account creations/updates
         for (const [normalizedName, accDetails] of accountUpdates.entries()) {
-            const existingAccount = existingAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
+            const existingAccount = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
             try {
                 if (isPreviewOnly) {
                     // For preview, just populate the map based on what *would* happen
@@ -1235,16 +1247,16 @@ export default function ImportDataPage() {
       setImportProgress(0);
       setError(null); // Clear previous errors
       let overallError = false;
-      let latestAccounts: Account[] = []; // Variable to hold accounts after creation/update
+      let latestAccountsState: Account[] = [...accounts]; // Use current state as initial
 
        // --- Crucial Step: Create/Update Accounts and get FINAL map ---
         console.log("Finalizing account creation/updates before import...");
         try {
-            latestAccounts = await getAccounts(); // Fetch current accounts
+            // latestAccountsState is already up-to-date from the useEffect or previous operations
             const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
-                rawData, // Pass ALL raw data to ensure all accounts (even those with only opening balances) are processed
+                rawData, // Pass ALL raw data to ensure all accounts are processed
                 columnMappings, // Pass confirmed mappings
-                latestAccounts, // Pass current accounts
+                latestAccountsState, // Pass current accounts state
                 false // Set to false to actually perform creation/update
             );
 
@@ -1257,8 +1269,8 @@ export default function ImportDataPage() {
             console.log("Using FINAL account map for import execution:", finalMap);
 
             // Refresh accounts state in UI *after* creation/update step
-            latestAccounts = await getAccounts(); // Fetch again to get the absolute latest state
-            setAccounts(latestAccounts); // Update the component's account state
+            latestAccountsState = await getAccounts(); // Fetch again to get the absolute latest state
+            setAccounts(latestAccountsState); // Update the component's account state
 
         } catch (finalAccountMapError) {
             console.error("Error during account preparation phase:", finalAccountMapError);
@@ -1288,8 +1300,8 @@ export default function ImportDataPage() {
 
       // Fetch current categories and tags *after* potential additions
       console.log("Fetching latest categories and tags before import...");
-      let currentCategories = await getCategories();
-      let currentTags = await getTags();
+      let currentCategoriesList = await getCategories(); // Renamed to avoid conflict
+      let currentTagsList = await getTags(); // Renamed to avoid conflict
 
 
       const totalToImport = recordsToImport.length;
@@ -1326,7 +1338,7 @@ export default function ImportDataPage() {
           try {
                const categoryName = item.category?.trim() || 'Uncategorized';
                // Use the fetched currentCategories list
-               const foundCategory = currentCategories.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
+               const foundCategory = currentCategoriesList.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
                // If category wasn't found after attempting to add, default to Uncategorized
                const finalCategoryName = foundCategory ? foundCategory.name : 'Uncategorized';
                if (categoryName !== 'Uncategorized' && !foundCategory && categoryName !== 'Transfer' && categoryName !== 'Initial Balance') {
@@ -1336,7 +1348,7 @@ export default function ImportDataPage() {
                // Use the fetched currentTags list
                const finalTags = item.tags?.map(importedTagName => {
                    const trimmedTagName = importedTagName.trim();
-                   const foundTag = currentTags.find(t => t.name.toLowerCase() === trimmedTagName.toLowerCase());
+                   const foundTag = currentTagsList.find(t => t.name.toLowerCase() === trimmedTagName.toLowerCase());
                    // If tag wasn't found after adding, keep original (should have been added) - or discard? For now, keep.
                     if (!foundTag && trimmedTagName) console.warn(`Row ${rowNumber}: Tag "${trimmedTagName}" not found after add attempt.`);
                    return foundTag ? foundTag.name : trimmedTagName;
@@ -1731,7 +1743,7 @@ export default function ImportDataPage() {
                             {columnMappings.account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.account!]}>{item.originalRecord[columnMappings.account!]}</TableCell>}
                             {columnMappings.source_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.source_account!]}>{item.originalRecord[columnMappings.source_account!]}</TableCell>}
                             {columnMappings.destination_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.destination_account!]}>{item.originalRecord[columnMappings.destination_account!]}</TableCell>}
-                            {columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>} {/* Show Type */}
+                             {columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>} {/* Show Type */}
 
                             {/* Parsed Details */}
                             {columnMappings.description && <TableCell className="max-w-[200px] truncate" title={item.description}>{item.description}</TableCell>}
@@ -1778,3 +1790,4 @@ export default function ImportDataPage() {
     </div>
   );
 }
+

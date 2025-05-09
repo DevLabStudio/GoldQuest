@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -38,67 +37,111 @@ export default function DashboardPage() {
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
 
-  const fetchData = async () => {
-    if (typeof window === 'undefined') {
-      setIsLoading(false);
-      return;
-    }
-    setIsLoading(true);
-    try {
-      const prefs = getUserPreferences();
-      setPreferredCurrency(prefs.preferredCurrency);
-
-      const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
-        getAccounts(),
-        getCategories(),
-        getTags()
-      ]);
-      setAccounts(fetchedAccounts);
-      setCategories(fetchedCategories);
-      setTags(fetchedTagsList);
-
-
-      // Fetch transactions for all accounts
-      if (fetchedAccounts.length > 0) {
-        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-        const transactionsByAccount = await Promise.all(transactionPromises);
-        const combinedTransactions = transactionsByAccount.flat();
-        setAllTransactions(combinedTransactions);
-      } else {
-        setAllTransactions([]);
-      }
-
-
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Failed to fetch dashboard data:", error);
-      toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
-     // Client-side only listener
-     const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key === 'userTags' || event.key?.startsWith('transactions-')) {
-            console.log("Storage changed in dashboard, refetching data...");
-            fetchData();
+    let isMounted = true;
+
+    const fetchData = async () => {
+      if (typeof window === 'undefined') {
+        if(isMounted) setIsLoading(false);
+        return;
+      }
+      if(isMounted) setIsLoading(true);
+      try {
+        const prefs = getUserPreferences();
+        if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
+
+        const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
+          getAccounts(),
+          getCategories(),
+          getTags()
+        ]);
+        if(isMounted) setAccounts(fetchedAccounts);
+        if(isMounted) setCategories(fetchedCategories);
+        if(isMounted) setTags(fetchedTagsList);
+
+        if (fetchedAccounts.length > 0) {
+          const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+          const transactionsByAccount = await Promise.all(transactionPromises);
+          const combinedTransactions = transactionsByAccount.flat();
+          if(isMounted) setAllTransactions(combinedTransactions);
+        } else {
+          if(isMounted) setAllTransactions([]);
         }
-     };
-     if (typeof window !== 'undefined') {
-        window.addEventListener('storage', handleStorageChange);
-     }
-     return () => {
-       if (typeof window !== 'undefined') {
-         window.removeEventListener('storage', handleStorageChange);
-       }
-     };
-  }, []);
+
+        if(isMounted) setLastUpdated(new Date());
+      } catch (error) {
+        console.error("Failed to fetch dashboard data:", error);
+        if(isMounted) toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+      } finally {
+        if(isMounted) setIsLoading(false);
+      }
+    };
+
+    fetchData();
+
+    const handleStorageChange = (event: StorageEvent) => {
+      if (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key === 'userTags' || event.key?.startsWith('transactions-')) {
+          console.log("Storage changed in dashboard, refetching data...");
+          if (isMounted) {
+              fetchData();
+          }
+      }
+    };
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('storage', handleStorageChange);
+    }
+
+    return () => {
+      isMounted = false;
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('storage', handleStorageChange);
+      }
+    };
+  }, [toast]); // toast is a dependency of fetchData
 
   const handleRefresh = () => {
-    fetchData();
+     // Create a local fetchData function to avoid depending on the one in useEffect's closure
+     const refreshData = async () => {
+        if (typeof window === 'undefined') {
+          setIsLoading(false);
+          return;
+        }
+        setIsLoading(true);
+        try {
+          const prefs = getUserPreferences();
+          setPreferredCurrency(prefs.preferredCurrency);
+
+          const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
+            getAccounts(),
+            getCategories(),
+            getTags()
+          ]);
+          setAccounts(fetchedAccounts);
+          setCategories(fetchedCategories);
+          setTags(fetchedTagsList);
+
+
+          // Fetch transactions for all accounts
+          if (fetchedAccounts.length > 0) {
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+            const transactionsByAccount = await Promise.all(transactionPromises);
+            const combinedTransactions = transactionsByAccount.flat();
+            setAllTransactions(combinedTransactions);
+          } else {
+            setAllTransactions([]);
+          }
+
+
+          setLastUpdated(new Date());
+        } catch (error) {
+          console.error("Failed to fetch dashboard data:", error);
+          toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+    refreshData();
   };
 
   const formatLastUpdated = (date: Date | null) => {
@@ -229,7 +272,7 @@ export default function DashboardPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await fetchData(); // Refresh dashboard data
+      handleRefresh(); // Refresh dashboard data
       setIsAddTransactionDialogOpen(false);
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
@@ -264,7 +307,7 @@ export default function DashboardPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      await fetchData(); // Refresh dashboard data
+      handleRefresh(); // Refresh dashboard data
       setIsAddTransactionDialogOpen(false);
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
@@ -512,3 +555,4 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
+

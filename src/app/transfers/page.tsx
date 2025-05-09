@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, deleteTransaction, type Transaction } from "@/services/transactions.tsx"; // Import deleteTransaction
+import { getTransactions, deleteTransaction, type Transaction, updateTransaction } from "@/services/transactions.tsx"; // Import deleteTransaction and updateTransaction
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
@@ -15,6 +14,8 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
+// import AddTransactionForm from '@/components/transactions/add-transaction-form'; // Potentially for editing transfers
+// import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
 // Define the initial limit for transactions
 const INITIAL_TRANSACTION_LIMIT = 50;
@@ -39,9 +40,10 @@ export default function TransfersPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
 
-  // State for Delete Confirmation (Edit might need more complex handling for transfers)
+  // State for Edit/Delete Modals
   const [selectedTransactionPair, setSelectedTransactionPair] = useState<Transaction[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  // const [isEditDialogOpen, setIsEditDialogOpen] = useState(false); // For future edit functionality
 
 
   // Fetch data on mount and listen for storage changes
@@ -66,18 +68,21 @@ export default function TransfersPage() {
         if (isMounted) setAccounts(fetchedAccounts);
 
         // Fetch transactions with limit
-        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 })); // Fetch more to increase chance of finding pairs
-        const transactionsByAccount = await Promise.all(transactionPromises);
-        const combinedTransactions = transactionsByAccount.flat();
+        if (fetchedAccounts.length > 0) {
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 })); // Fetch more to increase chance of finding pairs
+            const transactionsByAccount = await Promise.all(transactionPromises);
+            const combinedTransactions = transactionsByAccount.flat();
+            combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            if (isMounted) setAllTransactions(combinedTransactions);
+        } else {
+            if(isMounted) setAllTransactions([]);
+        }
 
-        combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-
-        if (isMounted) setAllTransactions(combinedTransactions);
 
       } catch (err) {
         console.error("Failed to fetch transfer data:", err);
         if (isMounted) setError("Could not load transfer data. Please try again later.");
-        toast({ title: "Error", description: "Failed to load data.", variant: "destructive" });
+        if (isMounted) toast({ title: "Error", description: "Failed to load data.", variant: "destructive" });
       } finally {
         if (isMounted) setIsLoading(false);
       }
@@ -86,9 +91,9 @@ export default function TransfersPage() {
     fetchData();
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories')) {
+         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key?.startsWith('transactions-')) && isMounted ) {
              console.log("Storage changed, refetching transfer data...");
-             if (isMounted) fetchData();
+             fetchData();
          }
      };
      if (typeof window !== 'undefined') {
@@ -100,9 +105,26 @@ export default function TransfersPage() {
          if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
          }
-     }
+     };
+  }, [toast]);
 
-  }, [toast]); // Added toast to dependency array
+    const localFetchData = async () => { // Define a local refetch for handlers
+        if (typeof window === 'undefined') return;
+        setIsLoading(true); setError(null);
+        try {
+            const prefs = getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
+            const fetchedAccounts = await getAccounts(); setAccounts(fetchedAccounts);
+            if (fetchedAccounts.length > 0) {
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 }));
+                const txsByAcc = await Promise.all(tPromises);
+                const combinedTxs = txsByAcc.flat();
+                combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+                setAllTransactions(combinedTxs);
+            } else { setAllTransactions([]); }
+        } catch (e) { console.error(e); setError("Could not reload transfer data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
+        finally { setIsLoading(false); }
+    };
+
 
   // Find pairs of transfer transactions (simple matching by description and inverse amount)
   // This is a basic approach and might be fragile. A dedicated transfer ID would be better.
@@ -137,7 +159,7 @@ export default function TransfersPage() {
     });
 
     return transfers.sort((a, b) => new Date(b.from.date).getTime() - new Date(a.from.date).getTime());
-  }, [allTransactions, accounts]);
+  }, [allTransactions]); // Removed accounts dependency as getAccountName is used for display only
 
    const getAccountName = (accountId: string): string => {
         return accounts.find(acc => acc.id === accountId)?.name || 'Unknown Account';
@@ -167,7 +189,7 @@ export default function TransfersPage() {
                 deleteTransaction(selectedTransactionPair[1].id, selectedTransactionPair[1].accountId)
             ]);
              // Refetch data after deletion
-             await fetchData(); // Call fetchData to refresh the list
+             await localFetchData(); // Call localFetchData to refresh the list
              toast({
                 title: "Transfer Deleted",
                 description: `Transfer record removed successfully.`,
@@ -224,7 +246,7 @@ export default function TransfersPage() {
               </TableHeader>
               <TableBody>
                 {transferTransactionPairs.map((pair) => {
-                    const fromAccount = getAccountForTransaction(pair.from.accountId);
+                    const fromAccount = accounts.find(acc => acc.id === pair.from.accountId); // Find account for currency
                     if (!fromAccount) return null; // Should have accounts if transactions exist
 
                     // Amount is positive, representing the transferred value
@@ -278,7 +300,7 @@ export default function TransfersPage() {
                                                 <AlertDialogFooter>
                                                   <AlertDialogCancel onClick={() => setSelectedTransactionPair(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
                                                   <AlertDialogAction onClick={handleDeleteTransferConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                    {isDeleting ? "Deleting..." : "Delete Transfer"}
+                                                    {isDeleting ? "Deleting Transfer"}
                                                   </AlertDialogAction>
                                                 </AlertDialogFooter>
                                             </AlertDialogContent>
@@ -313,3 +335,4 @@ export default function TransfersPage() {
     </div>
   );
 }
+
