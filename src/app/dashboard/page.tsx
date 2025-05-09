@@ -302,9 +302,11 @@ export default function DashboardPage() {
   return (
     <TooltipProvider>
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
+        <div className="mb-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
-           <div className="flex items-center gap-2 mt-4 sm:mt-0">
+        </div>
+
+        <div className="flex items-center gap-2 mb-6">
             <Button variant="outline" size="sm" onClick={() => openAddDialog('expense')}>
                 <ArrowDownCircle className="mr-2 h-4 w-4" />
                 Add Spend
@@ -317,7 +319,6 @@ export default function DashboardPage() {
                 <TransferIcon className="mr-2 h-4 w-4" />
                 Add Transfer
             </Button>
-          </div>
         </div>
 
         <Card>
@@ -487,12 +488,13 @@ export default function DashboardPage() {
               initialType={transactionTypeToAdd}
             />
           )}
-           {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && (
+           {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
                <div className="py-4 text-center text-muted-foreground">
                  Please ensure you have at least one account, category, and tag set up before adding transactions.
                    You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.
                </div>
             )}
+             {isLoading && <Skeleton className="h-40 w-full" /> }
         </DialogContent>
       </Dialog>
     </TooltipProvider>
