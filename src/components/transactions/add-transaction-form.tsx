@@ -67,7 +67,7 @@ const formSchema = z.discriminatedUnion('type', [
 });
 
 
-type AddTransactionFormData = z.infer<typeof formSchema>;
+export type AddTransactionFormData = z.infer<typeof formSchema>;
 
 interface AddTransactionFormProps {
   accounts: Account[];
@@ -104,7 +104,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     defaultValues: initialData ? {
         ...initialData,
         // Ensure date is a Date object
-        date: initialData.date ? (typeof initialData.date === 'string' ? new Date(initialData.date + 'T00:00:00Z') : initialData.date) : new Date(), // Ensure UTC for date string
+        date: initialData.date ? (typeof initialData.date === 'string' ? new Date(initialData.date.includes('T') ? initialData.date : initialData.date + 'T00:00:00Z') : initialData.date) : new Date(),
         tags: initialData.tags || [], // Use initial tags or empty array
     } : {
       type: initialType,
@@ -142,23 +142,18 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
 
   async function onSubmit(values: AddTransactionFormData) {
-    // Extract tags - assuming Textarea input for simplicity now
-    // In a real app, use a multi-select component that returns string[]
-    const finalTags = values.tags || []; // Use tags array directly from form state
+    const finalTags = values.tags || []; 
 
     if (values.type === 'transfer') {
-      // Handle transfer
       if (onTransferAdded) {
         await onTransferAdded({
             fromAccountId: values.fromAccountId,
             toAccountId: values.toAccountId,
-            amount: values.amount, // Already positive
+            amount: values.amount, 
             date: values.date,
             description: values.description || `Transfer to ${accounts.find(a=>a.id === values.toAccountId)?.name || 'account'}`,
-            tags: finalTags, // Pass tags to transfer function
+            tags: finalTags, 
         });
-         console.log("Transfer data:", { ...values, tags: finalTags });
-         // TODO: Implement transfer logic (add two transactions)
       } else {
         console.warn("onTransferAdded callback not provided.");
          toast({
@@ -168,25 +163,24 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
          });
       }
     } else {
-      // Handle expense or income
       const transactionAmount = values.type === 'expense' ? -Math.abs(values.amount) : Math.abs(values.amount);
       const transactionData: Omit<Transaction, 'id'> | Transaction = {
+        // If initialData (editing), preserve the ID
+        ...(initialData && (initialData as Transaction).id && { id: (initialData as Transaction).id }),
         accountId: values.accountId,
         amount: transactionAmount,
-        date: format(values.date, 'yyyy-MM-dd'), // Format date to string
-        description: values.description || values.category, // Use category if description empty
+        date: format(values.date, 'yyyy-MM-dd'), 
+        description: values.description || values.category, 
         category: values.category,
-        tags: finalTags, // Pass the final tags array
+        tags: finalTags, 
       };
       await onTransactionAdded(transactionData);
-       console.log("Expense/Income data submitted:", transactionData);
     }
   }
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-         {/* Transaction Type Selector (Disabled if editing) */}
          <FormField
           control={form.control}
           name="type"
@@ -196,7 +190,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
               <Select
                   onValueChange={field.onChange}
                   defaultValue={field.value}
-                  disabled={!!initialData} // Disable if editing
+                  disabled={!!initialData} 
               >
                 <FormControl>
                   <SelectTrigger>
@@ -214,10 +208,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
           )}
         />
 
-        {/* Conditional Fields based on Type */}
         {transactionType === 'transfer' ? (
           <>
-            {/* Transfer Specific Fields */}
             <div className="grid grid-cols-2 gap-4">
                <FormField
                 control={form.control}
@@ -268,13 +260,12 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 )}
               />
             </div>
-             {/* Amount Field for Transfer */}
+            <div className="grid grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="amount"
                 render={({ field }) => (
                   <FormItem>
-                    {/* Label indicates currency of the 'From' account */}
                     <FormLabel>Amount ({getCurrencySymbol(fromAccountCurrency)})</FormLabel>
                     <FormControl>
                       <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''}/>
@@ -283,10 +274,51 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                   </FormItem>
                 )}
               />
+              <FormField
+                control={form.control}
+                name="date"
+                render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel>Date</FormLabel>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <FormControl>
+                          <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full pl-3 text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                          >
+                            {field.value ? (
+                              format(field.value, "PPP")
+                            ) : (
+                              <span>Pick a date</span>
+                            )}
+                            <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                          </Button>
+                        </FormControl>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-auto p-0" align="start">
+                        <Calendar
+                          mode="single"
+                          selected={field.value}
+                          onSelect={field.onChange}
+                          disabled={(date) =>
+                            date > new Date() || date < new Date("1900-01-01")
+                          }
+                          initialFocus
+                        />
+                      </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            </div>
           </>
         ) : (
            <>
-             {/* Expense/Income Specific Fields */}
               <FormField
                 control={form.control}
                 name="accountId"
@@ -311,7 +343,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                   </FormItem>
                 )}
               />
-              {/* Amount Field for Expense/Income */}
+              <div className="grid grid-cols-2 gap-4">
                 <FormField
                     control={form.control}
                     name="amount"
@@ -319,14 +351,54 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     <FormItem>
                         <FormLabel>Amount ({getCurrencySymbol(selectedAccountCurrency)})</FormLabel>
                         <FormControl>
-                        {/* Handle potential undefined value on initial load/edit */}
                         <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''} />
                         </FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
                 />
-               {/* Category Field (Required for Expense/Income) */}
+                <FormField
+                  control={form.control}
+                  name="date"
+                  render={({ field }) => (
+                    <FormItem className="flex flex-col">
+                      <FormLabel>Date</FormLabel>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Button
+                              variant={"outline"}
+                              className={cn(
+                                "w-full pl-3 text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                              )}
+                            >
+                              {field.value ? (
+                                format(field.value, "PPP")
+                              ) : (
+                                <span>Pick a date</span>
+                              )}
+                              <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                            </Button>
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            mode="single"
+                            selected={field.value}
+                            onSelect={field.onChange}
+                            disabled={(date) =>
+                              date > new Date() || date < new Date("1900-01-01")
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+              </div>
                <FormField
                 control={form.control}
                 name="category"
@@ -341,13 +413,12 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         </FormControl>
                         <SelectContent>
                         {categories
-                            .sort((a, b) => a.name.localeCompare(b.name)) // Sort categories alphabetically
+                            .sort((a, b) => a.name.localeCompare(b.name)) 
                             .map((cat) => (
                             <SelectItem key={cat.id} value={cat.name}>
                                 {cat.name}
                             </SelectItem>
                         ))}
-                        {/* Option to add a new category could go here */}
                         </SelectContent>
                     </Select>
                     <FormMessage />
@@ -356,49 +427,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 />
            </>
         )}
-
-         {/* Common Fields: Date, Description, Tags */}
-          <FormField
-          control={form.control}
-          name="date"
-          render={({ field }) => (
-            <FormItem className="flex flex-col">
-              <FormLabel>Date</FormLabel>
-              <Popover>
-                <PopoverTrigger asChild>
-                  <FormControl>
-                    <Button
-                      variant={"outline"}
-                      className={cn(
-                        "w-full pl-3 text-left font-normal",
-                        !field.value && "text-muted-foreground"
-                      )}
-                    >
-                      {field.value ? (
-                        format(field.value, "PPP")
-                      ) : (
-                        <span>Pick a date</span>
-                      )}
-                      <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                    </Button>
-                  </FormControl>
-                </PopoverTrigger>
-                <PopoverContent className="w-auto p-0" align="start">
-                  <Calendar
-                    mode="single"
-                    selected={field.value}
-                    onSelect={field.onChange}
-                    disabled={(date) =>
-                      date > new Date() || date < new Date("1900-01-01")
-                    }
-                    initialFocus
-                  />
-                </PopoverContent>
-              </Popover>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
 
         <FormField
           control={form.control}
@@ -409,9 +437,9 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
               <FormControl>
                 <Textarea
                   placeholder="Add a note or description..."
-                  className="resize-none" // Optional: prevent resizing
+                  className="resize-none" 
                   {...field}
-                  value={field.value || ''} // Handle potential undefined value
+                  value={field.value || ''} 
                 />
               </FormControl>
               <FormMessage />
@@ -419,26 +447,23 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
           )}
         />
 
-       {/* Tags Input Field (Using Textarea for simplicity, replace with multi-select later) */}
          <FormField
             control={form.control}
-            name="tags" // The field name should match the schema
+            name="tags" 
             render={({ field }) => (
                 <FormItem>
                 <FormLabel>Tags (Optional)</FormLabel>
-                 {/* For editing, display existing tags. For adding, it's an empty array. */}
-                 {/* We use Controller to manage the transformation between string[] and string */}
                  <Controller
                       name="tags"
                       control={form.control}
-                      defaultValue={initialData?.tags || []} // Use initial data if available
+                      defaultValue={initialData?.tags || []} 
                       render={({ field: controllerField }) => (
                           <FormControl>
                               <Textarea
                                 placeholder="Enter tags separated by commas (e.g., work, project-x)"
                                 className="resize-none"
-                                value={controllerField.value?.join(', ') || ''} // Convert array to comma-separated string for display
-                                onChange={(e) => controllerField.onChange(parseTagsInput(e.target.value))} // Parse input string back to array
+                                value={controllerField.value?.join(', ') || ''} 
+                                onChange={(e) => controllerField.onChange(parseTagsInput(e.target.value))} 
                               />
                           </FormControl>
                       )}
