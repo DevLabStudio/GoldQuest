@@ -556,9 +556,9 @@ export default function ImportDataPage() {
               let isOpeningBalance = false;
 
               // Check for "Saldo inicial para:" pattern first
-              const initialBalanceMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
-               if (initialBalanceMatch) {
-                   const accountNameFromDesc = initialBalanceMatch[1].trim();
+              const initialBalanceDescMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
+               if (initialBalanceDescMatch) {
+                   const accountNameFromDesc = initialBalanceDescMatch[1].trim();
                    const accountNameLower = accountNameFromDesc.toLowerCase();
                    primaryAccountId = tempAccountMap[accountNameLower];
                     if (!primaryAccountId) {
@@ -839,14 +839,14 @@ export default function ImportDataPage() {
             const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
             const descValue = descCol ? record[descCol]?.trim() : undefined;
             const descLower = descValue?.toLowerCase();
-            const initialBalanceMatch = descLower?.match(/^saldo inicial para:\s*(.+)$/);
+            const initialBalanceDescMatch = descLower?.match(/^saldo inicial para:\s*(.+)$/);
 
             let isOpening = false;
             let accountNameForBalance: string | undefined = undefined;
 
-            if (initialBalanceMatch) {
+            if (initialBalanceDescMatch) {
                 // Prioritize "Saldo inicial para:" description
-                accountNameForBalance = initialBalanceMatch[1].trim();
+                accountNameForBalance = initialBalanceDescMatch[1].trim();
                 isOpening = true;
                 console.log(`Row ${index + 2}: Found 'Saldo inicial para:' description for account "${accountNameForBalance}".`);
             } else if (typeValue === 'opening balance') {
@@ -1661,7 +1661,7 @@ export default function ImportDataPage() {
 
         <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
             {/* Increase max width for the mapping dialog */}
-            <DialogContent className="sm:max-w-2xl">
+            <DialogContent className="sm:max-w-3xl">
                 <DialogHeader>
                     <DialogTitle>Step 2: Map CSV Columns</DialogTitle>
                     <DialogDescription>

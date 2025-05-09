@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState } from 'react';
@@ -100,7 +101,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4 py-4 max-h-[70vh] overflow-y-auto pr-2">
+    <form onSubmit={handleSubmit} className="space-y-6 py-4 max-h-[70vh] overflow-y-auto pr-2">
        {error && (
             <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
@@ -110,7 +111,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
         )}
 
       {APP_FIELDS.map(appField => (
-        <div key={appField.value} className="grid grid-cols-2 items-center gap-x-4 gap-y-1">
+        <div key={appField.value} className="grid grid-cols-2 items-center gap-x-4 gap-y-2">
           <div className="flex flex-col">
              <Label htmlFor={`map-${appField.value}`}>
                 {appField.label}
