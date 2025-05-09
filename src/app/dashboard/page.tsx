@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -321,7 +320,7 @@ export default function DashboardPage() {
                 />
               ) : (
                 <div className="flex h-full items-center justify-center text-muted-foreground">
-                  No portfolio data to display.
+                  No portfolio data to display. Add accounts to see your composition.
                 </div>
               )}
             </CardContent>
@@ -344,3 +343,4 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
+
