@@ -6,8 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, updateTransaction, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
-import { getCategories, getCategoryStyle, Category } from '@/services/categories';
-import { getTags, type Tag, getTagStyle } from '@/services/tags';
+import { getCategories, getCategoryStyle, Category } from '@/services/categories.tsx';
+import { getTags, type Tag, getTagStyle } from '@/services/tags.tsx';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
@@ -39,7 +39,7 @@ const formatDate = (dateString: string): string => {
 
 export default function RevenuePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>(([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -149,7 +149,7 @@ export default function RevenuePage() {
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
                 setAllTransactions(combinedTxs);
             } else { setAllTransactions([]); }
-        } catch (e) { console.error(e); setError("Could not reload revenue data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
+        } catch (e: any) { console.error(e); setError("Could not reload revenue data."); toast({title: "Error", description: e.message || "Failed to reload data.", variant: "destructive"});}
         finally { setIsLoading(false); }
     };
 
