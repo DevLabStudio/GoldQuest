@@ -1249,12 +1249,14 @@ export default function ImportDataPage() {
       setError(null); // Clear previous errors
       let overallError = false;
       let latestAccountsState: Account[] = [...accounts]; // Use current state as initial
+      let localFinalAccountMap: { [key: string]: string } = {}; // Use this local map for the import loop
+
 
        // --- Crucial Step: Create/Update Accounts and get FINAL map ---
         console.log("Finalizing account creation/updates before import...");
         try {
             // latestAccountsState is already up-to-date from the useEffect or previous operations
-            const { success: finalAccountMapSuccess, map: finalMap } = await createOrUpdateAccountsAndGetMap(
+            const { success: finalAccountMapSuccess, map: finalMapFromAccountCreation } = await createOrUpdateAccountsAndGetMap(
                 rawData, // Pass ALL raw data to ensure all accounts are processed
                 columnMappings, // Pass confirmed mappings
                 latestAccountsState, // Pass current accounts state
@@ -1266,8 +1268,9 @@ export default function ImportDataPage() {
                 setIsLoading(false);
                 return;
             }
-            setFinalAccountMapForImport(finalMap); // Save the final map to state for use in transaction loop
-            console.log("Using FINAL account map for import execution:", finalMap);
+            localFinalAccountMap = finalMapFromAccountCreation; // Use this directly for the loop
+            setFinalAccountMapForImport(finalMapFromAccountCreation); // Also update state for other potential uses
+            console.log("Using local FINAL account map for import execution:", localFinalAccountMap);
 
             // Refresh accounts state in UI *after* creation/update step
             latestAccountsState = await getAccounts(); // Fetch again to get the absolute latest state
@@ -1365,11 +1368,11 @@ export default function ImportDataPage() {
                 if (sourceName && destName) { // Explicit transfer based on Firefly columns
                      const sourceNameLower = sourceName.toLowerCase();
                      const destNameLower = destName.toLowerCase();
-                     const sourceId = finalAccountMapForImport[sourceNameLower]; // Use the FINAL map
-                     const destId = finalAccountMapForImport[destNameLower]; // Use the FINAL map
+                     const sourceId = localFinalAccountMap[sourceNameLower]; // Use the LOCAL map
+                     const destId = localFinalAccountMap[destNameLower]; // Use the LOCAL map
 
-                     if (!sourceId) throw new Error(`Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
-                     if (!destId) throw new Error(`Transfer Import Error - Could not find final destination account ID for "${destName}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
+                     if (!sourceId) throw new Error(`Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(localFinalAccountMap)}`);
+                     if (!destId) throw new Error(`Transfer Import Error - Could not find final destination account ID for "${destName}". Map: ${JSON.stringify(localFinalAccountMap)}`);
                      if (sourceId === destId) throw new Error(`Transfer Import Error - Source and destination accounts are the same ("${sourceName}").`);
 
 
@@ -1418,10 +1421,10 @@ export default function ImportDataPage() {
                          throw new Error(`Row ${rowNumber}: Could not determine account name for transaction.`);
                      }
 
-                     const accountIdForImport = finalAccountMapForImport[accountNameForTx.toLowerCase()]; // Use the FINAL map
+                     const accountIdForImport = localFinalAccountMap[accountNameForTx.toLowerCase()]; // Use the LOCAL map
 
                      if (!accountIdForImport) {
-                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
+                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(localFinalAccountMap)}`);
                      }
                      if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_') || accountIdForImport.startsWith('preview_')) {
                          throw new Error(`Invalid account ID reference ('${accountIdForImport}') for import.`);
@@ -1750,6 +1753,7 @@ export default function ImportDataPage() {
                                 const accountName = finalAccountId.replace('preview_create_', '');
                                 finalAccountId = finalAccountMapForImport[accountName] || finalAccountId;
                             } else {
+                                // Use finalAccountMapForImport (the state variable) here if appropriate, or ensure the temp map is accurate
                                 finalAccountId = finalAccountMapForImport[finalAccountId.toLowerCase()] || finalAccountId;
                             }
                        }
