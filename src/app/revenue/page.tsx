@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -22,15 +21,12 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
-// Define the initial limit for transactions (can be removed if fetching all)
-// const INITIAL_TRANSACTION_LIMIT = 50;
 
-// Helper function to format date
 const formatDate = (dateString: string): string => {
     try {
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return format(date, 'PP'); // Use a user-friendly format like 'Jul 15, 2024'
+        return format(date, 'PP'); 
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -50,13 +46,11 @@ export default function RevenuePage() {
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
-  // State for Edit/Delete Modals
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
 
-  // Fetch data on mount and listen for storage changes
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
@@ -66,8 +60,8 @@ export default function RevenuePage() {
             return;
         }
 
-        if (isMounted) setIsLoading(true);
-        if (isMounted) setError(null);
+        if(isMounted) setIsLoading(true);
+        if(isMounted) setError(null);
         try {
             const prefs = getUserPreferences();
             if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
@@ -78,12 +72,11 @@ export default function RevenuePage() {
                 getTags()
             ]);
 
-            if (isMounted) setAccounts(fetchedAccounts);
-            if (isMounted) setCategories(fetchedCategories);
-            if (isMounted) setTags(fetchedTags);
+            if(isMounted) setAccounts(fetchedAccounts);
+            if(isMounted) setCategories(fetchedCategories);
+            if(isMounted) setTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
-                 // Fetch ALL transactions for each account
                 const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
@@ -123,9 +116,8 @@ export default function RevenuePage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]);
+  }, []); // Corrected dependency array
 
-  // Filter transactions to only include income (positive amounts)
   const incomeTransactions = useMemo(() => {
     return allTransactions.filter(tx => tx.amount > 0);
   }, [allTransactions]);
@@ -142,7 +134,6 @@ export default function RevenuePage() {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                // Fetch ALL transactions for each account
                 const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
@@ -243,7 +234,7 @@ export default function RevenuePage() {
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     try {
-      const transferAmount = Math.abs(data.amount);
+      const transferAmount = Math.Abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
@@ -330,7 +321,6 @@ export default function RevenuePage() {
           </div>
        )}
 
-      {/* Income Transactions Table */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Income Transactions</CardTitle>
@@ -339,7 +329,7 @@ export default function RevenuePage() {
            </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading && incomeTransactions.length === 0 ? ( // Show skeleton only on initial load
+          {isLoading && incomeTransactions.length === 0 ? ( 
             <div className="space-y-2">
               {[...Array(5)].map((_, i) => (
                   <Skeleton key={i} className="h-12 w-full" />
@@ -364,7 +354,7 @@ export default function RevenuePage() {
                     if (!account) return null;
 
                     const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                    const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true); // Convert to preferred
+                    const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true); 
 
                     return (
                         <TableRow key={transaction.id} className="hover:bg-muted/50">
@@ -492,7 +482,6 @@ export default function RevenuePage() {
             </DialogContent>
         </Dialog>
 
-       {/* Add Transaction Dialog */}
        <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>

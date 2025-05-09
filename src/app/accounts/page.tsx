@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
-import { PlusCircle, Edit, Trash2, MoreHorizontal, Check, Wallet } from "lucide-react"; // Added Wallet icon
+import { PlusCircle, Edit, Trash2, MoreHorizontal, Wallet } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import AddAccountForm from '@/components/accounts/add-account-form';
-import AddCryptoForm from '@/components/accounts/add-crypto-form'; // Import the new crypto form
+import AddCryptoForm from '@/components/accounts/add-crypto-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
@@ -23,7 +24,7 @@ export default function AccountsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isAddAssetDialogOpen, setIsAddAssetDialogOpen] = useState(false);
-  const [isAddCryptoDialogOpen, setIsAddCryptoDialogOpen] = useState(false); // State for crypto dialog
+  const [isAddCryptoDialogOpen, setIsAddCryptoDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const { toast } = useToast();
@@ -91,23 +92,20 @@ export default function AccountsPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); // Added toast to dependency array
+  }, []); // Corrected dependency array
 
-  // Updated handler to use NewAccountData type
+  const localFetchAccountsData = async () => {
+    if (typeof window === 'undefined') return;
+    setIsLoading(true); setError(null);
+    try { setAllAccounts(await getAccounts()); }
+    catch (err) { console.error(err); setError("Could not reload accounts."); }
+    finally { setIsLoading(false); }
+  }
+
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
       await addAccount(newAccountData);
-      // Directly call fetchAccountsData defined in useEffect's scope is not ideal.
-      // Instead, set a flag or re-trigger the effect that fetches.
-      // For simplicity here, we directly call it, but this can be improved.
-      const fetchAccountsDataFromEffect = async () => {
-        if (typeof window === 'undefined') return;
-        setIsLoading(true); setError(null);
-        try { setAllAccounts(await getAccounts()); }
-        catch (err) { console.error(err); setError("Could not reload accounts."); }
-        finally { setIsLoading(false); }
-      };
-      await fetchAccountsDataFromEffect();
+      await localFetchAccountsData();
       setIsAddAssetDialogOpen(false);
       setIsAddCryptoDialogOpen(false);
       toast({
@@ -127,14 +125,7 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      const fetchAccountsDataFromEffect = async () => {
-        if (typeof window === 'undefined') return;
-        setIsLoading(true); setError(null);
-        try { setAllAccounts(await getAccounts()); }
-        catch (err) { console.error(err); setError("Could not reload accounts."); }
-        finally { setIsLoading(false); }
-      };
-      await fetchAccountsDataFromEffect();
+      await localFetchAccountsData();
       setIsEditDialogOpen(false);
       setSelectedAccount(null);
       toast({
@@ -154,14 +145,7 @@ export default function AccountsPage() {
    const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
-        const fetchAccountsDataFromEffect = async () => {
-            if (typeof window === 'undefined') return;
-            setIsLoading(true); setError(null);
-            try { setAllAccounts(await getAccounts()); }
-            catch (err) { console.error(err); setError("Could not reload accounts."); }
-            finally { setIsLoading(false); }
-        };
-        await fetchAccountsDataFromEffect();
+        await localFetchAccountsData();
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,
@@ -181,26 +165,25 @@ export default function AccountsPage() {
     setIsEditDialogOpen(true);
   };
 
-  // Filter accounts by category
   const assetAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'asset'), [allAccounts]);
   const cryptoAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'crypto'), [allAccounts]);
 
 
-  // Reusable Table Component
-  const AccountTable = ({ accounts, title, category, onAddClick, isAddDialogOpen, onOpenChange, AddFormComponent }: {
+  interface AccountTableProps {
       accounts: Account[];
       title: string;
       category: 'asset' | 'crypto';
       onAddClick: () => void;
       isAddDialogOpen: boolean;
       onOpenChange: (open: boolean) => void;
-      AddFormComponent: React.FC<{ onAccountAdded: (data: NewAccountData) => void }>;
-  }) => (
-    <Card className="mb-8"> {/* Add margin between tables */}
+      AddFormComponent: FC<{ onAccountAdded: (data: NewAccountData) => void }>;
+  }
+  
+  const AccountTable: FC<AccountTableProps> = ({ accounts, title, category, onAddClick, isAddDialogOpen, onOpenChange, AddFormComponent }) => (
+    <Card className="mb-8"> 
       <CardHeader>
          <div className="flex justify-between items-center">
             <CardTitle>{title}</CardTitle>
-            {/* Add Account Dialog Trigger for this table */}
              <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
                <DialogTrigger asChild>
                  <Button variant="default" size="sm">
@@ -225,7 +208,7 @@ export default function AccountsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead> {/* Dynamic Header */}
+              <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead> 
               <TableHead>Current balance</TableHead>
               <TableHead>Last activity</TableHead>
               <TableHead>Balance difference</TableHead>
@@ -234,7 +217,7 @@ export default function AccountsPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              [...Array(2)].map((_, i) => ( // Fewer skeleton rows per table
+              [...Array(2)].map((_, i) => ( 
                 <TableRow key={`skeleton-${category}-${i}`}>
                   <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
@@ -248,14 +231,12 @@ export default function AccountsPage() {
               accounts.map((account) => (
                 <TableRow key={account.id} className="hover:bg-muted/50">
                   <TableCell className="font-medium">{account.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell> {/* Use providerName */}
+                  <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell> 
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-semibold text-primary">
-                         {/* Display original balance */}
                         {formatCurrency(account.balance, account.currency, undefined, false)}
                       </span>
-                      {/* Conditionally display converted balance */}
                       {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                         <span className="text-xs text-muted-foreground mt-1">
                             (≈ {formatCurrency(account.balance, account.currency, undefined, true)})
@@ -320,7 +301,6 @@ export default function AccountsPage() {
           </TableBody>
         </Table>
       </CardContent>
-      {/* Optional: Add button at the bottom if needed and accounts exist */}
         {!isLoading && accounts.length > 0 && (
           <CardContent className="pt-4 border-t">
               <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
@@ -348,9 +328,7 @@ export default function AccountsPage() {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
-         {/* Keep the main page title simple or remove if table titles are enough */}
          <h1 className="text-3xl font-bold">Accounts Management</h1>
-         {/* Buttons for adding accounts are now within each table's header */}
       </div>
 
         {error && (
@@ -359,10 +337,9 @@ export default function AccountsPage() {
           </div>
        )}
 
-       {/* Asset Accounts Table */}
         <AccountTable
             accounts={assetAccounts}
-            title="Property (Asset Accounts)" // Updated Title
+            title="Property (Asset Accounts)" 
             category="asset"
             onAddClick={() => setIsAddAssetDialogOpen(true)}
             isAddDialogOpen={isAddAssetDialogOpen}
@@ -370,19 +347,17 @@ export default function AccountsPage() {
             AddFormComponent={AddAccountForm}
         />
 
-       {/* Crypto Accounts Table */}
         <AccountTable
             accounts={cryptoAccounts}
-            title="Self-Custody (Crypto Accounts)" // New Title
+            title="Self-Custody (Crypto Accounts)" 
             category="crypto"
             onAddClick={() => setIsAddCryptoDialogOpen(true)}
             isAddDialogOpen={isAddCryptoDialogOpen}
             onOpenChange={setIsAddCryptoDialogOpen}
-            AddFormComponent={AddCryptoForm} // Use the new Crypto Form
+            AddFormComponent={AddCryptoForm} 
         />
 
 
-       {/* Edit Account Dialog (Common for both types) */}
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
           if (!open) setSelectedAccount(null);
@@ -394,7 +369,6 @@ export default function AccountsPage() {
                       Modify the details of your account.
                   </DialogDescription>
               </DialogHeader>
-              {/* Pass the selected account (could be asset or crypto) to the edit form */}
               {selectedAccount && (
                   <EditAccountForm
                       account={selectedAccount}

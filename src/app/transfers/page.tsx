@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -6,8 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, deleteTransaction, type Transaction, updateTransaction, addTransaction } from "@/services/transactions";
-import { getCategories, Category } from '@/services/categories'; // Import categories for AddTransactionForm
-import { getTags, Tag } from '@/services/tags'; // Import tags for AddTransactionForm
+import { getCategories, Category } from '@/services/categories'; 
+import { getTags, Tag } from '@/services/tags'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
@@ -19,12 +18,10 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
-// import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
-// Define the initial limit for transactions
+
 const INITIAL_TRANSACTION_LIMIT = 50;
 
-// Helper function to format date
 const formatDate = (dateString: string): string => {
     try {
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
@@ -49,12 +46,10 @@ export default function TransfersPage() {
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
-  // State for Edit/Delete Modals
   const [selectedTransactionPair, setSelectedTransactionPair] = useState<Transaction[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
 
-  // Fetch data on mount and listen for storage changes
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
@@ -84,7 +79,6 @@ export default function TransfersPage() {
         }
 
 
-        // Fetch transactions with limit
         if (fetchedAccounts.length > 0) {
             const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 }));
             const transactionsByAccount = await Promise.all(transactionPromises);
@@ -123,7 +117,7 @@ export default function TransfersPage() {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, [toast]);
+  }, []); // Corrected dependency array
 
     const localFetchData = async () => {
         if (typeof window === 'undefined') return;
@@ -226,7 +220,7 @@ export default function TransfersPage() {
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     try {
-      const transferAmount = Math.abs(data.amount);
+      const transferAmount = Math.Abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
@@ -344,7 +338,7 @@ export default function TransfersPage() {
                     const fromAccount = accounts.find(acc => acc.id === pair.from.accountId);
                     if (!fromAccount) return null;
 
-                    const formattedAmount = formatCurrency(Math.abs(pair.from.amount), fromAccount.currency, undefined, true);
+                    const formattedAmount = formatCurrency(Math.Abs(pair.from.amount), fromAccount.currency, undefined, true);
 
                     return (
                         <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
@@ -417,7 +411,6 @@ export default function TransfersPage() {
          )}
       </Card>
 
-      {/* Add Transaction Dialog */}
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
@@ -449,3 +442,4 @@ export default function TransfersPage() {
     </div>
   );
 }
+

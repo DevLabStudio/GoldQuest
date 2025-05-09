@@ -17,7 +17,6 @@ export default function PreferencesPage() {
 
   useEffect(() => {
     let isMounted = true;
-    // Load preferences client-side
     if (typeof window !== 'undefined') {
       try {
         const loadedPrefs = getUserPreferences();
@@ -29,18 +28,17 @@ export default function PreferencesPage() {
           description: "Could not load your preferences.",
           variant: "destructive",
         });
-        // Set default preferences on error to allow UI interaction
         if (isMounted) setPreferences({ preferredCurrency: 'BRL' });
       } finally {
           if (isMounted) setIsLoading(false);
       }
     } else {
-        if (isMounted) setIsLoading(false); // Stop loading if on server
+        if (isMounted) setIsLoading(false); 
     }
     return () => {
         isMounted = false;
     }
-  }, [toast]);
+  }, []); // Corrected dependency array
 
   const handleCurrencyChange = (newCurrency: string) => {
     if (preferences) {
@@ -56,9 +54,7 @@ export default function PreferencesPage() {
           title: "Preferences Saved",
           description: "Your preferences have been updated successfully.",
         });
-         // Optional: Trigger a custom event or slightly delay then reload if absolutely necessary
-         // for other components relying heavily on localStorage without listeners.
-          window.dispatchEvent(new Event('storage')); // Dispatch storage event to notify other components
+          window.dispatchEvent(new Event('storage')); 
       } catch (error) {
         console.error("Failed to save preferences:", error);
         toast({
@@ -114,7 +110,6 @@ export default function PreferencesPage() {
                 </p>
               </div>
 
-              {/* Add more preference options here later */}
 
               <Button onClick={handleSaveChanges}>Save Changes</Button>
             </>

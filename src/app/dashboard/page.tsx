@@ -98,51 +98,39 @@ export default function DashboardPage() {
         window.removeEventListener('storage', handleStorageChange);
       }
     };
-  }, [toast]); // toast is a dependency of fetchData
+  }, []); // Corrected dependency array
 
-  const handleRefresh = () => {
-     // Create a local fetchData function to avoid depending on the one in useEffect's closure
-     const refreshData = async () => {
-        if (typeof window === 'undefined') {
-          setIsLoading(false);
-          return;
-        }
-        setIsLoading(true);
-        try {
-          const prefs = getUserPreferences();
-          setPreferredCurrency(prefs.preferredCurrency);
+  const handleRefresh = async () => {
+     setIsLoading(true);
+     try {
+       const prefs = getUserPreferences();
+       setPreferredCurrency(prefs.preferredCurrency);
 
-          const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
-            getAccounts(),
-            getCategories(),
-            getTags()
-          ]);
-          setAccounts(fetchedAccounts);
-          setCategories(fetchedCategories);
-          setTags(fetchedTagsList);
+       const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
+         getAccounts(),
+         getCategories(),
+         getTags()
+       ]);
+       setAccounts(fetchedAccounts);
+       setCategories(fetchedCategories);
+       setTags(fetchedTagsList);
 
-
-          // Fetch transactions for all accounts
-          if (fetchedAccounts.length > 0) {
-            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-            const transactionsByAccount = await Promise.all(transactionPromises);
-            const combinedTransactions = transactionsByAccount.flat();
-            setAllTransactions(combinedTransactions);
-          } else {
-            setAllTransactions([]);
-          }
-
-
-          setLastUpdated(new Date());
-        } catch (error) {
-          console.error("Failed to fetch dashboard data:", error);
-          toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
-        } finally {
-          setIsLoading(false);
-        }
-      };
-    refreshData();
-  };
+       if (fetchedAccounts.length > 0) {
+         const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+         const transactionsByAccount = await Promise.all(transactionPromises);
+         const combinedTransactions = transactionsByAccount.flat();
+         setAllTransactions(combinedTransactions);
+       } else {
+         setAllTransactions([]);
+       }
+       setLastUpdated(new Date());
+     } catch (error) {
+       console.error("Failed to fetch dashboard data:", error);
+       toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+     } finally {
+       setIsLoading(false);
+     }
+   };
 
   const formatLastUpdated = (date: Date | null) => {
     if (!date) return "Updating...";
@@ -154,7 +142,6 @@ export default function DashboardPage() {
     return `Updated ${diffMinutes} mins ago`;
   };
 
-  // --- KPI Calculations ---
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return accounts.reduce((sum, account) => {
@@ -192,7 +179,6 @@ export default function DashboardPage() {
       if (tx.amount < 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          // Summing absolute values, display will handle sign
           return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
         }
       }
@@ -203,7 +189,7 @@ export default function DashboardPage() {
   const totalAssetsValue = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return accounts.reduce((sum, account) => {
-      if (account.balance >= 0) { // Considering accounts with positive balance as assets
+      if (account.balance >= 0) { 
         return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
       }
       return sum;
@@ -213,7 +199,7 @@ export default function DashboardPage() {
   const totalLiabilitiesValue = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return accounts.reduce((sum, account) => {
-      if (account.balance < 0) { // Considering accounts with negative balance as liabilities
+      if (account.balance < 0) { 
         return sum + convertCurrency(Math.abs(account.balance), account.currency, preferredCurrency);
       }
       return sum;
@@ -246,7 +232,6 @@ export default function DashboardPage() {
     return data;
   }, [accounts, preferredCurrency, isLoading]);
 
-  // --- Transaction Dialog Handlers ---
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
     if (accounts.length === 0) {
         toast({
@@ -272,7 +257,7 @@ export default function DashboardPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      handleRefresh(); // Refresh dashboard data
+      await handleRefresh(); 
       setIsAddTransactionDialogOpen(false);
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
@@ -286,17 +271,15 @@ export default function DashboardPage() {
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
-      // Create outgoing transaction
       await addTransaction({
         accountId: data.fromAccountId,
         amount: -transferAmount,
         date: formattedDate,
         description: desc,
-        category: 'Transfer', // Standard category for transfers
+        category: 'Transfer', 
         tags: data.tags || [],
       });
 
-      // Create incoming transaction
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
@@ -307,7 +290,7 @@ export default function DashboardPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      handleRefresh(); // Refresh dashboard data
+      await handleRefresh(); 
       setIsAddTransactionDialogOpen(false);
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
@@ -449,16 +432,16 @@ export default function DashboardPage() {
             title="Monthly Income"
             value={formatCurrency(monthlyIncome, preferredCurrency, undefined, false)}
             tooltip="Total income received this month."
-            icon={<TrendingUp className="text-green-500" />} // Keep explicit Tailwind color for icon
-            valueClassName="text-green-600 dark:text-green-500" // Keep explicit Tailwind color for value
+            icon={<TrendingUp className="text-green-500" />} 
+            valueClassName="text-green-600 dark:text-green-500" 
             href="/revenue"
           />
           <KpiCard
             title="Monthly Expenses"
             value={formatCurrency(monthlyExpenses, preferredCurrency, undefined, false)}
             tooltip="Total expenses this month."
-            icon={<TrendingDown className="text-red-500" />} // Keep explicit Tailwind color for icon
-            valueClassName="text-red-600 dark:text-red-500" // Keep explicit Tailwind color for value
+            icon={<TrendingDown className="text-red-500" />} 
+            valueClassName="text-red-600 dark:text-red-500" 
             href="/expenses"
           />
         </div>
@@ -523,7 +506,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Add Transaction Dialog */}
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -23,15 +22,11 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
 
-// Define the initial limit for transactions (can be removed if fetching all)
-// const INITIAL_TRANSACTION_LIMIT = 50;
-
-// Helper function to format date (consistent with revenue page)
 const formatDate = (dateString: string): string => {
     try {
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return format(date, 'PP'); // Use a user-friendly format like 'Jul 15, 2024'
+        return format(date, 'PP'); 
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -51,13 +46,11 @@ export default function ExpensesPage() {
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
-  // State for Edit/Delete Modals
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
 
-  // Fetch data on mount and listen for storage changes
   useEffect(() => {
     let isMounted = true;
     const fetchData = async () => {
@@ -84,7 +77,6 @@ export default function ExpensesPage() {
             if(isMounted) setTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
-                // Fetch ALL transactions for each account
                 const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
@@ -126,9 +118,8 @@ export default function ExpensesPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]);
+  }, []); // Corrected dependency array
 
-  // Filter transactions to only include expenses (negative amounts)
   const expenseTransactions = useMemo(() => {
     return allTransactions.filter(tx => tx.amount < 0);
   }, [allTransactions]);
@@ -145,7 +136,6 @@ export default function ExpensesPage() {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                // Fetch ALL transactions for each account
                 const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
@@ -333,7 +323,6 @@ export default function ExpensesPage() {
           </div>
        )}
 
-      {/* Expenses Transactions Table */}
       <Card>
         <CardHeader>
           <CardTitle>Recent Expense Transactions</CardTitle>
@@ -495,7 +484,6 @@ export default function ExpensesPage() {
             </DialogContent>
         </Dialog>
 
-      {/* Add Transaction Dialog */}
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>

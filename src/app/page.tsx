@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -14,11 +13,12 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getUserPreferences } from '@/lib/preferences';
-import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency'; // Import getCurrencySymbol
+import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency'; 
 import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useToast } from "@/hooks/use-toast";
 
-// Dummy data for charts that are not yet connected to real data
+
 const incomeSourceData = [
   { source: "E-commerce", amount: 2100, fill: "hsl(var(--chart-1))" },
   { source: "Google Adsense", amount: 950, fill: "hsl(var(--chart-3))" },
@@ -55,6 +55,7 @@ export default function DashboardPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const { toast } = useToast();
 
   useEffect(() => {
     let isMounted = true;
@@ -74,7 +75,6 @@ export default function DashboardPage() {
         const fetchedCategories = await getCategories();
         if (isMounted) setCategories(fetchedCategories);
 
-        // Fetch transactions for all accounts
         if (fetchedAccounts.length > 0) {
           const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
           const transactionsByAccount = await Promise.all(transactionPromises);
@@ -87,13 +87,13 @@ export default function DashboardPage() {
 
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
+        if(isMounted) toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
 
     fetchData();
-    // Add storage listener to refetch data if underlying data changes
     const handleStorageChange = (event: StorageEvent) => {
         if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key)) && isMounted) {
             console.log("Storage changed on main dashboard, refetching data...");
@@ -113,9 +113,8 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Empty dependency array, runs once on mount and sets up listener
+  }, []); // Corrected dependency array
 
-  // Calculate Total Net Worth
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return accounts.reduce((sum, account) => {
@@ -123,7 +122,6 @@ export default function DashboardPage() {
     }, 0);
   }, [accounts, preferredCurrency, isLoading]);
 
-  // Filter current month transactions
   const currentMonthTransactions = useMemo(() => {
     if (isLoading) return [];
     const now = new Date();
@@ -135,7 +133,6 @@ export default function DashboardPage() {
     });
   }, [allTransactions, isLoading]);
 
-  // Calculate Monthly Income
   const monthlyIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return currentMonthTransactions.reduce((sum, tx) => {
@@ -149,31 +146,29 @@ export default function DashboardPage() {
     }, 0);
   }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
 
-  // Calculate Monthly Expenses (as a positive number)
   const monthlyExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return currentMonthTransactions.reduce((sum, tx) => {
       if (tx.amount < 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+          return sum + convertCurrency(Math.Abs(tx.amount), account.currency, preferredCurrency);
         }
       }
       return sum;
     }, 0);
   }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
 
-  // Generate data for SpendingsBreakdown
   const spendingsBreakdownDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return [];
+    if (isLoading || typeof window === 'undefined' || !categories.length) return [];
     const expenseCategoryTotals: { [key: string]: number } = {};
 
     currentMonthTransactions.forEach(tx => {
-      if (tx.amount < 0) { // Only expenses
+      if (tx.amount < 0) { 
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           const categoryName = tx.category || 'Uncategorized';
-          const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+          const convertedAmount = convertCurrency(Math.Abs(tx.amount), account.currency, preferredCurrency);
           expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
         }
       }
@@ -182,8 +177,7 @@ export default function DashboardPage() {
     return Object.entries(expenseCategoryTotals)
       .map(([name, amount]) => {
         const { icon: CategoryIcon, color } = getCategoryStyle(name);
-        // Map the Tailwind color to a bgColor class. This is a simplification.
-        // A more robust solution would involve parsing the HSL color or having predefined bg classes.
+        
         const categoryStyle = getCategoryStyle(name);
         const bgColor = categoryStyle.color.split(' ').find(cls => cls.startsWith('bg-')) || 'bg-gray-500 dark:bg-gray-700';
 
@@ -194,12 +188,12 @@ export default function DashboardPage() {
           bgColor: bgColor,
         };
       })
-      .sort((a, b) => b.amount - a.amount) // Sort by amount descending
-      .slice(0, 3); // Take top 3 for display
+      .sort((a, b) => b.amount - a.amount) 
+      .slice(0, 3); 
   }, [currentMonthTransactions, accounts, categories, preferredCurrency, isLoading]);
 
 
-  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) { // More specific initial loading
+  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) { 
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -222,7 +216,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      {/* First Row of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
           <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
@@ -232,15 +225,13 @@ export default function DashboardPage() {
           amount={monthlyExpenses}
           currency={getCurrencySymbol(preferredCurrency)}
           chartType="negative"
-          href="/expenses" // Link to expenses page
+          href="/expenses" 
         />
         <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
 
-      {/* Second Row of Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
-           {/* Using dummy data for IncomeSourceChart for now */}
           <IncomeSourceChart data={incomeSourceData} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
         <SmallStatCard
@@ -248,12 +239,10 @@ export default function DashboardPage() {
           amount={monthlyIncome}
           currency={getCurrencySymbol(preferredCurrency)}
           chartType="positive"
-          href="/revenue" // Link to revenue page
+          href="/revenue" 
         />
-        {/* The 4th column in this row is empty as per the visual structure of the image */}
       </div>
 
-      {/* Third Row of Charts (Using dummy data for now) */}
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
         <IncomeExpensesChart data={monthlyIncomeExpensesData} currency={getCurrencySymbol(preferredCurrency)} />
         <AssetsChart data={assetsData} currency={getCurrencySymbol(preferredCurrency)} />
@@ -261,3 +250,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

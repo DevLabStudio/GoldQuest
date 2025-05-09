@@ -7,21 +7,20 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
-import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories.tsx"; // Import new service (updated extension)
-import AddCategoryForm from '@/components/categories/add-category-form'; // Import Add form
-import EditCategoryForm from '@/components/categories/edit-category-form'; // Import Edit form
+import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories.tsx";
+import AddCategoryForm from '@/components/categories/add-category-form';
+import EditCategoryForm from '@/components/categories/edit-category-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 
-// Removed duplicate categoryStyles and getCategoryStyle as they are now imported from the service
 
 export default function CategoriesPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false); // State for delete confirmation
-  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null); // For edit/delete
+  const [isDeleting, setIsDeleting] = useState(false); 
+  const [selectedCategory, setSelectedCategory] = useState<Category | null>(null); 
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
@@ -67,24 +66,23 @@ export default function CategoriesPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); // Added toast to dependency array
+  }, []); // Corrected dependency array
 
-  // Add Category Handler
+  const localFetchCategories = async () => {
+    setIsLoading(true); setError(null);
+    try {
+        const fetched = await getCategories();
+        fetched.sort((a, b) => a.name.localeCompare(b.name));
+        setCategories(fetched);
+    } catch (e) { console.error(e); setError("Could not reload categories.");}
+    finally { setIsLoading(false); }
+  };
+
   const handleAddCategory = async (categoryName: string) => {
     setIsLoading(true);
     try {
       await addCategory(categoryName);
-      // Refetch after adding by calling the local fetch function if needed
-      const fetchCategoriesEffect = async () => {
-        setIsLoading(true); setError(null);
-        try {
-            const fetched = await getCategories();
-            fetched.sort((a, b) => a.name.localeCompare(b.name));
-            setCategories(fetched);
-        } catch (e) { console.error(e); setError("Could not reload categories.");}
-        finally { setIsLoading(false); }
-      };
-      await fetchCategoriesEffect();
+      await localFetchCategories();
       setIsAddDialogOpen(false);
       toast({
         title: "Success",
@@ -102,21 +100,11 @@ export default function CategoriesPage() {
     }
   };
 
-  // Edit Category Handler
    const handleUpdateCategory = async (categoryId: string, newName: string) => {
      setIsLoading(true);
      try {
        await updateCategory(categoryId, newName);
-       const fetchCategoriesEffect = async () => {
-        setIsLoading(true); setError(null);
-        try {
-            const fetched = await getCategories();
-            fetched.sort((a, b) => a.name.localeCompare(b.name));
-            setCategories(fetched);
-        } catch (e) { console.error(e); setError("Could not reload categories.");}
-        finally { setIsLoading(false); }
-      };
-      await fetchCategoriesEffect();
+       await localFetchCategories();
        setIsEditDialogOpen(false);
        setSelectedCategory(null);
        toast({
@@ -135,22 +123,12 @@ export default function CategoriesPage() {
      }
    };
 
-   // Delete Category Handler
    const handleDeleteCategoryConfirm = async () => {
        if (!selectedCategory) return;
        setIsDeleting(true);
        try {
            await deleteCategory(selectedCategory.id);
-           const fetchCategoriesEffect = async () => {
-            setIsLoading(true); setError(null);
-            try {
-                const fetched = await getCategories();
-                fetched.sort((a, b) => a.name.localeCompare(b.name));
-                setCategories(fetched);
-            } catch (e) { console.error(e); setError("Could not reload categories.");}
-            finally { setIsLoading(false); }
-          };
-          await fetchCategoriesEffect();
+           await localFetchCategories();
            toast({
                title: "Category Deleted",
                description: `Category "${selectedCategory.name}" removed.`,
@@ -169,23 +147,19 @@ export default function CategoriesPage() {
    };
 
 
-  // Open Edit Dialog
   const openEditDialog = (category: Category) => {
     setSelectedCategory(category);
     setIsEditDialogOpen(true);
   };
 
-   // Open Delete Confirmation Dialog
    const openDeleteDialog = (category: Category) => {
       setSelectedCategory(category);
-      // The AlertDialog trigger will handle opening the dialog
    };
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold">Categories</h1>
-        {/* Add Category Dialog Trigger */}
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
           <DialogTrigger asChild>
              <Button variant="default" size="sm">
@@ -199,7 +173,6 @@ export default function CategoriesPage() {
                 Enter the details for your new category.
               </DialogDescription>
             </DialogHeader>
-             {/* Pass handler and loading state */}
              <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoading} />
           </DialogContent>
         </Dialog>
@@ -219,7 +192,7 @@ export default function CategoriesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {isLoading && categories.length === 0 ? ( // Show skeleton only on initial load
+          {isLoading && categories.length === 0 ? ( 
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
                {[...Array(10)].map((_, i) => (
                    <Skeleton key={i} className="h-10 w-full rounded-full" />
@@ -232,17 +205,15 @@ export default function CategoriesPage() {
                 return (
                   <div key={category.id} className="group relative">
                      <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border items-center`}>
-                       <div className="flex items-center gap-1 overflow-hidden mr-8"> {/* Add margin-right */}
+                       <div className="flex items-center gap-1 overflow-hidden mr-8"> 
                          <CategoryIcon />
                          <span className="capitalize truncate">{category.name}</span>
                        </div>
-                       {/* Action buttons (Positioned absolutely on the right) */}
                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditDialog(category)}>
                               <Edit className="h-4 w-4" />
                               <span className="sr-only">Edit</span>
                           </Button>
-                           {/* Use AlertDialog for Delete Confirmation */}
                           <AlertDialog>
                               <AlertDialogTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => openDeleteDialog(category)}>
@@ -250,7 +221,6 @@ export default function CategoriesPage() {
                                   <span className="sr-only">Delete</span>
                                 </Button>
                               </AlertDialogTrigger>
-                               {/* Render content only if this specific category is selected for deletion */}
                               {selectedCategory?.id === category.id && (
                                   <AlertDialogContent>
                                       <AlertDialogHeader>
@@ -279,7 +249,6 @@ export default function CategoriesPage() {
               <p className="text-muted-foreground">
                 No categories found.
               </p>
-              {/* Button to open Add Dialog */}
               <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
                  <DialogTrigger asChild>
                     <Button variant="link" className="mt-2 px-0 h-auto text-primary">
@@ -299,7 +268,6 @@ export default function CategoriesPage() {
             </div>
           )}
         </CardContent>
-        {/* Footer Add Button (visible if categories exist) */}
          {!isLoading && categories.length > 0 && (
             <CardContent className="pt-4 border-t flex justify-start">
                  <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -322,10 +290,9 @@ export default function CategoriesPage() {
          )}
       </Card>
 
-        {/* Edit Category Dialog */}
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
             setIsEditDialogOpen(open);
-            if (!open) setSelectedCategory(null); // Clear selection when closing
+            if (!open) setSelectedCategory(null); 
         }}>
             <DialogContent className="sm:max-w-[425px]">
                 <DialogHeader>

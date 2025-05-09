@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -23,10 +22,7 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 
-// Define the initial limit for transactions (can be removed if fetching all)
-// const INITIAL_TRANSACTION_LIMIT = 50;
 
-// Helper function to format date (consistent with previous implementation)
 const formatDate = (dateString: string): string => {
     try {
         const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
@@ -82,7 +78,6 @@ export default function TransactionsOverviewPage() {
             if(isMounted) setTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
-                // Fetch ALL transactions for each account for the overview page
                 const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
@@ -124,7 +119,7 @@ export default function TransactionsOverviewPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]);
+  }, []); // Corrected dependency array
 
   const spendingData = useMemo(() => {
       if (isLoading || !accounts.length || !allTransactions.length) return [];
@@ -135,7 +130,7 @@ export default function TransactionsOverviewPage() {
           if (tx.amount < 0) {
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
-                 const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+                 const convertedAmount = convertCurrency(Math.Abs(tx.amount), account.currency, preferredCurrency);
                  const category = tx.category || 'Uncategorized';
                  categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
               }
@@ -161,7 +156,6 @@ export default function TransactionsOverviewPage() {
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                 // Fetch ALL transactions for each account
                 const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
@@ -187,7 +181,7 @@ export default function TransactionsOverviewPage() {
             return;
         }
 
-        const transactionAmount = formData.type === 'expense' ? -Math.abs(formData.amount) : Math.abs(formData.amount);
+        const transactionAmount = formData.type === 'expense' ? -Math.Abs(formData.amount) : Math.Abs(formData.amount);
 
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
@@ -262,7 +256,7 @@ export default function TransactionsOverviewPage() {
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     try {
-      const transferAmount = Math.abs(data.amount);
+      const transferAmount = Math.Abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
@@ -512,7 +506,7 @@ export default function TransactionsOverviewPage() {
                         initialData={{
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
                             accountId: selectedTransaction.accountId,
-                            amount: Math.abs(selectedTransaction.amount),
+                            amount: Math.Abs(selectedTransaction.amount),
                             date: selectedTransaction.date ? new Date(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,
@@ -529,7 +523,6 @@ export default function TransactionsOverviewPage() {
             </DialogContent>
         </Dialog>
 
-       {/* Add Transaction Dialog */}
        <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
