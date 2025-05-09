@@ -395,6 +395,7 @@ export default function DashboardPage() {
             tooltip="Total income received this month."
             icon={<TrendingUp className="text-green-500" />} // Keep explicit Tailwind color for icon
             valueClassName="text-green-600 dark:text-green-500" // Keep explicit Tailwind color for value
+            href="/revenue"
           />
           <KpiCard
             title="Monthly Expenses"
@@ -402,6 +403,7 @@ export default function DashboardPage() {
             tooltip="Total expenses this month."
             icon={<TrendingDown className="text-red-500" />} // Keep explicit Tailwind color for icon
             valueClassName="text-red-600 dark:text-red-500" // Keep explicit Tailwind color for value
+            href="/expenses"
           />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -496,5 +498,7 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
+
+    
 
     
