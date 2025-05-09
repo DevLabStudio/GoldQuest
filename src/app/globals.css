@@ -11,79 +11,79 @@ body {
 
 @layer base {
   :root {
-    /* Light theme defaults */
-    --background: 0 0% 100%; /* White */
-    --foreground: 0 0% 3.9%; /* Near Black */
-    --card: 0 0% 100%; /* White */
-    --card-foreground: 0 0% 3.9%; /* Near Black */
-    --popover: 0 0% 100%; /* White */
-    --popover-foreground: 0 0% 3.9%; /* Near Black */
-    --primary: 19 100% 50%; /* New Orange #FF5200 */
-    --primary-foreground: 0 0% 98%; /* White (better contrast with new orange) */
-    --secondary: 0 0% 96.1%; /* Light Gray */
-    --secondary-foreground: 0 0% 9%; /* Dark Gray / Near Black */
-    --muted: 0 0% 96.1%; /* Light Gray */
-    --muted-foreground: 0 0% 45.1%; /* Mid Gray */
-    --accent: 0 0% 96.1%; /* Light Gray */
-    --accent-foreground: 0 0% 9%; /* Dark Gray / Near Black */
-    --destructive: 0 84.2% 60.2%; /* Default Red */
-    --destructive-foreground: 0 0% 98%; /* White */
-    --border: 0 0% 89.8%; /* Light Gray */
-    --input: 0 0% 89.8%; /* Light Gray */
-    --ring: 19 100% 50%; /* New Orange #FF5200 */
-    --chart-1: 19 100% 50%; /* New Orange #FF5200 */
-    --chart-2: 19 90% 60%; /* Lighter Orange */
-    --chart-3: 19 80% 70%; /* Even Lighter Orange */
-    --chart-4: 0 0% 60%; /* Gray */
-    --chart-5: 0 0% 40%; /* Darker Gray */
-    --radius: 0.5rem;
-    --sidebar-background: 0 0% 98%; /* Very Light Gray (almost White) */
-    --sidebar-foreground: 0 0% 9%; /* Dark Gray / Near Black */
-    --sidebar-primary: 19 100% 50%; /* New Orange #FF5200 */
-    --sidebar-primary-foreground: 0 0% 98%; /* White (better contrast) */
-    --sidebar-accent: 0 0% 90%; /* Slightly darker gray */
-    --sidebar-accent-foreground: 0 0% 9%; /* Dark Gray / Near Black */
-    --sidebar-border: 0 0% 89.8%; /* Light Gray */
-    --sidebar-ring: 19 100% 50%; /* New Orange #FF5200 */
+    /* Light theme defaults - Adjust if light theme is ever used */
+    --background: 0 0% 100%; 
+    --foreground: 0 0% 3.9%; 
+    --card: 0 0% 100%; 
+    --card-foreground: 0 0% 3.9%; 
+    --popover: 0 0% 100%; 
+    --popover-foreground: 0 0% 3.9%; 
+    --primary: 16 100% 55%; /* Coral/Salmon - for Total Net Worth card */
+    --primary-foreground: 0 0% 98%; /* White for contrast on primary */
+    --secondary: 0 0% 96.1%; 
+    --secondary-foreground: 0 0% 9%; 
+    --muted: 0 0% 96.1%; 
+    --muted-foreground: 0 0% 45.1%; 
+    --accent: 0 0% 96.1%; 
+    --accent-foreground: 0 0% 9%; 
+    --destructive: 0 84.2% 60.2%; 
+    --destructive-foreground: 0 0% 98%; 
+    --border: 0 0% 89.8%; 
+    --input: 0 0% 89.8%; 
+    --ring: 16 100% 55%; /* Coral/Salmon for ring */
+    --chart-1: 194 71% 51%; /* Blue for charts */
+    --chart-2: 160 60% 45%; /* Teal/Green for charts */
+    --chart-3: 262 70% 55%; /* Purple for charts */
+    --chart-4: 340 80% 60%; /* Pink/Red for charts - also used for Total Net Worth Card */
+    --chart-5: 40 90% 55%; /* Orange for charts */
+    --radius: 0.75rem; /* Slightly more rounded corners */
+    --sidebar-background: 0 0% 98%; 
+    --sidebar-foreground: 0 0% 9%; 
+    --sidebar-primary: 16 100% 55%; 
+    --sidebar-primary-foreground: 0 0% 98%; 
+    --sidebar-accent: 0 0% 90%; 
+    --sidebar-accent-foreground: 0 0% 9%; 
+    --sidebar-border: 0 0% 89.8%; 
+    --sidebar-ring: 16 100% 55%; 
 
-    /* Define font variable */
     --font-oxanium: var(--font-oxanium);
   }
   .dark {
-    --background: 0 0% 3.9%; /* Near Black */
-    --foreground: 0 0% 98%; /* White */
-    --card: 0 0% 10%; /* Dark Gray */
-    --card-foreground: 0 0% 98%; /* White */
-    --popover: 0 0% 8%; /* Darker Gray */
-    --popover-foreground: 0 0% 98%; /* White */
-    --primary: 19 100% 50%; /* New Orange #FF5200 */
-    --primary-foreground: 0 0% 98%; /* White (better contrast) */
-    --secondary: 0 0% 15%; /* Dark Gray */
-    --secondary-foreground: 0 0% 98%; /* White */
-    --muted: 0 0% 15%; /* Dark Gray */
-    --muted-foreground: 0 0% 60%; /* Mid Gray */
-    --accent: 0 0% 20%; /* Adjusted accent for better visibility */
-    --accent-foreground: 0 0% 98%; /* White */
-    --destructive: 0 70% 50%; /* Adjusted Red for dark theme */
-    --destructive-foreground: 0 0% 98%; /* White */
-    --border: 0 0% 20%; /* Darker border */
-    --input: 0 0% 15%; /* Dark Gray */
-    --ring: 19 100% 50%; /* New Orange #FF5200 */
-    --chart-1: 19 100% 50%; /* New Orange #FF5200 */
-    --chart-2: 19 90% 60%; /* Lighter Orange */
-    --chart-3: 19 80% 70%; /* Even Lighter Orange */
-    --chart-4: 0 0% 60%; /* Gray */
-    --chart-5: 0 0% 40%; /* Darker Gray */
-    --sidebar-background: 0 0% 8%; /* Slightly different dark */
-    --sidebar-foreground: 0 0% 98%; /* White */
-    --sidebar-primary: 19 100% 50%; /* New Orange #FF5200 */
-    --sidebar-primary-foreground: 0 0% 98%; /* White (better contrast) */
-    --sidebar-accent: 0 0% 25%; /* Darker accent for hover/active state */
-    --sidebar-accent-foreground: 0 0% 98%; /* White */
-    --sidebar-border: 0 0% 20%; /* Darker border matching main border */
-    --sidebar-ring: 19 100% 50%; /* New Orange #FF5200 */
+    --background: 224 71% 4%; /* Very Dark Blue - matches image bg */
+    --foreground: 210 40% 98%; /* Light Gray/White */
+    --card: 224 71% 9%; /* Dark Blue - for card backgrounds */
+    --card-foreground: 210 40% 98%; /* Light Gray/White */
+    --popover: 224 71% 9%; /* Dark Blue */
+    --popover-foreground: 210 40% 98%; 
+    --primary: 16 100% 55%; /* Coral/Salmon - for Total Net Worth card */
+    --primary-foreground: 0 0% 98%; 
+    --secondary: 224 71% 15%; /* Slightly Lighter Dark Blue */
+    --secondary-foreground: 210 40% 98%; 
+    --muted: 224 71% 15%; 
+    --muted-foreground: 210 40% 60%; /* Mid Gray */
+    --accent: 224 71% 20%; 
+    --accent-foreground: 210 40% 98%; 
+    --destructive: 0 63% 31%; /* Darker Red */
+    --destructive-foreground: 0 0% 98%; 
+    --border: 224 71% 15%; /* Dark Blue border */
+    --input: 224 71% 12%; /* Darker input background */
+    --ring: 16 100% 55%; /* Coral/Salmon for ring */
+    --chart-1: 194 71% 51%; /* Blue */
+    --chart-2: 160 60% 45%; /* Teal/Green */
+    --chart-3: 262 70% 55%; /* Purple */
+    --chart-4: 16 100% 55%; /* Coral/Salmon (same as primary for consistency if needed) */
+    --chart-5: 35 90% 50%; /* Orange */
+    --radius: 0.75rem; /* Consistent rounded corners */
+    
+    --sidebar-background: 224 71% 6%; /* Darker sidebar */
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 16 100% 55%; 
+    --sidebar-primary-foreground: 0 0% 98%;
+    --sidebar-accent: 224 71% 12%; 
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 224 71% 10%;
+    --sidebar-ring: 16 100% 55%;
 
-    /* Define font variable for dark mode */
     --font-oxanium: var(--font-oxanium);
   }
 }

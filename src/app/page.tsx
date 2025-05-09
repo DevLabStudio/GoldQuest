@@ -1,227 +1,86 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, TrendingUp, TrendingDown, Wallet, Landmark, Scale, PiggyBank, PieChart as PieChartIcon } from "lucide-react"; // Added PieChartIcon
-import KpiCard from "@/components/dashboard/kpi-card";
-import NetWorthCompositionChart from "@/components/dashboard/net-worth-composition-chart"; // Import new chart
-import { getUserPreferences } from '@/lib/preferences';
-import { formatCurrency } from '@/lib/currency';
-import { TooltipProvider } from '@/components/ui/tooltip';
-import { Skeleton } from '@/components/ui/skeleton';
+import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
+import SmallStatCard from "@/components/dashboard/small-stat-card";
+import IncomeSourceChart from "@/components/dashboard/income-source-chart";
+import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown";
+import IncomeExpensesChart from "@/components/dashboard/income-expenses-chart";
+import AssetsChart from "@/components/dashboard/assets-chart";
+import { DollarSign, TrendingUp, TrendingDown, Home, Users, Car } from "lucide-react";
+
+const incomeSourceData = [
+  { source: "E-commerce", amount: 2100, fill: "hsl(var(--chart-1))" },
+  { source: "Google Adsense", amount: 950, fill: "hsl(var(--chart-3))" },
+  { source: "My Shop", amount: 8000, fill: "hsl(var(--chart-5))" },
+  { source: "Salary", amount: 13000, fill: "hsl(var(--chart-2))" },
+];
+
+const spendingsBreakdownData = [
+  { name: "Housing", amount: 3452, icon: <Home className="h-6 w-6 text-white" />,bgColor: "bg-purple-500" },
+  { name: "Personal", amount: 2200, icon: <Users className="h-6 w-6 text-white" />, bgColor: "bg-pink-500" },
+  { name: "Transportation", amount: 2190, icon: <Car className="h-6 w-6 text-white" />, bgColor: "bg-orange-500" },
+];
+
+const monthlyIncomeExpensesData = [
+  { month: "Jan", income: 12000, expenses: 8000 },
+  { month: "Feb", income: 15000, expenses: 9500 },
+  { month: "Mar", income: 18000, expenses: 12000 },
+  { month: "Apr", income: 14000, expenses: 15000 },
+  { month: "May", income: 22000, expenses: 10000 },
+  { month: "Jun", income: 25000, expenses: 11000 },
+  { month: "Jul", income: 23000, expenses: 13000 },
+  { month: "Aug", income: 20000, expenses: 12500 },
+  { month: "Sep", income: 19000, expenses: 10000 },
+  { month: "Oct", income: 21000, expenses: 9000 },
+  { month: "Nov", income: 24000, expenses: 11500 },
+  { month: "Dec", income: 20239, expenses: 20239 }, // Max values from image
+];
+
+const assetsData = [
+  { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" }, // Reddish-pink
+  { name: "Stock", value: 22500, fill: "hsl(var(--chart-1))" }, // Blue
+  { name: "Warehouse", value: 120000, fill: "hsl(var(--chart-3))" }, // Purple
+  { name: "Land", value: 135000, fill: "hsl(var(--chart-2))" }, // Teal/Green
+];
+
 
 export default function DashboardPage() {
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isChartLoading, setIsChartLoading] = useState(true);
-
-  // Placeholder data for accounts and transactions (replace with actual data fetching)
-  const [accounts, setAccounts] = useState<any[]>([]);
-  const [transactions, setTransactions] = useState<any[]>([]);
-
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const prefs = getUserPreferences();
-      setPreferredCurrency(prefs.preferredCurrency);
-      setLastUpdated(new Date());
-      // Simulate fetching chart data
-      setTimeout(() => {
-        setIsChartLoading(false);
-      }, 1200);
-    }
-  }, []);
-
-  const handleRefresh = () => {
-    setIsLoading(true);
-    setIsChartLoading(true);
-    setTimeout(() => {
-      setLastUpdated(new Date());
-      // Simulate fetching actual data
-      // fetchDashboardData();
-      setIsLoading(false);
-      setIsChartLoading(false);
-    }, 1000);
-  };
-
-  const formatLastUpdated = (date: Date | null) => {
-    if (!date) return "Atualizando...";
-    const now = new Date();
-    const diffSeconds = Math.round((now.getTime() - date.getTime()) / 1000);
-    if (diffSeconds < 60) return `Atualizado há ${diffSeconds} segundos`;
-    const diffMinutes = Math.round(diffSeconds / 60);
-    if (diffMinutes === 1) return "Atualizado há 1 minuto";
-    return `Atualizado há ${diffMinutes} minutos`;
-  };
-
-  // Placeholder data for Personal Finance KPIs
-  // For the chart, totalAssets will represent Crypto, totalLiabilities will represent Stocks value
-  const personalKpiData = {
-    totalNetWorth: 125000.75,
-    totalAssets: 80000.50, // Example value for "Crypto"
-    totalLiabilities: 45000.25, // Example value for "Stocks"
-    monthlyIncome: 7500.00,
-    monthlyExpenses: -4850.25,
-    savingsRate: 0.3533,
-  };
-
   return (
-    <TooltipProvider>
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6">
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+    <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
+      {/* Header can be added here if needed, e.g., "Dashboard" title */}
+      {/* <h1 className="text-3xl font-bold text-foreground mb-6">Dashboard</h1> */}
+      
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        {/* Row 1 */}
+        <div className="xl:col-span-2">
+          <TotalNetWorthCard amount={278378} currency="$" />
         </div>
+        <SmallStatCard title="Spendings" amount={9228} currency="$" chartType="negative" />
+        <SpendingsBreakdown title="Spendings" data={spendingsBreakdownData} currency="$" />
 
-        {/* Resumo Card with Filters */}
-        <Card>
-          <CardHeader>
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-              <div>
-                <CardTitle className="text-xl">Resumo Financeiro</CardTitle>
-              </div>
-              <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                <span className="text-xs text-muted-foreground">{formatLastUpdated(lastUpdated)}</span>
-                <Button variant="default" size="sm" onClick={handleRefresh} disabled={isLoading}>
-                  <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                  Atualizar
-                </Button>
-              </div>
-            </div>
-          </CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            <div>
-              <label htmlFor="date-range" className="text-xs font-medium text-muted-foreground">Período</label>
-              <Select defaultValue="thisMonth">
-                <SelectTrigger id="date-range">
-                  <SelectValue placeholder="Selecione o período" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="thisMonth">Este Mês</SelectItem>
-                  <SelectItem value="lastMonth">Mês Passado</SelectItem>
-                  <SelectItem value="last3months">Últimos 3 Meses</SelectItem>
-                  <SelectItem value="thisYear">Este Ano</SelectItem>
-                  <SelectItem value="allTime">Desde o Início</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label htmlFor="account-filter" className="text-xs font-medium text-muted-foreground">Conta</label>
-              <Select defaultValue="all">
-                <SelectTrigger id="account-filter">
-                  <SelectValue placeholder="Selecione a conta" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Contas</SelectItem>
-                   <SelectItem value="placeholder-1">Conta Placeholder 1</SelectItem>
-                   <SelectItem value="placeholder-2">Conta Placeholder 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label htmlFor="category-filter" className="text-xs font-medium text-muted-foreground">Categoria</label>
-              <Select defaultValue="all">
-                <SelectTrigger id="category-filter">
-                  <SelectValue placeholder="Selecione a categoria" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todas as Categorias</SelectItem>
-                   <SelectItem value="cat-placeholder-1">Categoria Placeholder 1</SelectItem>
-                   <SelectItem value="cat-placeholder-2">Categoria Placeholder 2</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* KPI Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          <KpiCard
-            title="Patrimônio Líquido"
-            value={formatCurrency(personalKpiData.totalNetWorth, preferredCurrency, undefined, true)}
-            tooltip="Seu patrimônio total (Ativos - Passivos)."
-            icon={<Wallet className="text-primary" />}
-          />
-          <KpiCard
-            title="Receitas do Mês"
-            value={formatCurrency(personalKpiData.monthlyIncome, preferredCurrency, undefined, true)}
-            tooltip="Total de receitas recebidas neste mês."
-            icon={<TrendingUp className="text-green-500" />}
-            valueClassName="text-green-600 dark:text-green-500"
-          />
-          <KpiCard
-            title="Despesas do Mês"
-            value={formatCurrency(personalKpiData.monthlyExpenses, preferredCurrency, undefined, true)}
-            tooltip="Total de despesas realizadas neste mês."
-            icon={<TrendingDown className="text-red-500" />}
-            valueClassName="text-red-600 dark:text-red-500"
-          />
+        {/* Row 2 */}
+        <div className="xl:col-span-2">
+          <IncomeSourceChart data={incomeSourceData} currency="$" />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-           <KpiCard
-            title="Total de Ativos"
-            value={formatCurrency(personalKpiData.totalAssets + personalKpiData.totalLiabilities, preferredCurrency, undefined, true)} // Assuming totalAssets here is just one part
-            tooltip="Soma de todos os seus ativos (contas, investimentos, etc.)."
-            icon={<Landmark className="text-primary" />}
-          />
-          <KpiCard
-            title="Total de Passivos" // This might be less relevant if chart shows portfolio breakdown
-            value={formatCurrency(0, preferredCurrency, undefined, true)} // Placeholder if chart is portfolio-focused
-            tooltip="Soma de todas as suas dívidas e obrigações."
-            icon={<Scale className="text-primary" />}
-          />
-          <KpiCard
-            title="Taxa de Poupança"
-            value={`${(personalKpiData.savingsRate * 100).toFixed(1)}%`}
-            tooltip="Percentual da sua renda que você está economizando."
-            isPercentage={true}
-            icon={<PiggyBank className="text-primary" />}
-          />
-        </div>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Composição do Portfolio ({preferredCurrency})</CardTitle>
-              <CardDescription>Distribuição entre Crypto e Stocks.</CardDescription>
-            </CardHeader>
-            <CardContent className="h-[300px] sm:h-[350px]">
-              {isChartLoading ? (
-                <Skeleton className="h-full w-full" />
-              ) : personalKpiData.totalAssets > 0 || personalKpiData.totalLiabilities > 0 ? (
-                <NetWorthCompositionChart
-                  totalAssets={personalKpiData.totalAssets} // Pass Crypto value
-                  totalLiabilities={personalKpiData.totalLiabilities} // Pass Stocks value
-                  currency={preferredCurrency}
-                />
-              ) : (
-                <div className="flex h-full items-center justify-center text-muted-foreground">
-                  Sem dados para exibir a composição do portfolio.
-                </div>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Fluxo de Caixa Mensal (Em Breve)</CardTitle>
-              <CardDescription>Compare suas receitas e despesas ao longo do tempo.</CardDescription>
-            </CardHeader>
-            <CardContent className="h-[300px] sm:h-[350px] flex items-center justify-center">
-               {isChartLoading ? (
-                  <Skeleton className="h-full w-full" />
-               ) : (
-                 <p className="text-muted-foreground">Gráfico de fluxo de caixa em desenvolvimento.</p>
-               )}
-            </CardContent>
-          </Card>
-        </div>
+        <SmallStatCard title="Income" amount={24050} currency="$" chartType="positive" />
+        {/* The image implies assets chart spans to this area or the small income card is shorter. 
+            For a simpler grid, I'll place assets on the next row taking more space.
+            If Assets chart needs to be here, the parent grid needs to be more complex (e.g. grid-template-areas)
+            or this row needs specific col-span adjustments for children.
+            For now, let's assume Assets chart is on its own or with Income & Expenses.
+        */}
+         <div className="xl:col-span-2"> {/* Placeholder for assets if it were here, or could be empty or another small card */}
+          {/* If assets chart were to span to the right of income source, it would be here */}
+         </div>
       </div>
-    </TooltipProvider>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+         {/* Row 3 */}
+        <IncomeExpensesChart data={monthlyIncomeExpensesData} currency="$" />
+        <AssetsChart data={assetsData} currency="$" />
+      </div>
+    </div>
   );
 }
-
