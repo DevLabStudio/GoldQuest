@@ -13,76 +13,76 @@ body {
   :root {
     /* Light theme defaults - Adjust if light theme is ever used */
     --background: 0 0% 100%; 
-    --foreground: 0 0% 3.9%; 
+    --foreground: 224 71% 4%; /* Very Dark Blue for text on light bg */
     --card: 0 0% 100%; 
-    --card-foreground: 0 0% 3.9%; 
+    --card-foreground: 224 71% 4%; 
     --popover: 0 0% 100%; 
-    --popover-foreground: 0 0% 3.9%; 
-    --primary: 16 100% 55%; /* Coral/Salmon - for Total Net Worth card */
+    --popover-foreground: 224 71% 4%; 
+    --primary: 36 100% 50%; /* Bitcoin Orange */
     --primary-foreground: 0 0% 98%; /* White for contrast on primary */
     --secondary: 0 0% 96.1%; 
-    --secondary-foreground: 0 0% 9%; 
+    --secondary-foreground: 224 71% 4%; 
     --muted: 0 0% 96.1%; 
-    --muted-foreground: 0 0% 45.1%; 
+    --muted-foreground: 224 71% 25%; /* Darker muted text */
     --accent: 0 0% 96.1%; 
-    --accent-foreground: 0 0% 9%; 
+    --accent-foreground: 224 71% 4%; 
     --destructive: 0 84.2% 60.2%; 
     --destructive-foreground: 0 0% 98%; 
     --border: 0 0% 89.8%; 
     --input: 0 0% 89.8%; 
-    --ring: 16 100% 55%; /* Coral/Salmon for ring */
+    --ring: 36 100% 50%; /* Bitcoin Orange for ring */
     --chart-1: 194 71% 51%; /* Blue for charts */
     --chart-2: 160 60% 45%; /* Teal/Green for charts */
     --chart-3: 262 70% 55%; /* Purple for charts */
-    --chart-4: 340 80% 60%; /* Pink/Red for charts - also used for Total Net Worth Card */
+    --chart-4: 340 80% 60%; /* Pink/Red for charts */
     --chart-5: 40 90% 55%; /* Orange for charts */
     --radius: 0.75rem; /* Slightly more rounded corners */
     --sidebar-background: 0 0% 98%; 
-    --sidebar-foreground: 0 0% 9%; 
-    --sidebar-primary: 16 100% 55%; 
+    --sidebar-foreground: 224 71% 4%; 
+    --sidebar-primary: 36 100% 50%; 
     --sidebar-primary-foreground: 0 0% 98%; 
     --sidebar-accent: 0 0% 90%; 
-    --sidebar-accent-foreground: 0 0% 9%; 
+    --sidebar-accent-foreground: 224 71% 4%; 
     --sidebar-border: 0 0% 89.8%; 
-    --sidebar-ring: 16 100% 55%; 
+    --sidebar-ring: 36 100% 50%; 
 
     --font-oxanium: var(--font-oxanium);
   }
   .dark {
-    --background: 224 71% 4%; /* Very Dark Blue - matches image bg */
-    --foreground: 210 40% 98%; /* Light Gray/White */
-    --card: 224 71% 9%; /* Dark Blue - for card backgrounds */
+    --background: 0 0% 3.9%; /* Near Black */
+    --foreground: 210 40% 98%; /* Light Gray/White for text on dark bg */
+    --card: 0 0% 5.9%; /* Slightly lighter black for card backgrounds */
     --card-foreground: 210 40% 98%; /* Light Gray/White */
-    --popover: 224 71% 9%; /* Dark Blue */
+    --popover: 0 0% 5.9%; /* Slightly lighter black */
     --popover-foreground: 210 40% 98%; 
-    --primary: 16 100% 55%; /* Coral/Salmon - for Total Net Worth card */
+    --primary: 36 100% 50%; /* Bitcoin Orange */
     --primary-foreground: 0 0% 98%; 
-    --secondary: 224 71% 15%; /* Slightly Lighter Dark Blue */
+    --secondary: 0 0% 10%; /* Dark Gray */
     --secondary-foreground: 210 40% 98%; 
-    --muted: 224 71% 15%; 
+    --muted: 0 0% 10%; 
     --muted-foreground: 210 40% 60%; /* Mid Gray */
-    --accent: 224 71% 20%; 
+    --accent: 0 0% 15%; /* Darker Gray for accent */
     --accent-foreground: 210 40% 98%; 
     --destructive: 0 63% 31%; /* Darker Red */
     --destructive-foreground: 0 0% 98%; 
-    --border: 224 71% 15%; /* Dark Blue border */
-    --input: 224 71% 12%; /* Darker input background */
-    --ring: 16 100% 55%; /* Coral/Salmon for ring */
+    --border: 0 0% 15%; /* Dark Gray border */
+    --input: 0 0% 8%; /* Even darker input background */
+    --ring: 36 100% 50%; /* Bitcoin Orange for ring */
     --chart-1: 194 71% 51%; /* Blue */
     --chart-2: 160 60% 45%; /* Teal/Green */
     --chart-3: 262 70% 55%; /* Purple */
-    --chart-4: 16 100% 55%; /* Coral/Salmon (same as primary for consistency if needed) */
-    --chart-5: 35 90% 50%; /* Orange */
+    --chart-4: 340 80% 60%; /* Pink/Red */
+    --chart-5: 40 90% 55%; /* Orange */
     --radius: 0.75rem; /* Consistent rounded corners */
     
-    --sidebar-background: 224 71% 6%; /* Darker sidebar */
+    --sidebar-background: 0 0% 2.9%; /* Very dark sidebar */
     --sidebar-foreground: 210 40% 98%;
-    --sidebar-primary: 16 100% 55%; 
+    --sidebar-primary: 36 100% 50%; 
     --sidebar-primary-foreground: 0 0% 98%;
-    --sidebar-accent: 224 71% 12%; 
+    --sidebar-accent: 0 0% 8%; 
     --sidebar-accent-foreground: 210 40% 98%;
-    --sidebar-border: 224 71% 10%;
-    --sidebar-ring: 16 100% 55%;
+    --sidebar-border: 0 0% 7%;
+    --sidebar-ring: 36 100% 50%;
 
     --font-oxanium: var(--font-oxanium);
   }
