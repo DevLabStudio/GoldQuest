@@ -167,8 +167,8 @@ export default function DashboardPage() {
 
   if (isLoading && typeof window !== 'undefined') { // Added client-side check for skeleton
     return (
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6">
-        <Skeleton className="h-10 w-1/3 mb-6" />
+      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
+        <Skeleton className="h-10 w-1/3 mb-4" />
         <Card>
           <CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -177,13 +177,13 @@ export default function DashboardPage() {
             <Skeleton className="h-16 w-full" />
           </CardContent>
         </Card>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Skeleton className="h-80 w-full" />
           <Skeleton className="h-80 w-full" />
         </div>
@@ -194,8 +194,8 @@ export default function DashboardPage() {
 
   return (
     <TooltipProvider>
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6">
-        <div className="flex flex-col sm:flex-row justify-between items-center mb-6">
+      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
+        <div className="flex flex-col sm:flex-row justify-between items-center mb-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
         </div>
 
@@ -261,7 +261,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <KpiCard
             title="Net Worth"
             value={formatCurrency(totalNetWorth, preferredCurrency, undefined, false)}
@@ -283,7 +283,7 @@ export default function DashboardPage() {
             valueClassName="text-red-600 dark:text-red-500"
           />
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
            <KpiCard
             title="Total Assets"
             value={formatCurrency(totalAssetsValue, preferredCurrency, undefined, false)}
@@ -305,7 +305,7 @@ export default function DashboardPage() {
           />
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card>
             <CardHeader>
               <CardTitle>Portfolio Composition ({preferredCurrency})</CardTitle>
