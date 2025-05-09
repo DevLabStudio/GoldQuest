@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { RefreshCw, TrendingUp, TrendingDown, Wallet, Landmark, Scale, PiggyBank, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { RefreshCw, TrendingUp, TrendingDown, Wallet, Landmark, Scale, PiggyBank, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from "lucide-react";
 import KpiCard from "@/components/dashboard/kpi-card";
 import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
 import { getUserPreferences } from '@/lib/preferences';
@@ -203,7 +204,7 @@ export default function DashboardPage() {
   }, [accounts, preferredCurrency, isLoading]);
 
   // --- Transaction Dialog Handlers ---
-  const openAddDialog = (type: 'expense' | 'income' | 'transfer') => {
+  const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
     if (accounts.length === 0) {
         toast({
             title: "No Accounts",
@@ -302,24 +303,35 @@ export default function DashboardPage() {
   return (
     <TooltipProvider>
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-        <div className="mb-4">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
           <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
+          <div className="mt-2 sm:mt-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="default">
+                  <PlusCircle className="mr-2 h-4 w-4" />
+                  Add Transaction
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
+                  <ArrowDownCircle className="mr-2 h-4 w-4" />
+                  Add Spend
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
+                  <ArrowUpCircle className="mr-2 h-4 w-4" />
+                  Add Income
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
+                  <TransferIcon className="mr-2 h-4 w-4" />
+                  Add Transfer
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 mb-6">
-            <Button variant="outline" size="sm" onClick={() => openAddDialog('expense')}>
-                <ArrowDownCircle className="mr-2 h-4 w-4" />
-                Add Spend
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => openAddDialog('income')}>
-                <ArrowUpCircle className="mr-2 h-4 w-4" />
-                Add Income
-            </Button>
-             <Button variant="outline" size="sm" onClick={() => openAddDialog('transfer')}>
-                <TransferIcon className="mr-2 h-4 w-4" />
-                Add Transfer
-            </Button>
-        </div>
 
         <Card>
           <CardHeader>
@@ -329,7 +341,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-2 mt-2 sm:mt-0">
                 <span className="text-xs text-muted-foreground">{formatLastUpdated(lastUpdated)}</span>
-                <Button variant="default" size="sm" onClick={handleRefresh} disabled={isLoading}>
+                <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                   Refresh
                 </Button>
@@ -500,7 +512,3 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
-
-    
-
-    
