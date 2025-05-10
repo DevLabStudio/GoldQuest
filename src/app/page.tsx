@@ -253,7 +253,7 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <div className="xl:col-span-2"><Skeleton className="h-[300px] w-full" /></div>
-          <Skeleton className="h-[160px] w-full" />
+          {/* Removed SpendingsBreakdown Skeleton to match removal of component */}
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Skeleton className="h-[350px] w-full" />
@@ -266,22 +266,16 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <div className="xl:col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"> {/* Changed xl:grid-cols-4 to xl:grid-cols-3 */}
+        <div className="xl:col-span-2"> {/* Adjusted span for TotalNetWorthCard */}
           <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
-        <SmallStatCard
-          title="Spendings"
-          amount={monthlyExpenses}
-          currency={getCurrencySymbol(preferredCurrency)}
-          chartType="negative"
-          href="/expenses"
-        />
-        <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
+        {/* SpendingsBreakdown was here, now removed */}
+         <SpendingsBreakdown title="Top Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-        <div className="xl:col-span-2">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"> {/* Changed xl:grid-cols-4 to xl:grid-cols-3 */}
+        <div className="xl:col-span-2"> {/* Adjusted span for IncomeSourceChart */}
           {isLoading || incomeSourceDataActual.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground h-full">
                  <CardHeader>
@@ -295,13 +289,7 @@ export default function DashboardPage() {
             <IncomeSourceChart data={incomeSourceDataActual} currency={getCurrencySymbol(preferredCurrency)} />
           )}
         </div>
-        <SmallStatCard
-          title="Income"
-          amount={monthlyIncome}
-          currency={getCurrencySymbol(preferredCurrency)}
-          chartType="positive"
-          href="/revenue"
-        />
+        {/* Income SmallStatCard was here, now removed */}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
