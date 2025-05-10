@@ -5,6 +5,7 @@ import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
 import AuthWrapper from '@/components/layout/auth-wrapper'; 
+// Removed DateRangePicker and related state from here as it's moved to dashboard/page.tsx
 
 // Configure Oxanium font
 const oxanium = Oxanium({
@@ -33,6 +34,10 @@ export default function RootLayout({
           'min-h-screen flex flex-col'
         )}
       >
+        {/* 
+          The DateRangePicker was previously here conditionally. 
+          It's now moved to src/app/dashboard/page.tsx to be part of the sticky header there.
+        */}
         <AuthWrapper>{children}</AuthWrapper>
         <Toaster />
       </body>
