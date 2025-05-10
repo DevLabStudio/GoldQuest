@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -410,21 +409,24 @@ export default function ImportDataPage() {
               const rowNumber = index + 2; 
 
               const dateValue = record[dateCol];
-              let descriptionValue = descCol ? record[descCol] : undefined;
-              const destinationNameValue = destNameCol ? record[destNameCol] : undefined; // Payee from Firefly
-              const categoryValue = catCol ? record[catCol] : undefined;
-              const accountNameValue = accountCol ? record[accountCol] : undefined; 
+              // Get raw string values from the record
+              const accountNameValue = accountCol ? record[accountCol] : undefined;
               const sourceAccountNameValue = sourceAccountCol ? record[sourceAccountCol] : undefined;
               const destAccountNameValue = destAccountCol ? record[destAccountCol] : undefined;
+              let descriptionFromRecord = descCol ? record[descCol] : undefined;
+              const destinationNameValue = destNameCol ? record[destNameCol] : undefined; // Payee from Firefly
+              const categoryValue = catCol ? record[catCol] : undefined;
               const tagsValue = tagsCol ? record[tagsCol] : undefined;
               const notesValue = notesCol ? record[notesCol] : undefined;
-              const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined; 
-              const descriptionLower = descriptionValue?.toLowerCase();
+              const typeFromRecord = typeCol ? record[typeCol] : undefined;
 
-              // If description is empty but destination_name is present (common in Firefly), use destination_name
+              let descriptionValue = descriptionFromRecord;
               if (!descriptionValue && destinationNameValue) {
                   descriptionValue = destinationNameValue;
               }
+
+              const descriptionLower = descriptionValue?.toLowerCase(); // Safe with optional chaining
+              const typeValue = typeFromRecord?.trim().toLowerCase(); // Safe with optional chaining
 
 
               let parsedAmount: number = NaN; 
@@ -492,11 +494,11 @@ export default function ImportDataPage() {
 
               if (!dateValue) throw new Error(`Row ${rowNumber}: Missing mapped 'Date' data.`);
 
-              let description = descriptionValue?.trim() || 'Imported Transaction';
-              let category = categoryValue?.trim() || 'Uncategorized';
-              const parsedTags = tagsValue?.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) || [];
-               if (notesValue) { 
-                   description += ` (Notes: ${notesValue.trim()})`; 
+              let description = descriptionValue?.trim() || 'Imported Transaction'; // Safe
+              let category = categoryValue?.trim() || 'Uncategorized'; // Safe
+              const parsedTags = tagsValue?.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) || []; // Safe
+               if (notesValue) { // notesValue is raw from record
+                   description += ` (Notes: ${notesValue.trim()})`;  // Safe due to if check
                }
 
               let transactionTypeInternal: 'income' | 'expense' | 'transfer' | 'skip' = 'skip';
@@ -508,7 +510,7 @@ export default function ImportDataPage() {
 
                const initialBalanceDescMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
                if (initialBalanceDescMatch) {
-                   const accountNameFromDesc = initialBalanceDescMatch[1].trim();
+                   const accountNameFromDesc = initialBalanceDescMatch[1].trim(); // Safe, match ensures group 1 is string
                    csvAccountNameKey = accountNameFromDesc.toLowerCase();
                    if (!tempAccountMap[csvAccountNameKey]) {
                        console.warn(`Row ${rowNumber}: Initial balance for account "${accountNameFromDesc}" (from desc), but not in temp map. Placeholder will be used.`);
@@ -521,28 +523,35 @@ export default function ImportDataPage() {
                    category = 'Opening Balance'; 
                    console.log(`Row ${rowNumber}: Identified 'Saldo inicial para:' for account ${accountNameFromDesc}. Amount: ${parsedAmount}. This will set initial account balance.`);
                } else if (typeValue === 'opening balance') {
-                    const accountNameForOpening = accountCol ? record[accountCol]?.trim() : undefined;
-                     if (accountNameForOpening) {
-                         csvAccountNameKey = accountNameForOpening.toLowerCase();
-                         if (!tempAccountMap[csvAccountNameKey]) throw new Error(`Row ${rowNumber}: Opening balance type, but Account '${accountNameForOpening}' not in temp map.`);
-                         if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid amount for 'opening balance'.`);
-                         isOpeningBalance = true;
-                         transactionTypeInternal = 'skip'; 
-                         description = descriptionValue || `Opening Balance for ${accountNameForOpening}`;
-                         category = 'Opening Balance';
-                         console.log(`Row ${rowNumber}: Identified 'opening balance' type for account ${accountNameForOpening}. Amount: ${parsedAmount}. This will set initial account balance.`);
-                    } else {
-                         throw new Error(`Row ${rowNumber}: 'opening balance' type detected, but 'Account Name' column is not mapped or empty.`);
+                    // accountNameValue comes from record[accountCol]
+                    if (!accountNameValue || typeof accountNameValue !== 'string' || accountNameValue.trim() === '') {
+                        throw new Error(`Row ${rowNumber}: 'opening balance' type detected, but 'Account Name' column ('${accountCol || 'Not Mapped'}') is missing, empty, or not a string.`);
                     }
+                    const accountNameForOpening = accountNameValue.trim();
+                    csvAccountNameKey = accountNameForOpening.toLowerCase();
+                    if (!tempAccountMap[csvAccountNameKey]) throw new Error(`Row ${rowNumber}: Opening balance type, but Account '${accountNameForOpening}' not in temp map.`);
+                    if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid amount for 'opening balance'.`);
+                    isOpeningBalance = true;
+                    transactionTypeInternal = 'skip'; 
+                    description = descriptionValue || `Opening Balance for ${accountNameForOpening}`;
+                    category = 'Opening Balance';
+                    console.log(`Row ${rowNumber}: Identified 'opening balance' type for account ${accountNameForOpening}. Amount: ${parsedAmount}. This will set initial account balance.`);
                } else if (typeValue === 'transfer' || (sourceAccountNameValue && destAccountNameValue)) { // Transfer
+                   if (!sourceAccountNameValue || typeof sourceAccountNameValue !== 'string' || sourceAccountNameValue.trim() === '') {
+                       throw new Error(`Row ${rowNumber}: Transfer type but CSV Source Account Name ('${sourceAccountCol || 'Not Mapped'}') is missing, empty, or not a string.`);
+                   }
                    csvSourceAccountNameKey = sourceAccountNameValue.trim().toLowerCase();
+
+                   if (!destAccountNameValue || typeof destAccountNameValue !== 'string' || destAccountNameValue.trim() === '') {
+                       throw new Error(`Row ${rowNumber}: Transfer type but CSV Destination Account Name ('${destAccountCol || 'Not Mapped'}') is missing, empty, or not a string.`);
+                   }
                    csvDestAccountNameKey = destAccountNameValue.trim().toLowerCase();
+                   
                    if (!tempAccountMap[csvSourceAccountNameKey]) throw new Error(`Row ${rowNumber}: Transfer, Source account ('${sourceAccountNameValue}') not in temp map.`);
                    if (!tempAccountMap[csvDestAccountNameKey]) throw new Error(`Row ${rowNumber}: Transfer, Destination account ('${destAccountNameValue}') not in temp map.`);
                    if (csvSourceAccountNameKey === csvDestAccountNameKey) throw new Error(`Row ${rowNumber}: Transfer source and destination accounts are the same ('${sourceAccountNameValue}').`);
 
-                   // For transfers, amount should always be positive. The import process handles the signs.
-                   if (isNaN(parsedAmount)) { // If parsedAmount is NaN (e.g. from income/expense conflict)
+                   if (isNaN(parsedAmount)) { 
                         const signedVal = parseAmount(signedAmountValue);
                         const incomeVal = parseAmount(incomeAmountValue);
                         const expenseVal = parseAmount(expenseAmountValue);
@@ -552,41 +561,48 @@ export default function ImportDataPage() {
                         else if (!isNaN(expenseVal) && expenseVal > 0) parsedAmount = expenseVal;
                         else throw new Error(`Row ${rowNumber}: Could not determine transfer amount from available amount columns.`);
                    } else {
-                        parsedAmount = Math.abs(parsedAmount); // Ensure it's positive
+                        parsedAmount = Math.abs(parsedAmount); 
                    }
                    
                    if (parsedAmount <= 0) throw new Error(`Row ${rowNumber}: Transfer amount resolved to zero or negative.`);
-
                    transactionTypeInternal = 'transfer';
                    category = 'Transfer'; 
                    description = description || `Transfer from ${sourceAccountNameValue} to ${destAccountNameValue}`;
 
                } else if (accountNameValue) { // Regular income/expense
+                   if (typeof accountNameValue !== 'string' || accountNameValue.trim() === '') {
+                       throw new Error(`Row ${rowNumber}: CSV Account Name ('${accountCol || 'Not Mapped'}') is missing, empty, or not a string for income/expense transaction.`);
+                   }
                    csvAccountNameKey = accountNameValue.trim().toLowerCase();
                    if (!tempAccountMap[csvAccountNameKey]) throw new Error(`Row ${rowNumber}: Account '${accountNameValue}' not in temp map.`);
 
                    if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value ('${signedAmountValue || incomeAmountValue || expenseAmountValue || 'N/A'}').`);
 
-                   if (typeValue === 'deposit' || (typeValue === 'transfer' && parsedAmount > 0)) { // Firefly might mark one leg of transfer as 'deposit'
+                   if (typeValue === 'deposit' || (typeValue === 'transfer' && parsedAmount > 0)) { 
                        parsedAmount = Math.abs(parsedAmount); 
                        transactionTypeInternal = 'income';
                        if (typeValue === 'transfer') category = 'Transfer'; 
-                   } else if (typeValue === 'withdrawal' || (typeValue === 'transfer' && parsedAmount < 0)) {  // Firefly might mark one leg of transfer as 'withdrawal'
+                   } else if (typeValue === 'withdrawal' || (typeValue === 'transfer' && parsedAmount < 0)) { 
                        parsedAmount = -Math.abs(parsedAmount); 
                        transactionTypeInternal = 'expense';
                         if (typeValue === 'transfer') category = 'Transfer';
                    } else {
                        transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
                    }
-               } else {
-                   const singleAccountName = (sourceAccountNameValue || destAccountNameValue)?.trim();
+               } else { // Fallback to single account name from source/dest if accountCol not mapped/empty
+                   const trimmedSource = typeof sourceAccountNameValue === 'string' ? sourceAccountNameValue.trim() : undefined;
+                   const trimmedDest = typeof destAccountNameValue === 'string' ? destAccountNameValue.trim() : undefined;
+                   const singleAccountName = trimmedSource || trimmedDest;
+
                    if (singleAccountName) {
-                      csvAccountNameKey = singleAccountName.toLowerCase();
+                      csvAccountNameKey = singleAccountName.toLowerCase(); // Already trimmed
                       if (!tempAccountMap[csvAccountNameKey]) throw new Error(`Row ${rowNumber}: Account '${singleAccountName}' from source/destination column not found in temp map.`);
                       if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value.`);
                       transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
                    } else {
-                      throw new Error(`Row ${rowNumber}: Missing required account information.`);
+                      if (!isOpeningBalance) { // Only throw if not opening balance
+                         throw new Error(`Row ${rowNumber}: Missing required account information (Primary Account Name, or Source/Destination for transfers).`);
+                      }
                    }
                }
 
@@ -626,7 +642,6 @@ export default function ImportDataPage() {
             } catch (rowError: any) {
                 console.error(`Error processing row ${index + 2} with mappings:`, confirmedMappings, `and record:`, record, `Error:`, rowError);
                  return {
-                    // accountId: `error_row_${index}`,
                     date: parseDate(record[dateCol]), 
                     amount: 0, 
                     description: `Error Processing Row ${index + 2}`,
@@ -744,27 +759,32 @@ export default function ImportDataPage() {
         const descCol = mappings.description; 
 
         csvData.forEach((record, index) => {
-            const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
-            const descValue = descCol ? record[descCol]?.trim() : undefined;
+            const typeValueRaw = typeCol ? record[typeCol] : undefined;
+            const typeValue = typeof typeValueRaw === 'string' ? typeValueRaw.trim().toLowerCase() : undefined;
+            
+            const descValueRaw = descCol ? record[descCol] : undefined;
+            const descValue = typeof descValueRaw === 'string' ? descValueRaw.trim() : undefined;
             const descLower = descValue?.toLowerCase();
             const initialBalanceDescMatch = descLower?.match(/^saldo inicial para:\s*(.+)$/);
 
             let isOpening = false;
-            let accountNameForBalance: string | undefined = undefined;
+            let accountNameForBalanceRaw: string | undefined = undefined;
 
             if (initialBalanceDescMatch) {
-                accountNameForBalance = initialBalanceDescMatch[1].trim();
+                accountNameForBalanceRaw = initialBalanceDescMatch[1]; // No trim here, already trimmed in descValue
                 isOpening = true;
-                console.log(`Row ${index + 2}: Found 'Saldo inicial para:' description for account "${accountNameForBalance}".`);
+                console.log(`Row ${index + 2}: Found 'Saldo inicial para:' description for account "${accountNameForBalanceRaw}".`);
             } else if (typeValue === 'opening balance') {
-                accountNameForBalance = accountNameCol ? record[accountNameCol]?.trim() : undefined;
-                 if (accountNameForBalance) {
+                accountNameForBalanceRaw = accountNameCol ? record[accountNameCol] : undefined;
+                 if (accountNameForBalanceRaw && typeof accountNameForBalanceRaw === 'string') {
                     isOpening = true;
-                    console.log(`Row ${index + 2}: Found 'opening balance' type for account "${accountNameForBalance}".`);
+                    console.log(`Row ${index + 2}: Found 'opening balance' type for account "${accountNameForBalanceRaw.trim()}".`);
                  } else {
-                     console.warn(`Row ${index + 2}: 'opening balance' type found, but could not determine account name from the mapped 'Account Name' column.`);
+                     console.warn(`Row ${index + 2}: 'opening balance' type found, but could not determine account name from the mapped 'Account Name' column ('${accountNameCol}') or value is not a string.`);
                  }
             }
+            
+            const accountNameForBalance = typeof accountNameForBalanceRaw === 'string' ? accountNameForBalanceRaw.trim() : undefined;
 
             if (isOpening && accountNameForBalance) {
                  const normalizedName = accountNameForBalance.toLowerCase();
@@ -813,24 +833,32 @@ export default function ImportDataPage() {
         });
 
         csvData.forEach((record, index) => {
-             const typeValue = typeCol ? record[typeCol]?.trim().toLowerCase() : undefined;
-             const descValue = descCol ? record[descCol]?.trim() : undefined;
+             const typeValueRaw = typeCol ? record[typeCol] : undefined;
+             const typeValue = typeof typeValueRaw === 'string' ? typeValueRaw.trim().toLowerCase() : undefined;
+             
+             const descValueRaw = descCol ? record[descCol] : undefined;
+             const descValue = typeof descValueRaw === 'string' ? descValueRaw.trim() : undefined;
              const descLower = descValue?.toLowerCase();
              const isOpeningEntry = typeValue === 'opening balance' || descLower?.startsWith('saldo inicial para:');
 
              if (isOpeningEntry) return; 
 
-             let potentialAccountNames: string[] = [];
+             let potentialAccountNamesRaw: (string | undefined)[] = [];
              if (typeValue === 'transfer' || (sourceAccountCol && record[sourceAccountCol] && destAccountCol && record[destAccountCol])) {
-                 potentialAccountNames = [
-                     sourceAccountCol ? record[sourceAccountCol]?.trim() : undefined,
-                     destAccountCol ? record[destAccountCol]?.trim() : undefined
-                 ].filter(Boolean) as string[];
+                 potentialAccountNamesRaw = [
+                     sourceAccountCol ? record[sourceAccountCol] : undefined,
+                     destAccountCol ? record[destAccountCol] : undefined
+                 ];
              } else {
-                  potentialAccountNames = [
-                      accountNameCol ? record[accountNameCol]?.trim() : undefined
-                  ].filter(Boolean) as string[];
+                  potentialAccountNamesRaw = [
+                      accountNameCol ? record[accountNameCol] : undefined
+                  ];
              }
+             
+             const potentialAccountNames = potentialAccountNamesRaw
+                .filter(name => typeof name === 'string' && name.trim() !== '')
+                .map(name => (name as string).trim());
+
 
              potentialAccountNames.forEach(name => {
                  if (name) {
@@ -1248,7 +1276,7 @@ export default function ImportDataPage() {
                      const accountIdForImport = localFinalAccountMap[accountNameForTx]; 
 
                      if (!accountIdForImport) {
-                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(localFinalAccountMap)}`);
+                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
                      }
                      if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_') || accountIdForImport.startsWith('preview_')) {
                          throw new Error(`Invalid account ID reference ('${accountIdForImport}') for import.`);
