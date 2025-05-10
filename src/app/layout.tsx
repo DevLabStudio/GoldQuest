@@ -5,7 +5,6 @@ import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
 import AuthWrapper from '@/components/layout/auth-wrapper'; 
-// Removed DateRangePicker and related state from here as it's moved to dashboard/page.tsx
 
 // Configure Oxanium font
 const oxanium = Oxanium({

@@ -316,10 +316,13 @@ export default function DashboardPage() {
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0) {
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 mb-4">
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 mb-4 -mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 border-b">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
                 <Skeleton className="h-10 w-1/3 mb-2 sm:mb-0" />
-                <Skeleton className="h-10 w-64" />
+                 <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <Skeleton className="h-10 w-full sm:w-64" /> {/* Date Picker Skeleton */}
+                    <Skeleton className="h-10 w-24" /> {/* Add Button Skeleton */}
+                </div>
             </div>
         </div>
         <Card>
