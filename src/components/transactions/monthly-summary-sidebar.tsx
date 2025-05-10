@@ -2,6 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
+import { useMemo } from 'react'; // Import useMemo
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
