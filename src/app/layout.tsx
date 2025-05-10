@@ -1,11 +1,10 @@
 
-'use client'; 
-
+import type { Metadata } from 'next';
 import { Oxanium } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
-import AuthWrapper from '@/components/layout/auth-wrapper'; // Import the new AuthWrapper
+import AuthWrapper from '@/components/layout/auth-wrapper'; 
 
 // Configure Oxanium font
 const oxanium = Oxanium({
@@ -13,6 +12,10 @@ const oxanium = Oxanium({
   subsets: ['latin'],
 });
 
+export const metadata: Metadata = {
+  title: 'The Golden Game',
+  description: 'Simple personal finance management',
+};
 
 export default function RootLayout({
   children,
@@ -22,8 +25,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <head>
-          <title>The Golden Game</title>
-          <meta name="description" content="Simple personal finance management" />
+          {/* Metadata will be injected by Next.js from the export above */}
       </head>
       <body
       className={cn(
@@ -37,4 +39,3 @@ export default function RootLayout({
     </html>
   );
 }
-
