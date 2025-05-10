@@ -14,33 +14,11 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getUserPreferences } from '@/lib/preferences';
-import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency'; 
-import { startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 
-
-const incomeSourceData = [
-  { source: "E-commerce", amount: 2100, fill: "hsl(var(--chart-1))" },
-  { source: "Google Adsense", amount: 950, fill: "hsl(var(--chart-3))" },
-  { source: "My Shop", amount: 8000, fill: "hsl(var(--chart-5))" },
-  { source: "Salary", amount: 13000, fill: "hsl(var(--chart-2))" },
-];
-
-const monthlyIncomeExpensesData = [
-  { month: "Jan", income: 12000, expenses: 8000 },
-  { month: "Feb", income: 15000, expenses: 9500 },
-  { month: "Mar", income: 18000, expenses: 12000 },
-  { month: "Apr", income: 14000, expenses: 15000 },
-  { month: "May", income: 22000, expenses: 10000 },
-  { month: "Jun", income: 25000, expenses: 11000 },
-  { month: "Jul", income: 23000, expenses: 13000 },
-  { month: "Aug", income: 20000, expenses: 12500 },
-  { month: "Sep", income: 19000, expenses: 10000 },
-  { month: "Oct", income: 21000, expenses: 9000 },
-  { month: "Nov", income: 24000, expenses: 11500 },
-  { month: "Dec", income: 20239, expenses: 20239 },
-];
 
 const assetsData = [
   { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" },
@@ -114,7 +92,7 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); 
+  }, []);
 
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
@@ -153,7 +131,7 @@ export default function DashboardPage() {
       if (tx.amount < 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency); // Corrected Math.Abs to Math.abs
+          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
         }
       }
       return sum;
@@ -161,15 +139,15 @@ export default function DashboardPage() {
   }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
 
   const spendingsBreakdownDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !categories.length) return [];
+    if (isLoading || typeof window === 'undefined' || !categories.length || !allTransactions.length) return [];
     const expenseCategoryTotals: { [key: string]: number } = {};
 
     currentMonthTransactions.forEach(tx => {
-      if (tx.amount < 0) { 
+      if (tx.amount < 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           const categoryName = tx.category || 'Uncategorized';
-          const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency); // Corrected Math.Abs to Math.abs
+          const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
           expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
         }
       }
@@ -178,7 +156,7 @@ export default function DashboardPage() {
     return Object.entries(expenseCategoryTotals)
       .map(([name, amount]) => {
         const { icon: CategoryIcon, color } = getCategoryStyle(name);
-        
+
         const categoryStyle = getCategoryStyle(name);
         const bgColor = categoryStyle.color.split(' ').find(cls => cls.startsWith('bg-')) || 'bg-gray-500 dark:bg-gray-700';
 
@@ -189,12 +167,83 @@ export default function DashboardPage() {
           bgColor: bgColor,
         };
       })
-      .sort((a, b) => b.amount - a.amount) 
-      .slice(0, 3); 
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 3);
   }, [currentMonthTransactions, accounts, categories, preferredCurrency, isLoading]);
 
+  const incomeSourceDataActual = useMemo(() => {
+    if (isLoading || typeof window === 'undefined' || !allTransactions.length) return [];
+    const incomeCategoryTotals: { [key: string]: number } = {};
+    const chartColors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
+    let colorIndex = 0;
 
-  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) { 
+    currentMonthTransactions.forEach(tx => {
+      if (tx.amount > 0) {
+        const account = accounts.find(acc => acc.id === tx.accountId);
+        if (account) {
+          const categoryName = tx.category || 'Uncategorized Income';
+          const convertedAmount = convertCurrency(tx.amount, account.currency, preferredCurrency);
+          incomeCategoryTotals[categoryName] = (incomeCategoryTotals[categoryName] || 0) + convertedAmount;
+        }
+      }
+    });
+
+    return Object.entries(incomeCategoryTotals)
+      .map(([source, amount]) => ({
+        source: source.charAt(0).toUpperCase() + source.slice(1),
+        amount,
+        fill: chartColors[colorIndex++ % chartColors.length],
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+
+
+  const monthlyIncomeExpensesDataActual = useMemo(() => {
+    if (isLoading || typeof window === 'undefined' || !allTransactions.length) return [];
+
+    const monthlyData: { [month: string]: { income: number; expenses: number } } = {};
+
+    // Get transactions from the last 12 months relative to today
+    const today = new Date();
+    const last12Months: { month: string; income: number; expenses: number }[] = [];
+
+    for (let i = 11; i >= 0; i--) {
+        const targetMonthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const monthKey = formatDateFns(targetMonthDate, 'MMM'); // e.g., "Jan", "Feb"
+        monthlyData[monthKey] = { income: 0, expenses: 0 };
+    }
+
+
+    allTransactions.forEach(tx => {
+        const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+        const monthKey = formatDateFns(txDate, 'MMM');
+        const account = accounts.find(acc => acc.id === tx.accountId);
+
+        if (account && monthlyData[monthKey]) {
+            if (tx.amount > 0) {
+                monthlyData[monthKey].income += convertCurrency(tx.amount, account.currency, preferredCurrency);
+            } else if (tx.amount < 0) {
+                monthlyData[monthKey].expenses += convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+            }
+        }
+    });
+
+    Object.keys(monthlyData).forEach(monthKey => {
+        last12Months.push({
+            month: monthKey,
+            income: monthlyData[monthKey].income,
+            expenses: monthlyData[monthKey].expenses,
+        });
+    });
+    // Ensure the order is chronological if necessary, or matches the order of generation
+    // For example, if you generated keys Jan, Feb, Mar, and then pushed, it would be in order.
+    // If `monthlyData` keys were not in order, you might need to sort `last12Months` by a date object.
+
+    return last12Months;
+  }, [allTransactions, accounts, preferredCurrency, isLoading]);
+
+
+  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) {
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
@@ -226,26 +275,48 @@ export default function DashboardPage() {
           amount={monthlyExpenses}
           currency={getCurrencySymbol(preferredCurrency)}
           chartType="negative"
-          href="/expenses" 
+          href="/expenses"
         />
         <SpendingsBreakdown title="Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-2">
-          <IncomeSourceChart data={incomeSourceData} currency={getCurrencySymbol(preferredCurrency)} />
+          {isLoading || incomeSourceDataActual.length === 0 ? (
+            <Card className="shadow-lg bg-card text-card-foreground h-full">
+                 <CardHeader>
+                    <CardTitle>Income Source</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-[250px] pb-0 flex items-center justify-center">
+                    {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income data for this month.</p>}
+                  </CardContent>
+            </Card>
+          ) : (
+            <IncomeSourceChart data={incomeSourceDataActual} currency={getCurrencySymbol(preferredCurrency)} />
+          )}
         </div>
         <SmallStatCard
           title="Income"
           amount={monthlyIncome}
           currency={getCurrencySymbol(preferredCurrency)}
           chartType="positive"
-          href="/revenue" 
+          href="/revenue"
         />
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        <IncomeExpensesChart data={monthlyIncomeExpensesData} currency={getCurrencySymbol(preferredCurrency)} />
+         {isLoading || monthlyIncomeExpensesDataActual.length === 0 ? (
+            <Card className="shadow-lg bg-card text-card-foreground">
+                <CardHeader className="flex flex-row items-start justify-between pb-4">
+                    <div><CardTitle>Income & Expenses</CardTitle></div>
+                </CardHeader>
+                <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
+                     {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income/expense data available.</p>}
+                </CardContent>
+            </Card>
+         ) : (
+            <IncomeExpensesChart data={monthlyIncomeExpensesDataActual} currency={getCurrencySymbol(preferredCurrency)} />
+         )}
         <AssetsChart data={assetsData} currency={getCurrencySymbol(preferredCurrency)} />
       </div>
     </div>

@@ -5,6 +5,7 @@ import type { FC } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartConfig, ChartContainer, ChartTooltipContent } from '@/components/ui/chart';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 interface IncomeSourceData {
   source: string;
@@ -18,6 +19,19 @@ interface IncomeSourceChartProps {
 }
 
 const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
+  if (!data || data.length === 0) {
+    return (
+        <Card className="shadow-lg bg-card text-card-foreground h-full">
+            <CardHeader>
+                <CardTitle>Income Source</CardTitle>
+            </CardHeader>
+            <CardContent className="h-[250px] pb-0 flex items-center justify-center">
+                 <p className="text-muted-foreground">No income data to display.</p>
+            </CardContent>
+        </Card>
+    );
+  }
+
   const chartConfig = data.reduce((acc, item) => {
     acc[item.source] = {
       label: item.source,
@@ -25,7 +39,7 @@ const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
     };
     return acc;
   }, {} as ChartConfig);
-  
+
   chartConfig['amount'] = { label: `Amount (${currency})`};
 
 
@@ -39,24 +53,24 @@ const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
           <ResponsiveContainer>
             <BarChart data={data} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
               <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
-              <XAxis 
-                type="number" 
-                axisLine={false} 
-                tickLine={false} 
+              <XAxis
+                type="number"
+                axisLine={false}
+                tickLine={false}
                 tickFormatter={(value) => `${currency}${value/1000}k`}
                 className="text-xs fill-muted-foreground"
               />
-              <YAxis 
-                dataKey="source" 
-                type="category" 
-                axisLine={false} 
-                tickLine={false} 
+              <YAxis
+                dataKey="source"
+                type="category"
+                axisLine={false}
+                tickLine={false}
                 className="text-xs fill-muted-foreground"
                 width={80} // Adjust width for labels
               />
               <Tooltip
                 cursor={{ fill: 'hsl(var(--muted))' }}
-                content={<ChartTooltipContent 
+                content={<ChartTooltipContent
                             formatter={(value, name, props) => (
                                 <div className="flex items-center">
                                 <span
@@ -84,3 +98,4 @@ const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
 };
 
 export default IncomeSourceChart;
+

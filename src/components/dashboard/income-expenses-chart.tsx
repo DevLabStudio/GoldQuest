@@ -5,6 +5,7 @@ import type { FC } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 interface MonthlyData {
   month: string;
@@ -18,6 +19,21 @@ interface IncomeExpensesChartProps {
 }
 
 const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) => {
+  if (!data || data.length === 0) {
+    return (
+        <Card className="shadow-lg bg-card text-card-foreground">
+            <CardHeader className="flex flex-row items-start justify-between pb-4">
+                <div>
+                    <CardTitle>Income & Expenses</CardTitle>
+                </div>
+            </CardHeader>
+            <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
+                <p className="text-muted-foreground">No income/expense data to display.</p>
+            </CardContent>
+        </Card>
+    );
+  }
+
   const chartConfig = {
     income: {
       label: "Income",
@@ -114,3 +130,4 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
 };
 
 export default IncomeExpensesChart;
+
