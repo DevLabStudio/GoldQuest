@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -16,11 +17,13 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, addTransaction, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
-import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, subDays } from 'date-fns';
+import type { DateRange } from 'react-day-picker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import { useToast } from "@/hooks/use-toast";
+import DateRangePicker from '@/components/dashboard/date-range-picker';
 
 
 export default function DashboardPage() {
@@ -35,6 +38,13 @@ export default function DashboardPage() {
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
+
+  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({
+    from: startOfMonth(new Date()),
+    to: endOfMonth(new Date()),
+  });
+  const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('all');
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
 
   useEffect(() => {
@@ -98,7 +108,7 @@ export default function DashboardPage() {
         window.removeEventListener('storage', handleStorageChange);
       }
     };
-  }, []); 
+  }, [toast]); 
 
   const handleRefresh = async () => {
      setIsLoading(true);
@@ -149,20 +159,24 @@ export default function DashboardPage() {
     }, 0);
   }, [accounts, preferredCurrency, isLoading]);
 
-  const currentMonthTransactions = useMemo(() => {
+  const selectedPeriodTransactions = useMemo(() => {
     if (isLoading) return [];
-    const now = new Date();
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
     return allTransactions.filter(tx => {
       const txDate = new Date(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      return isWithinInterval(txDate, { start: monthStart, end: monthEnd });
-    });
-  }, [allTransactions, isLoading]);
+      const isInDateRange = selectedDateRange.from && selectedDateRange.to ? 
+                            isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to }) : 
+                            true; // "All Time" if no range
+      
+      const matchesAccountFilter = selectedAccountFilter === 'all' || tx.accountId === selectedAccountFilter;
+      const matchesCategoryFilter = selectedCategoryFilter === 'all' || tx.category === selectedCategoryFilter;
 
-  const monthlyIncome = useMemo(() => {
+      return isInDateRange && matchesAccountFilter && matchesCategoryFilter;
+    });
+  }, [allTransactions, isLoading, selectedDateRange, selectedAccountFilter, selectedCategoryFilter]);
+
+  const periodIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
-    return currentMonthTransactions.reduce((sum, tx) => {
+    return selectedPeriodTransactions.reduce((sum, tx) => {
       if (tx.amount > 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
@@ -171,11 +185,11 @@ export default function DashboardPage() {
       }
       return sum;
     }, 0);
-  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+  }, [selectedPeriodTransactions, accounts, preferredCurrency, isLoading]);
 
-  const monthlyExpenses = useMemo(() => {
+  const periodExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
-    return currentMonthTransactions.reduce((sum, tx) => {
+    return selectedPeriodTransactions.reduce((sum, tx) => {
       if (tx.amount < 0) {
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
@@ -184,7 +198,7 @@ export default function DashboardPage() {
       }
       return sum;
     }, 0);
-  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+  }, [selectedPeriodTransactions, accounts, preferredCurrency, isLoading]);
 
   const totalAssetsValue = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
@@ -207,10 +221,10 @@ export default function DashboardPage() {
   }, [accounts, preferredCurrency, isLoading]);
 
   const savingsRate = useMemo(() => {
-    if (monthlyIncome === 0) return 0;
-    const netSavings = monthlyIncome - monthlyExpenses;
-    return netSavings / monthlyIncome;
-  }, [monthlyIncome, monthlyExpenses]);
+    if (periodIncome === 0) return 0;
+    const netSavings = periodIncome - periodExpenses;
+    return netSavings / periodIncome;
+  }, [periodIncome, periodExpenses]);
 
   const netWorthCompositionData = useMemo((): NetWorthChartDataPoint[] => {
     if (isLoading || typeof window === 'undefined') return [];
@@ -377,22 +391,14 @@ export default function DashboardPage() {
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             <div>
               <label htmlFor="date-range" className="text-xs font-medium text-muted-foreground">Period</label>
-              <Select defaultValue="thisMonth">
-                <SelectTrigger id="date-range">
-                  <SelectValue placeholder="Select period" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="thisMonth">This Month</SelectItem>
-                  <SelectItem value="lastMonth">Last Month</SelectItem>
-                  <SelectItem value="last3months">Last 3 Months</SelectItem>
-                  <SelectItem value="thisYear">This Year</SelectItem>
-                  <SelectItem value="allTime">All Time</SelectItem>
-                </SelectContent>
-              </Select>
+              <DateRangePicker
+                initialRange={selectedDateRange}
+                onRangeChange={setSelectedDateRange}
+              />
             </div>
             <div>
               <label htmlFor="account-filter" className="text-xs font-medium text-muted-foreground">Account</label>
-              <Select defaultValue="all" disabled={accounts.length === 0}>
+              <Select defaultValue={selectedAccountFilter} onValueChange={setSelectedAccountFilter} disabled={accounts.length === 0}>
                 <SelectTrigger id="account-filter">
                   <SelectValue placeholder="Select account" />
                 </SelectTrigger>
@@ -406,7 +412,7 @@ export default function DashboardPage() {
             </div>
             <div>
               <label htmlFor="category-filter" className="text-xs font-medium text-muted-foreground">Category</label>
-              <Select defaultValue="all" disabled={categories.length === 0}>
+              <Select defaultValue={selectedCategoryFilter} onValueChange={setSelectedCategoryFilter} disabled={categories.length === 0}>
                 <SelectTrigger id="category-filter">
                   <SelectValue placeholder="Select category" />
                 </SelectTrigger>
@@ -429,17 +435,17 @@ export default function DashboardPage() {
             icon={<Wallet className="text-primary" />}
           />
           <KpiCard
-            title="Monthly Income"
-            value={formatCurrency(monthlyIncome, preferredCurrency, undefined, false)}
-            tooltip="Total income received this month."
+            title={`Income (${format(selectedDateRange.from || new Date(), 'MMM yyyy')})`}
+            value={formatCurrency(periodIncome, preferredCurrency, undefined, false)}
+            tooltip={`Total income received in the selected period.`}
             icon={<TrendingUp className="text-green-500" />} 
             valueClassName="text-green-600 dark:text-green-500" 
             href="/revenue"
           />
           <KpiCard
-            title="Monthly Expenses"
-            value={formatCurrency(monthlyExpenses, preferredCurrency, undefined, false)}
-            tooltip="Total expenses this month."
+            title={`Expenses (${format(selectedDateRange.from || new Date(), 'MMM yyyy')})`}
+            value={formatCurrency(periodExpenses, preferredCurrency, undefined, false)}
+            tooltip={`Total expenses in the selected period.`}
             icon={<TrendingDown className="text-red-500" />} 
             valueClassName="text-red-600 dark:text-red-500" 
             href="/expenses"
@@ -459,9 +465,9 @@ export default function DashboardPage() {
             icon={<Scale className="text-primary" />}
           />
           <KpiCard
-            title="Savings Rate"
+            title={`Savings Rate (${format(selectedDateRange.from || new Date(), 'MMM yyyy')})`}
             value={`${(savingsRate * 100).toFixed(1)}%`}
-            tooltip="Percentage of your income you are saving."
+            tooltip="Percentage of your income you are saving in the selected period."
             isPercentage={true}
             icon={<PiggyBank className="text-primary" />}
           />
@@ -492,14 +498,14 @@ export default function DashboardPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Monthly Cash Flow (Coming Soon)</CardTitle>
-              <CardDescription>Compare income and expenses over time.</CardDescription>
+              <CardTitle>Cash Flow (Selected Period)</CardTitle>
+              <CardDescription>Compare income and expenses over the selected period.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px] sm:h-[350px] flex items-center justify-center">
                {isLoading && accounts.length === 0 ? (
                   <Skeleton className="h-full w-full" />
                ) : (
-                 <p className="text-muted-foreground">Cash flow chart in development.</p>
+                 <p className="text-muted-foreground">Cash flow chart for selected period in development.</p>
                )}
             </CardContent>
           </Card>
