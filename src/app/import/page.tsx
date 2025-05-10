@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -522,7 +523,7 @@ export default function ImportDataPage() {
                const initialBalanceDescMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
                if (initialBalanceDescMatch) {
                    // Account name might be in description for "Saldo inicial para:"
-                   const accountNameFromDesc = initialBalanceMatch[1].trim();
+                   const accountNameFromDesc = initialBalanceDescMatch[1].trim();
                    const accountNameLower = accountNameFromDesc.toLowerCase();
                    primaryAccountId = tempAccountMap[accountNameLower]; // Use temp map
                     if (!primaryAccountId) {
@@ -586,7 +587,9 @@ export default function ImportDataPage() {
                        parsedAmount = Math.abs(parsedAmount); // Ensure positive for transfer representation
                    }
 
-                   primaryAccountId = sourceId; // For the "from" transaction
+                   // Setting primaryAccountId is not strictly necessary here as handleImport will use sourceId and destId.
+                   // However, ensure it has a value if used elsewhere for this item.
+                   primaryAccountId = sourceId; // Conventionally, the "from" account.
                    transactionTypeInternal = 'transfer';
                    category = 'Transfer'; // Standard category for transfers
                    description = description || `Transfer from ${sourceAccountNameValue} to ${destAccountNameValue}`;
@@ -1222,17 +1225,17 @@ export default function ImportDataPage() {
             latestAccountsState = await getAccounts(); // Refetch accounts from service
             setAccounts(latestAccountsState); // Update component state
 
-        } catch (finalAccountMapError) {
-            console.error("Error during account preparation phase:", finalAccountMapError);
-            setIsLoading(false);
+      } catch (finalAccountMapError) {
+          console.error("Error during account preparation phase:", finalAccountMapError);
             setError("Critical error during account preparation. Import aborted.");
-            toast({
-                title: "Import Failed",
-                description: "Could not prepare accounts for import.",
-                variant: "destructive",
-            });
-           return; // Halt import
-       }
+          toast({
+              title: "Import Failed",
+              description: "Could not prepare accounts for import.",
+              variant: "destructive",
+          });
+          setIsLoading(false);
+          return; // Halt import
+      }
         // -------------------------------------------------------------
 
 
@@ -1298,29 +1301,35 @@ export default function ImportDataPage() {
                }).filter(Boolean) || [];
 
 
-                // Handle transfers (which create two transactions)
+                // Determine if it's a transfer based on the category set during processAndMapData
+                // Also ensure source_account and destination_account columns were mapped for transfers
                 const sourceCol = columnMappings.source_account;
                 const destCol = columnMappings.destination_account;
-                const sourceName = sourceCol ? item.originalRecord[sourceCol]?.trim() : undefined;
-                const destNameValue = destCol ? item.originalRecord[destCol]?.trim() : undefined; // Renamed to avoid conflict
 
-                if (sourceName && destNameValue) { // It's a transfer if both source and destination are present
+                if (item.category === 'Transfer' && sourceCol && destCol) {
+                    const sourceName = item.originalRecord[sourceCol]?.trim();
+                    const destNameValue = item.originalRecord[destCol]?.trim();
+
+                    if (!sourceName || !destNameValue) {
+                        throw new Error(`Transfer Import Error - Row ${rowNumber} marked as Transfer, but source or destination account name is missing in CSV from mapped columns.`);
+                    }
+
                      const sourceNameLower = sourceName.toLowerCase();
                      const destNameLower = destNameValue.toLowerCase();
-                     const sourceId = localFinalAccountMap[sourceNameLower]; // Use the definitive map
-                     const destId = localFinalAccountMap[destNameLower]; // Use the definitive map
+                     const sourceId = localFinalAccountMap[sourceNameLower]; 
+                     const destId = localFinalAccountMap[destNameLower]; 
 
-                     if (!sourceId) throw new Error(`Transfer Import Error - Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(localFinalAccountMap)}`);
-                     if (!destId) throw new Error(`Transfer Import Error - Could not find final destination account ID for "${destNameValue}". Map: ${JSON.stringify(localFinalAccountMap)}`);
-                     if (sourceId === destId) throw new Error(`Transfer Import Error - Source and destination accounts are the same ("${sourceName}").`);
+                     if (!sourceId) throw new Error(`Transfer Import Error - Row ${rowNumber}: Could not find final source account ID for "${sourceName}". Map: ${JSON.stringify(localFinalAccountMap)}`);
+                     if (!destId) throw new Error(`Transfer Import Error - Row ${rowNumber}: Could not find final destination account ID for "${destNameValue}". Map: ${JSON.stringify(localFinalAccountMap)}`);
+                     if (sourceId === destId) throw new Error(`Transfer Import Error - Row ${rowNumber}: Source and destination accounts are the same ("${sourceName}").`);
 
 
-                     const transferAmount = Math.abs(item.amount); // Transfers use positive amount internally for the two legs
+                     const transferAmount = Math.abs(item.amount); // item.amount should be absolute from processAndMapData for transfers
                      if (isNaN(transferAmount) || transferAmount <= 0) {
-                         throw new Error(`Transfer Import Error - Invalid or zero transfer amount (${item.amount}).`);
+                         throw new Error(`Transfer Import Error - Row ${rowNumber}: Invalid or zero transfer amount (${item.amount}).`);
                      }
 
-                     const transferDate = item.date; // Should be formatted YYYY-MM-DD
+                     const transferDate = item.date; 
                      const transferDesc = item.description || `Transfer from ${sourceName} to ${destNameValue}`;
                      const transferTags = finalTags;
 
@@ -1328,16 +1337,16 @@ export default function ImportDataPage() {
                      await addTransaction({
                          accountId: sourceId,
                          date: transferDate,
-                         amount: -transferAmount, // Negative for outgoing
+                         amount: -transferAmount, 
                          description: transferDesc,
-                         category: 'Transfer', // Specific category
+                         category: 'Transfer', 
                          tags: transferTags,
                      });
                      // Create incoming transaction
                      await addTransaction({
                          accountId: destId,
                          date: transferDate,
-                         amount: transferAmount, // Positive for incoming
+                         amount: transferAmount, 
                          description: transferDesc,
                          category: 'Transfer',
                          tags: transferTags,
@@ -1346,18 +1355,15 @@ export default function ImportDataPage() {
 
                  } else {
                      // Standard income/expense transaction
-                     // Get account name from the primary account column mapped (or fallback if needed)
-                     const accountNameMapped = columnMappings.account ? item.originalRecord[columnMappings.account]?.trim() : undefined;
-                     // Fallback to source/dest if 'account' wasn't mapped but one of these was (and it's not a transfer)
-                     const sourceNameMapped = columnMappings.source_account ? item.originalRecord[columnMappings.source_account]?.trim() : undefined;
-                     const destNameMapped = columnMappings.destination_account ? item.originalRecord[columnMappings.destination_account!]?.trim() : undefined; // Add definite assignment assertion if sure it exists
+                     const accountNameForTx = item.originalRecord[columnMappings.account!]?.trim() ||
+                                             item.originalRecord[columnMappings.source_account!]?.trim() ||
+                                             item.originalRecord[columnMappings.destination_account!]?.trim();
 
-                     const accountNameForTx = accountNameMapped || sourceNameMapped || destNameMapped;
                      if (!accountNameForTx) {
                          throw new Error(`Row ${rowNumber}: Could not determine account name for transaction.`);
                      }
 
-                     const accountIdForImport = localFinalAccountMap[accountNameForTx.toLowerCase()]; // Use definitive map
+                     const accountIdForImport = localFinalAccountMap[accountNameForTx.toLowerCase()]; 
 
                      if (!accountIdForImport) {
                           throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(finalAccountMapForImport)}`);
@@ -1365,14 +1371,14 @@ export default function ImportDataPage() {
                      if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_') || accountIdForImport.startsWith('preview_')) {
                          throw new Error(`Invalid account ID reference ('${accountIdForImport}') for import.`);
                      }
-                     if (isNaN(item.amount)) { // Amount should be correctly signed by now
+                     if (isNaN(item.amount)) { 
                           throw new Error(`Invalid amount for import.`);
                      }
 
                      const transactionPayload: Omit<Transaction, 'id'> = {
                         accountId: accountIdForImport,
-                        date: item.date, // Should be YYYY-MM-DD
-                        amount: item.amount, // Signed amount
+                        date: item.date, 
+                        amount: item.amount, 
                         description: item.description,
                         category: finalCategoryName,
                         tags: finalTags,
@@ -1752,4 +1758,5 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
 
