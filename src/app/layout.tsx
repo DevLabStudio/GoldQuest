@@ -71,36 +71,16 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   const pathname = usePathname();
-  const [isTransactionsOpen, setIsTransactionsOpen] = useState(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  const { isAuthenticated, logout, user, isLoadingAuth } = useAuth(); // Get isLoadingAuth
+  const [isTransactionsOpen, setIsTransactionsOpen] = useState(false); // Initialize with a consistent default
+  const { isAuthenticated, logout, user, isLoadingAuth } = useAuth();
 
    useEffect(() => {
+     // This is fine, as it affects a sub-component's state after mount
      setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
    }, [pathname]);
 
-  const isActive = (path: string) => pathname === path;
-  const isAnyTransactionRouteActive = pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers');
-
-
-  if (isLoadingAuth) { // Show a loading state until auth status is determined on the client
-    return (
-      <html lang="en" className="dark">
-        <head>
-            <title>The Golden Game</title>
-            <meta name="description" content="Simple personal finance management" />
-        </head>
-        <body
-        className={cn(
-            `${oxanium.variable} font-sans antialiased`,
-            'min-h-screen flex flex-col'
-          )}
-        >
-          <div className="flex items-center justify-center min-h-screen">Loading authentication...</div>
-        </body>
-      </html>
-    );
-  }
-
+   const isActive = (path: string) => pathname === path;
+   const isAnyTransactionRouteActive = pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers');
 
   return (
     <html lang="en" className="dark">
@@ -114,7 +94,9 @@ export default function RootLayout({
           'min-h-screen flex flex-col'
         )}
       >
-        {!isAuthenticated ? (
+        {isLoadingAuth ? (
+            <div className="flex items-center justify-center min-h-screen">Loading authentication...</div>
+        ) : !isAuthenticated ? (
             <LoginPage />
         ) : (
             <SidebarProvider>
@@ -278,7 +260,7 @@ export default function RootLayout({
               </SidebarInset>
             </SidebarProvider>
         )}
-        <Toaster /> {/* Toaster is rendered after isLoadingAuth is false */}
+        <Toaster />
       </body>
     </html>
   );
