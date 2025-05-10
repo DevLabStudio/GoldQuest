@@ -17,7 +17,7 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, addTransaction, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
-import { format, startOfMonth, endOfMonth, isWithinInterval, subDays } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
@@ -378,9 +378,11 @@ export default function DashboardPage() {
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
               <div>
                 <CardTitle className="text-xl">Financial Summary</CardTitle>
+                <CardDescription>
+                  Overview of your financial health for the selected period. Last updated: {formatLastUpdated(lastUpdated)}
+                </CardDescription>
               </div>
               <div className="flex items-center gap-2 mt-2 sm:mt-0">
-                <span className="text-xs text-muted-foreground">{formatLastUpdated(lastUpdated)}</span>
                 <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
                   Refresh
@@ -435,7 +437,7 @@ export default function DashboardPage() {
             icon={<Wallet className="text-primary" />}
           />
           <KpiCard
-            title={`Income (${format(selectedDateRange.from || new Date(), 'MMM yyyy')})`}
+            title={`Income (${selectedDateRange.from ? format(selectedDateRange.from, 'MMM yyyy') : 'All Time'})`}
             value={formatCurrency(periodIncome, preferredCurrency, undefined, false)}
             tooltip={`Total income received in the selected period.`}
             icon={<TrendingUp className="text-green-500" />} 
@@ -443,7 +445,7 @@ export default function DashboardPage() {
             href="/revenue"
           />
           <KpiCard
-            title={`Expenses (${format(selectedDateRange.from || new Date(), 'MMM yyyy')})`}
+            title={`Expenses (${selectedDateRange.from ? format(selectedDateRange.from, 'MMM yyyy') : 'All Time'})`}
             value={formatCurrency(periodExpenses, preferredCurrency, undefined, false)}
             tooltip={`Total expenses in the selected period.`}
             icon={<TrendingDown className="text-red-500" />} 
@@ -465,7 +467,7 @@ export default function DashboardPage() {
             icon={<Scale className="text-primary" />}
           />
           <KpiCard
-            title={`Savings Rate (${format(selectedDateRange.from || new Date(), 'MMM yyyy')})`}
+            title={`Savings Rate (${selectedDateRange.from ? format(selectedDateRange.from, 'MMM yyyy') : 'All Time'})`}
             value={`${(savingsRate * 100).toFixed(1)}%`}
             tooltip="Percentage of your income you are saving in the selected period."
             isPercentage={true}
@@ -543,3 +545,4 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
+

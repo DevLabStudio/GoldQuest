@@ -92,7 +92,7 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []);
+  }, [toast]); // Added toast to dependency array
 
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
@@ -203,14 +203,13 @@ export default function DashboardPage() {
 
     const monthlyData: { [month: string]: { income: number; expenses: number } } = {};
 
-    // Get transactions from the last 12 months relative to today
     const today = new Date();
-    const last12Months: { month: string; income: number; expenses: number }[] = [];
-
+    const last12MonthsKeys: string[] = [];
     for (let i = 11; i >= 0; i--) {
         const targetMonthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
         const monthKey = formatDateFns(targetMonthDate, 'MMM'); // e.g., "Jan", "Feb"
         monthlyData[monthKey] = { income: 0, expenses: 0 };
+        last12MonthsKeys.push(monthKey);
     }
 
 
@@ -219,7 +218,7 @@ export default function DashboardPage() {
         const monthKey = formatDateFns(txDate, 'MMM');
         const account = accounts.find(acc => acc.id === tx.accountId);
 
-        if (account && monthlyData[monthKey]) {
+        if (account && monthlyData[monthKey]) { // Check if monthKey is one of the last 12
             if (tx.amount > 0) {
                 monthlyData[monthKey].income += convertCurrency(tx.amount, account.currency, preferredCurrency);
             } else if (tx.amount < 0) {
@@ -227,19 +226,13 @@ export default function DashboardPage() {
             }
         }
     });
-
-    Object.keys(monthlyData).forEach(monthKey => {
-        last12Months.push({
-            month: monthKey,
-            income: monthlyData[monthKey].income,
-            expenses: monthlyData[monthKey].expenses,
-        });
-    });
-    // Ensure the order is chronological if necessary, or matches the order of generation
-    // For example, if you generated keys Jan, Feb, Mar, and then pushed, it would be in order.
-    // If `monthlyData` keys were not in order, you might need to sort `last12Months` by a date object.
-
-    return last12Months;
+    
+    // Return data in the correct order of months
+    return last12MonthsKeys.map(monthKey => ({
+        month: monthKey,
+        income: monthlyData[monthKey].income,
+        expenses: monthlyData[monthKey].expenses,
+    }));
   }, [allTransactions, accounts, preferredCurrency, isLoading]);
 
 
@@ -253,7 +246,6 @@ export default function DashboardPage() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <div className="xl:col-span-2"><Skeleton className="h-[300px] w-full" /></div>
-          {/* Removed SpendingsBreakdown Skeleton to match removal of component */}
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Skeleton className="h-[350px] w-full" />
@@ -266,16 +258,18 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"> {/* Changed xl:grid-cols-4 to xl:grid-cols-3 */}
-        <div className="xl:col-span-2"> {/* Adjusted span for TotalNetWorthCard */}
+      {/* The fixed header with DateRangePicker has been moved to src/app/dashboard/page.tsx */}
+      {/* This page will now just display the content below the header */}
+
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2">
           <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
-        {/* SpendingsBreakdown was here, now removed */}
          <SpendingsBreakdown title="Top Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6"> {/* Changed xl:grid-cols-4 to xl:grid-cols-3 */}
-        <div className="xl:col-span-2"> {/* Adjusted span for IncomeSourceChart */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+        <div className="xl:col-span-2">
           {isLoading || incomeSourceDataActual.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground h-full">
                  <CardHeader>
@@ -289,7 +283,6 @@ export default function DashboardPage() {
             <IncomeSourceChart data={incomeSourceDataActual} currency={getCurrencySymbol(preferredCurrency)} />
           )}
         </div>
-        {/* Income SmallStatCard was here, now removed */}
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
