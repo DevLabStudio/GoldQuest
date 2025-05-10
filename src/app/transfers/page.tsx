@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -81,7 +82,8 @@ export default function TransfersPage() {
 
 
         if (fetchedAccounts.length > 0) {
-            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 }));
+            // Fetch a larger set for pairing, or all if performance allows
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); // Potentially remove limit for pairing
             const transactionsByAccount = await Promise.all(transactionPromises);
             const combinedTransactions = transactionsByAccount.flat();
             combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -130,7 +132,7 @@ export default function TransfersPage() {
             setCategories(fetchedCategories);
             setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id, { limit: INITIAL_TRANSACTION_LIMIT * 2 }));
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); // Potentially remove limit
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -145,27 +147,27 @@ export default function TransfersPage() {
     const processedIds = new Set<string>();
 
     const potentialTransfers = allTransactions.filter(
-        tx => tx.category?.toLowerCase() === 'transfer' // Stricter check for 'transfer' category
+        tx => tx.category?.toLowerCase() === 'transfer'
     );
 
     potentialTransfers.forEach(txOut => {
       if (txOut.amount < 0 && !processedIds.has(txOut.id)) { // txOut is the outgoing leg
-        const txIn = potentialTransfers.find(tx =>
-          tx.amount === -txOut.amount && // txIn is the incoming leg, amount is positive opposite
-          tx.accountId !== txOut.accountId && // Different accounts
-          !processedIds.has(tx.id) &&
-          tx.date === txOut.date && // Same date
-          // Descriptions might be slightly different due to "Transfer to X" vs "Transfer from Y"
-          // So, make this check more lenient or base it on a shared identifier if available
-          (tx.description === txOut.description || 
-           tx.description?.includes(getAccountName(txOut.accountId)) && txOut.description?.includes(getAccountName(tx.accountId)) ||
-           (tx.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer")))
+        const matchingIncoming = potentialTransfers.filter(txIn =>
+          txIn.amount === -txOut.amount && // txIn is the incoming leg, amount is positive opposite
+          txIn.accountId !== txOut.accountId && // Different accounts
+          !processedIds.has(txIn.id) &&
+          txIn.date === txOut.date &&
+          (txIn.description === txOut.description || 
+           (txIn.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer")))
         );
-
-        if (txIn) {
-          transfers.push({ from: txOut, to: txIn });
-          processedIds.add(txOut.id);
-          processedIds.add(txIn.id);
+        
+        // If multiple potential matches, try to find the best one (e.g., closest timestamp if available, or just take first)
+        if (matchingIncoming.length > 0) {
+            // For simplicity, taking the first match. More sophisticated logic could be added.
+            const txIn = matchingIncoming[0]; 
+            transfers.push({ from: txOut, to: txIn });
+            processedIds.add(txOut.id);
+            processedIds.add(txIn.id);
         }
       }
     });
@@ -181,11 +183,6 @@ export default function TransfersPage() {
         setEditingTransferPair(transferPair);
         setTransactionTypeToAdd('transfer');
         setIsAddTransactionDialogOpen(true);
-        // Note: The AddTransactionForm will need logic to handle the 'editingTransferPair'
-        // This means it would pre-fill 'fromAccount', 'toAccount', 'amount', 'date', 'description', 'tags'
-        // And the submit handler for transfers would need to:
-        // 1. Delete the old pair (editingTransferPair.from.id, editingTransferPair.to.id)
-        // 2. Add the new pair based on form values
         toast({title: "Edit Transfer", description: "Modify transfer details. This will delete the old transfer and create a new one.", variant: "default", duration: 7000});
     };
 
@@ -219,23 +216,18 @@ export default function TransfersPage() {
         }
     };
 
-  const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => { // Allow Transaction for updates
+  const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => { 
     try {
-      if ('id' in data && data.id && editingTransferPair) { // Check if it's an update context for a transfer
-        // This means we are "updating" a transfer, which involves deleting old and adding new
-        // The new transfer data comes from the form, which should be passed to handleTransferAdded
+      if ('id' in data && data.id && editingTransferPair) { 
         console.warn("handleTransactionAdded called in edit transfer context. This should ideally go to a specific transfer update handler or onTransferAdded.");
-        // For now, we assume that if we are here, it's not an actual transfer update scenario
-        // or that the form correctly calls onTransferAdded.
-        // If we *must* handle it here, we'd need to ensure `data` has from/to accountId etc.
          toast({title: "Update Logic", description: "Transfer updates should be handled by onTransferAdded.", variant: "destructive"})
-      } else if (!('id' in data)) { // It's a new non-transfer transaction
+      } else if (!('id' in data)) { 
         await addTransaction(data as Omit<Transaction, 'id'>);
         toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       }
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
-      setEditingTransferPair(null); // Clear editing state
+      setEditingTransferPair(null); 
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
@@ -245,7 +237,6 @@ export default function TransfersPage() {
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
     setIsLoading(true);
     try {
-       // If we are editing a transfer, delete the old one first
        if (editingTransferPair) {
            console.log("Deleting old transfer pair before adding updated one:", editingTransferPair);
            await deleteTransaction(editingTransferPair.from.id, editingTransferPair.from.accountId);
@@ -280,7 +271,7 @@ export default function TransfersPage() {
       toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
-      setEditingTransferPair(null); // Clear editing state
+      setEditingTransferPair(null); 
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -290,7 +281,7 @@ export default function TransfersPage() {
   };
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (accounts.length === 0 && type !== 'transfer') { // Allow opening for transfer even with 0 accounts to show error
+    if (accounts.length === 0 && type !== 'transfer') { 
         toast({
             title: "No Accounts",
             description: "Please add an account first before adding transactions.",
@@ -304,10 +295,9 @@ export default function TransfersPage() {
             description: "You need at least two accounts to make a transfer.",
             variant: "destructive",
         });
-        return; // Still show dialog but form will likely be problematic or show this error again
     }
     setTransactionTypeToAdd(type);
-    setEditingTransferPair(null); // Ensure we are not in edit mode when adding new
+    setEditingTransferPair(null); 
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -429,7 +419,7 @@ export default function TransfersPage() {
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <div
-                                                            className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                                            className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                                                             onClick={() => openDeleteDialog(pair)}
                                                         >
                                                             <Trash2 className="mr-2 h-4 w-4" />

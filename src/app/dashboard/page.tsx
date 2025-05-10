@@ -174,7 +174,7 @@ export default function DashboardPage() {
   const periodIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return selectedPeriodTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0) {
+      if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           return sum + convertCurrency(tx.amount, account.currency, preferredCurrency);
@@ -187,7 +187,7 @@ export default function DashboardPage() {
   const periodExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return selectedPeriodTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0) {
+      if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
@@ -422,4 +422,3 @@ export default function DashboardPage() {
     </TooltipProvider>
   );
 }
-
