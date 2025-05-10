@@ -18,7 +18,6 @@ import {
   subMonths,
   subYears,
   isSameDay,
-  addDays,
 } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 
@@ -80,7 +79,7 @@ const presets: Preset[] = [
   {
     label: 'All Time',
     value: 'allTime',
-    getRange: () => ({ from: undefined, to: undefined }), // Or a very old date to today
+    getRange: () => ({ from: undefined, to: undefined }), 
   },
 ];
 
@@ -116,8 +115,8 @@ const DateRangePicker: FC<DateRangePickerProps> = ({
 
     const matchingPreset = presets.find(p => {
         const presetRange = p.getRange();
-        if (!presetRange.from && !range.from && !presetRange.to && !range.to) return p.value === 'allTime'; // All time match
-        if (!presetRange.from || !range.from || !presetRange.to || !range.to) return false; // Avoid errors if one is undefined and other is not (unless both allTime)
+        if (!presetRange.from && !range.from && !presetRange.to && !range.to) return p.value === 'allTime'; 
+        if (!presetRange.from || !range.from || !presetRange.to || !range.to) return false; 
         return isSameDay(presetRange.from, range.from) && isSameDay(presetRange.to, range.to);
     });
 
@@ -145,19 +144,15 @@ const DateRangePicker: FC<DateRangePickerProps> = ({
     if (preset) {
       const newRange = preset.getRange();
       setSelectedRange(newRange);
-      // Apply immediately for presets, or wait for "Apply" button for custom?
-      // For now, let's apply immediately
       onRangeChange(newRange);
       updateDisplayLabel(newRange);
-      if (preset.value !== 'custom') { // Close if not custom
-        setIsOpen(false);
-      }
+      setIsOpen(false);
     }
   };
 
   const handleCalendarSelect = (range: DateRange | undefined) => {
     setSelectedRange(range);
-    if (range?.from && !range.to) { // If only 'from' is selected, set 'to' to the same day to make it a single day range
+    if (range?.from && !range.to) { 
         setSelectedRange({ from: range.from, to: range.from });
     }
   };
@@ -165,16 +160,13 @@ const DateRangePicker: FC<DateRangePickerProps> = ({
   const handleApplyCustomRange = () => {
     if (selectedRange) {
       let finalRange = selectedRange;
-      // If only 'from' is selected in custom mode, make 'to' same as 'from'
       if (selectedRange.from && !selectedRange.to) {
         finalRange = { from: selectedRange.from, to: selectedRange.from };
         setSelectedRange(finalRange);
       } else if (!selectedRange.from && selectedRange.to) {
-        // This case should ideally not happen if calendar enforces from before to
         finalRange = { from: selectedRange.to, to: selectedRange.to };
         setSelectedRange(finalRange);
       }
-
       onRangeChange(finalRange);
       updateDisplayLabel(finalRange);
     }

@@ -17,7 +17,7 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, addTransaction, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
-import { format, startOfMonth, endOfMonth, isWithinInterval } from 'date-fns';
+import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
 import type { DateRange } from 'react-day-picker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
@@ -162,10 +162,10 @@ export default function DashboardPage() {
   const selectedPeriodTransactions = useMemo(() => {
     if (isLoading) return [];
     return allTransactions.filter(tx => {
-      const txDate = new Date(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+      const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
       const isInDateRange = selectedDateRange.from && selectedDateRange.to ? 
                             isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to }) : 
-                            true; // "All Time" if no range
+                            true; 
       
       const matchesAccountFilter = selectedAccountFilter === 'all' || tx.accountId === selectedAccountFilter;
       const matchesCategoryFilter = selectedCategoryFilter === 'all' || tx.category === selectedCategoryFilter;
@@ -316,13 +316,18 @@ export default function DashboardPage() {
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0) {
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-        <Skeleton className="h-10 w-1/3 mb-4" />
+        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                <Skeleton className="h-10 w-1/3 mb-2 sm:mb-0" />
+                <Skeleton className="h-10 w-64" />
+            </div>
+        </div>
         <Card>
           <CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
-            <Skeleton className="h-16 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
           </CardContent>
         </Card>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -343,33 +348,40 @@ export default function DashboardPage() {
   return (
     <TooltipProvider>
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4">
-          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">Dashboard</h1>
-          <div className="mt-2 sm:mt-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="default">
-                  <PlusCircle className="mr-2 h-4 w-4" />
-                  Add Transaction
-                  <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
-                  <ArrowDownCircle className="mr-2 h-4 w-4" />
-                  Add Spend
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
-                  <ArrowUpCircle className="mr-2 h-4 w-4" />
-                  Add Income
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
-                  <TransferIcon className="mr-2 h-4 w-4" />
-                  Add Transfer
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 mb-4 -mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 border-b">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
+                <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 sm:mb-0">Dashboard</h1>
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                    <DateRangePicker
+                        initialRange={selectedDateRange}
+                        onRangeChange={setSelectedDateRange}
+                        className="w-full sm:w-auto md:min-w-[280px]"
+                    />
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="default" className="w-full sm:w-auto">
+                            <PlusCircle className="mr-2 h-4 w-4" />
+                            Add
+                            <ChevronDown className="ml-2 h-4 w-4" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
+                            <ArrowDownCircle className="mr-2 h-4 w-4" />
+                            Add Spend
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
+                            <ArrowUpCircle className="mr-2 h-4 w-4" />
+                            Add Income
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
+                            <TransferIcon className="mr-2 h-4 w-4" />
+                            Add Transfer
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                </div>
+            </div>
         </div>
 
 
@@ -379,27 +391,20 @@ export default function DashboardPage() {
               <div>
                 <CardTitle className="text-xl">Financial Summary</CardTitle>
                 <CardDescription>
-                  Overview of your financial health for the selected period. Last updated: {formatLastUpdated(lastUpdated)}
+                  Overview for the selected period. Last updated: {formatLastUpdated(lastUpdated)}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2 mt-2 sm:mt-0">
                 <Button variant="outline" size="sm" onClick={handleRefresh} disabled={isLoading}>
                   <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-                  Refresh
+                  Refresh Data
                 </Button>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="date-range" className="text-xs font-medium text-muted-foreground">Period</label>
-              <DateRangePicker
-                initialRange={selectedDateRange}
-                onRangeChange={setSelectedDateRange}
-              />
-            </div>
-            <div>
-              <label htmlFor="account-filter" className="text-xs font-medium text-muted-foreground">Account</label>
+              <label htmlFor="account-filter" className="text-xs font-medium text-muted-foreground">Account Filter</label>
               <Select defaultValue={selectedAccountFilter} onValueChange={setSelectedAccountFilter} disabled={accounts.length === 0}>
                 <SelectTrigger id="account-filter">
                   <SelectValue placeholder="Select account" />
@@ -413,7 +418,7 @@ export default function DashboardPage() {
               </Select>
             </div>
             <div>
-              <label htmlFor="category-filter" className="text-xs font-medium text-muted-foreground">Category</label>
+              <label htmlFor="category-filter" className="text-xs font-medium text-muted-foreground">Category Filter</label>
               <Select defaultValue={selectedCategoryFilter} onValueChange={setSelectedCategoryFilter} disabled={categories.length === 0}>
                 <SelectTrigger id="category-filter">
                   <SelectValue placeholder="Select category" />
@@ -437,7 +442,7 @@ export default function DashboardPage() {
             icon={<Wallet className="text-primary" />}
           />
           <KpiCard
-            title={`Income (${selectedDateRange.from ? format(selectedDateRange.from, 'MMM yyyy') : 'All Time'})`}
+            title={`Income (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
             value={formatCurrency(periodIncome, preferredCurrency, undefined, false)}
             tooltip={`Total income received in the selected period.`}
             icon={<TrendingUp className="text-green-500" />} 
@@ -445,7 +450,7 @@ export default function DashboardPage() {
             href="/revenue"
           />
           <KpiCard
-            title={`Expenses (${selectedDateRange.from ? format(selectedDateRange.from, 'MMM yyyy') : 'All Time'})`}
+            title={`Expenses (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
             value={formatCurrency(periodExpenses, preferredCurrency, undefined, false)}
             tooltip={`Total expenses in the selected period.`}
             icon={<TrendingDown className="text-red-500" />} 
@@ -467,7 +472,7 @@ export default function DashboardPage() {
             icon={<Scale className="text-primary" />}
           />
           <KpiCard
-            title={`Savings Rate (${selectedDateRange.from ? format(selectedDateRange.from, 'MMM yyyy') : 'All Time'})`}
+            title={`Savings Rate (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
             value={`${(savingsRate * 100).toFixed(1)}%`}
             tooltip="Percentage of your income you are saving in the selected period."
             isPercentage={true}
