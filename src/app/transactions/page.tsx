@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -12,22 +13,23 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import SpendingChart from '@/components/dashboard/spending-chart';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; // Renamed TransferIcon
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
+import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 
 
 const formatDate = (dateString: string): string => {
     try {
-        const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
+        const date = parseISO(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return format(date, 'PP');
+        return format(date, 'MMM do, yyyy');
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -119,7 +121,7 @@ export default function TransactionsOverviewPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); 
+  }, [toast]); 
 
   const spendingData = useMemo(() => {
       if (isLoading || !accounts.length || !allTransactions.length) return [];
@@ -310,180 +312,197 @@ export default function TransactionsOverviewPage() {
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Transactions Overview</h1>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="default" size="sm">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add New Transaction
-              <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
-              <ArrowDownCircle className="mr-2 h-4 w-4" />
-              Add Spend
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
-              <ArrowUpCircle className="mr-2 h-4 w-4" />
-              Add Income
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
-              <TransferIcon className="mr-2 h-4 w-4" />
-              Add Transfer
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+        <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold">Transactions Overview</h1>
+            <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="default" size="sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add New Transaction
+                <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
+                <ArrowDownCircle className="mr-2 h-4 w-4" />
+                Add Spend
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
+                <ArrowUpCircle className="mr-2 h-4 w-4" />
+                Add Income
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
+                <TransferIconOriginal className="mr-2 h-4 w-4" />
+                Add Transfer
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
 
        {error && (
           <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">
               {error}
           </div>
        )}
+        <div className="flex flex-col md:flex-row gap-8">
+            <div className="flex-grow">
+                <Card className="mb-8">
+                    <CardHeader>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle>Overall Spending Breakdown</CardTitle>
+                                <CardDescription>Spending by category across all accounts ({preferredCurrency}).</CardDescription>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="h-80">
+                        {isLoading ? (
+                            <Skeleton className="h-full w-full" />
+                        ) : spendingData.length > 0 ? (
+                        <SpendingChart data={spendingData} currency={preferredCurrency} />
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-muted-foreground">
+                                No spending data available to display chart.
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
 
-       <div className="mb-8">
-           <Card>
-               <CardHeader>
-                   <CardTitle>Spending by Category ({preferredCurrency})</CardTitle>
-                   <CardDescription>Breakdown of expenses across all accounts (based on recent transactions).</CardDescription>
-               </CardHeader>
-               <CardContent className="h-80">
-                 {isLoading ? (
-                     <Skeleton className="h-full w-full" />
-                 ) : spendingData.length > 0 ? (
-                    <SpendingChart data={spendingData} currency={preferredCurrency} />
-                 ) : (
-                     <div className="flex h-full items-center justify-center text-muted-foreground">
-                         No spending data available to display chart.
-                     </div>
-                 )}
-               </CardContent>
-           </Card>
-       </div>
+                <Card>
+                    <CardHeader>
+                        <div className="flex justify-between items-center">
+                             <div>
+                                <CardTitle>Recent Transactions</CardTitle>
+                                <CardDescription>
+                                        All recent transactions.
+                                </CardDescription>
+                            </div>
+                            <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('expense')}> {/* Default to expense for generic button */}
+                                <PlusCircle className="mr-2 h-4 w-4" /> Create new transaction
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                    {isLoading && allTransactions.length === 0 ? (
+                        <div className="space-y-2">
+                        {[...Array(10)].map((_, i) => (
+                            <Skeleton key={i} className="h-12 w-full" />
+                        ))}
+                        </div>
+                    ) : allTransactions.length > 0 ? (
+                        <Table>
+                        <TableHeader>
+                            <TableRow>
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>Account</TableHead>
+                            <TableHead>Category</TableHead>
+                            <TableHead>Tags</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {allTransactions.map((transaction) => {
+                                const account = getAccountForTransaction(transaction.accountId);
+                                if (!account) return null;
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Transactions</CardTitle>
-           <CardDescription>
-                Showing recent transactions across all accounts. Amounts displayed in {preferredCurrency}.
-           </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading && allTransactions.length === 0 ? (
-            <div className="space-y-2">
-              {[...Array(10)].map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : allTransactions.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>Account</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Category</TableHead>
-                  <TableHead>Tags</TableHead>
-                  <TableHead className="text-right">Amount ({preferredCurrency})</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {allTransactions.map((transaction) => {
-                    const account = getAccountForTransaction(transaction.accountId);
-                    if (!account) return null;
-
-                    const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                    const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true);
-                    return (
-                        <TableRow key={transaction.id} className="hover:bg-muted/50">
-                            <TableCell className="whitespace-nowrap">{formatDate(transaction.date)}</TableCell>
-                            <TableCell className="text-muted-foreground">{account.name}</TableCell>
-                            <TableCell>{transaction.description}</TableCell>
-                            <TableCell>
-                                <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
-                                    <CategoryIcon />
-                                    <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
-                                </Badge>
-                            </TableCell>
-                            <TableCell>
-                                <div className="flex flex-wrap gap-1">
-                                    {transaction.tags?.map(tag => {
-                                        const { color: tagColor } = getTagStyle(tag);
-                                        return (
-                                            <Badge key={tag} variant="outline" className={`text-xs px-1.5 py-0.5 ${tagColor}`}>
-                                                {tag}
+                                const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
+                                const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true);
+                                return (
+                                    <TableRow key={transaction.id} className="hover:bg-muted/50">
+                                        <TableCell className="font-medium">{transaction.description}</TableCell>
+                                        <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+                                            {formattedAmount}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(transaction.date)}</TableCell>
+                                        <TableCell className="text-muted-foreground">{account.name}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
+                                                <CategoryIcon />
+                                                <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
                                             </Badge>
-                                        );
-                                    })}
-                                </div>
-                            </TableCell>
-                            <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                                {formattedAmount}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                      <span className="sr-only">Open menu</span>
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => openEditDialog(transaction)}>
-                                      <Edit className="mr-2 h-4 w-4" />
-                                      <span>Edit</span>
-                                    </DropdownMenuItem>
-                                    <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                             <div
-                                                className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                                                onClick={() => openDeleteDialog(transaction)}
-                                            >
-                                                 <Trash2 className="mr-2 h-4 w-4" />
-                                                 <span>Delete</span>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="flex flex-wrap gap-1">
+                                                {transaction.tags?.map(tag => {
+                                                    const { color: tagColor } = getTagStyle(tag);
+                                                    return (
+                                                        <Badge key={tag} variant="outline" className={`text-xs px-1.5 py-0.5 ${tagColor}`}>
+                                                            {tag}
+                                                        </Badge>
+                                                    );
+                                                })}
                                             </div>
-                                        </AlertDialogTrigger>
-                                        {selectedTransaction?.id === transaction.id && (
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                  <AlertDialogDescription>
-                                                    This action cannot be undone. This will permanently delete the transaction "{selectedTransaction.description}".
-                                                  </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                  <AlertDialogCancel onClick={() => setSelectedTransaction(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
-                                                  <AlertDialogAction onClick={handleDeleteTransactionConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                    {isDeleting ? "Deleting..." : "Delete"}
-                                                  </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        )}
-                                    </AlertDialog>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                    );
-                })}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-10">
-              <p className="text-muted-foreground">
-                No transactions found across any accounts yet.
-              </p>
+                                        </TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                <span className="sr-only">Open menu</span>
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => openEditDialog(transaction)}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                <span>Edit</span>
+                                                </DropdownMenuItem>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <div
+                                                            className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                                            onClick={() => openDeleteDialog(transaction)}
+                                                        >
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            <span>Delete</span>
+                                                        </div>
+                                                    </AlertDialogTrigger>
+                                                    {selectedTransaction?.id === transaction.id && (
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This action cannot be undone. This will permanently delete the transaction "{selectedTransaction.description}".
+                                                            </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                            <AlertDialogCancel onClick={() => setSelectedTransaction(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={handleDeleteTransactionConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                                {isDeleting ? "Deleting..." : "Delete"}
+                                                            </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    )}
+                                                </AlertDialog>
+                                            </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                        </Table>
+                    ) : (
+                        <div className="text-center py-10">
+                        <p className="text-muted-foreground">
+                            No transactions found across any accounts yet.
+                        </p>
+                        </div>
+                    )}
+                    </CardContent>
+                </Card>
             </div>
-          )}
-        </CardContent>
-         {!isLoading && allTransactions.length > 0 && (
-             <CardContent className="pt-4 border-t">
-             </CardContent>
-         )}
-      </Card>
+            <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
+                 <MonthlySummarySidebar
+                    transactions={allTransactions} // Pass all for overview, sidebar can filter
+                    accounts={accounts}
+                    preferredCurrency={preferredCurrency}
+                    transactionType="all" // Indicate to summarize all types or net
+                 />
+            </div>
+        </div>
+
 
         <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
             setIsEditDialogOpen(open);
@@ -504,13 +523,14 @@ export default function TransactionsOverviewPage() {
                         onTransactionAdded={handleUpdateTransaction}
                         isLoading={isLoading}
                         initialData={{
-                            type: selectedTransaction.amount < 0 ? 'expense' : 'income',
+                            type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
                             accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
-                            date: selectedTransaction.date ? new Date(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
+                            date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,
                             tags: selectedTransaction.tags || []
+                            // For transfers, fromAccountId and toAccountId would need to be handled if editing transfers directly from this form
                         }}
                     />
                 )}
@@ -554,3 +574,4 @@ export default function TransactionsOverviewPage() {
     </div>
   );
 }
+

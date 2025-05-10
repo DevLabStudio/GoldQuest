@@ -1,32 +1,33 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, deleteTransaction, type Transaction, updateTransaction, addTransaction } from "@/services/transactions";
+import { getTransactions, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
 import { getCategories, Category } from '@/services/categories'; 
 import { getTags, Tag } from '@/services/tags'; 
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format } from 'date-fns';
-import { ArrowRightLeft, MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
+import { format, parseISO } from 'date-fns';
+import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; // Renamed TransferIcon
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
-
+import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 
 const INITIAL_TRANSACTION_LIMIT = 50;
 
 const formatDate = (dateString: string): string => {
     try {
-        const date = new Date(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
+        const date = parseISO(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return format(date, 'PP');
+        return format(date, 'MMM do, yyyy');
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -117,7 +118,7 @@ export default function TransfersPage() {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, []); 
+  }, [toast]); 
 
     const localFetchData = async () => {
         if (typeof window === 'undefined') return;
@@ -173,7 +174,24 @@ export default function TransfersPage() {
    };
 
     const openEditDialog = (transferPair: { from: Transaction, to: Transaction }) => {
-        toast({ title: "Info", description: "Editing transfers is not yet implemented." });
+        // Editing transfers is complex as it involves two linked transactions.
+        // For now, direct to AddTransactionForm with 'transfer' type and prefill.
+        const { from, to } = transferPair;
+        const fromAccount = accounts.find(acc => acc.id === from.accountId);
+        if (!fromAccount) {
+            toast({ title: "Error", description: "Source account not found for editing.", variant: "destructive" });
+            return;
+        }
+        setTransactionTypeToAdd('transfer');
+        // We cannot directly edit a "pair" with the current AddTransactionForm for income/expense.
+        // Instead, user might need to delete and re-add, or we build a specific transfer edit form.
+        // For now, opening the Add Transaction form with type 'transfer' is a placeholder.
+        // To truly edit, we'd need to pre-fill `fromAccountId`, `toAccountId`, `amount`, `date`, `description`, `tags`
+        // and then upon submit, delete the old pair and add the new pair.
+        setSelectedTransaction(from); // Store one leg for context if needed by AddTransactionForm, but it won't fully work for "editing a transfer pair"
+        setIsAddTransactionDialogOpen(true); // Open the general add dialog with transfer type
+        toast({title: "Edit Transfer", description: "To edit a transfer, please delete the old one and create a new one with updated details.", variant: "default", duration: 7000});
+
     };
 
      const openDeleteDialog = (transferPair: { from: Transaction, to: Transaction }) => {
@@ -274,32 +292,32 @@ export default function TransfersPage() {
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Transfers Between Accounts</h1>
-         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="default" size="sm">
-              <PlusCircle className="mr-2 h-4 w-4" />
-              Add New Transaction
-              <ChevronDown className="ml-2 h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
-              <ArrowDownCircle className="mr-2 h-4 w-4" />
-              Add Spend
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
-              <ArrowUpCircle className="mr-2 h-4 w-4" />
-              Add Income
-            </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
-              <TransferIcon className="mr-2 h-4 w-4" />
-              Add Transfer
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </div>
+        <div className="flex justify-between items-center mb-6">
+            <h1 className="text-3xl font-bold">Transfers Between Accounts</h1>
+            <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="default" size="sm">
+                <PlusCircle className="mr-2 h-4 w-4" />
+                Add New Transaction
+                <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
+                <ArrowDownCircle className="mr-2 h-4 w-4" />
+                Add Spend
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
+                <ArrowUpCircle className="mr-2 h-4 w-4" />
+                Add Income
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
+                <TransferIconOriginal className="mr-2 h-4 w-4" />
+                Add Transfer
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
 
        {error && (
           <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">
@@ -307,109 +325,125 @@ export default function TransfersPage() {
           </div>
        )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Recent Transfer History</CardTitle>
-           <CardDescription>
-                Showing recent transfers between your accounts (limited results). Amounts displayed in {preferredCurrency}.
-           </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {isLoading ? (
-            <div className="space-y-2">
-              {[...Array(3)].map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full" />
-              ))}
-            </div>
-          ) : transferTransactionPairs.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Date</TableHead>
-                  <TableHead>From Account</TableHead>
-                  <TableHead>To Account</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead className="text-right">Amount ({preferredCurrency})</TableHead>
-                   <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {transferTransactionPairs.map((pair) => {
-                    const fromAccount = accounts.find(acc => acc.id === pair.from.accountId);
-                    if (!fromAccount) return null;
+        <div className="flex flex-col md:flex-row gap-8">
+            <div className="flex-grow">
+                <Card>
+                    <CardHeader>
+                         <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle>All Transfers</CardTitle>
+                                <CardDescription>
+                                    Transfers between {format(new Date(2024,0,1), 'MMM do, yyyy')} and {format(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
+                                </CardDescription>
+                            </div>
+                             <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('transfer')}>
+                                <TransferIconOriginal className="mr-2 h-4 w-4" /> Create new transfer
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                    {isLoading ? (
+                        <div className="space-y-2">
+                        {[...Array(3)].map((_, i) => (
+                            <Skeleton key={i} className="h-12 w-full" />
+                        ))}
+                        </div>
+                    ) : transferTransactionPairs.length > 0 ? (
+                        <Table>
+                        <TableHeader>
+                            <TableRow>
+                            <TableHead>Description</TableHead>
+                            <TableHead className="text-right">Amount</TableHead>
+                            <TableHead>Date</TableHead>
+                            <TableHead>From Account</TableHead>
+                            <TableHead>To Account</TableHead>
+                            <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {transferTransactionPairs.map((pair) => {
+                                const fromAccount = accounts.find(acc => acc.id === pair.from.accountId);
+                                if (!fromAccount) return null;
 
-                    const formattedAmount = formatCurrency(Math.abs(pair.from.amount), fromAccount.currency, undefined, true);
+                                const formattedAmount = formatCurrency(Math.abs(pair.from.amount), fromAccount.currency, undefined, true);
 
-                    return (
-                        <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
-                            <TableCell className="whitespace-nowrap">{formatDate(pair.from.date)}</TableCell>
-                            <TableCell className="text-muted-foreground">{getAccountName(pair.from.accountId)}</TableCell>
-                            <TableCell className="text-muted-foreground">{getAccountName(pair.to.accountId)}</TableCell>
-                            <TableCell>{pair.from.description || 'Transfer'}</TableCell>
-                            <TableCell className="text-right font-medium">
-                                {formattedAmount}
-                            </TableCell>
-                            <TableCell className="text-right">
-                                <DropdownMenu>
-                                  <DropdownMenuTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                      <span className="sr-only">Open menu</span>
-                                      <MoreHorizontal className="h-4 w-4" />
-                                    </Button>
-                                  </DropdownMenuTrigger>
-                                  <DropdownMenuContent align="end">
-                                    <DropdownMenuItem onClick={() => openEditDialog(pair)} disabled>
-                                      <Edit className="mr-2 h-4 w-4" />
-                                      <span>Edit (N/A)</span>
-                                    </DropdownMenuItem>
-                                     <AlertDialog>
-                                        <AlertDialogTrigger asChild>
-                                            <div
-                                                className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                                                onClick={() => openDeleteDialog(pair)}
-                                            >
-                                                 <Trash2 className="mr-2 h-4 w-4" />
-                                                 <span>Delete</span>
-                                            </div>
-                                        </AlertDialogTrigger>
-                                        {selectedTransactionPair && selectedTransactionPair[0].id === pair.from.id && (
-                                            <AlertDialogContent>
-                                                <AlertDialogHeader>
-                                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                                  <AlertDialogDescription>
-                                                    This action cannot be undone. This will permanently delete both transactions related to this transfer: "{pair.from.description}".
-                                                  </AlertDialogDescription>
-                                                </AlertDialogHeader>
-                                                <AlertDialogFooter>
-                                                  <AlertDialogCancel onClick={() => setSelectedTransactionPair(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
-                                                  <AlertDialogAction onClick={handleDeleteTransferConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                    {isDeleting ? "Deleting Transfer..." : "Delete Transfer"}
-                                                  </AlertDialogAction>
-                                                </AlertDialogFooter>
-                                            </AlertDialogContent>
-                                        )}
-                                    </AlertDialog>
-                                  </DropdownMenuContent>
-                                </DropdownMenu>
-                            </TableCell>
-                        </TableRow>
-                    );
-                })}
-              </TableBody>
-            </Table>
-          ) : (
-            <div className="text-center py-10">
-              <p className="text-muted-foreground">
-                No transfer transactions found yet.
-              </p>
+                                return (
+                                    <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
+                                        <TableCell className="font-medium">{pair.from.description || 'Transfer'}</TableCell>
+                                        <TableCell className="text-right font-medium">
+                                            {formattedAmount}
+                                        </TableCell>
+                                        <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(pair.from.date)}</TableCell>
+                                        <TableCell className="text-muted-foreground">{getAccountName(pair.from.accountId)}</TableCell>
+                                        <TableCell className="text-muted-foreground">{getAccountName(pair.to.accountId)}</TableCell>
+                                        <TableCell className="text-right">
+                                            <DropdownMenu>
+                                            <DropdownMenuTrigger asChild>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                <span className="sr-only">Open menu</span>
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem onClick={() => openEditDialog(pair)}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                <span>Edit</span>
+                                                </DropdownMenuItem>
+                                                <AlertDialog>
+                                                    <AlertDialogTrigger asChild>
+                                                        <div
+                                                            className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                                            onClick={() => openDeleteDialog(pair)}
+                                                        >
+                                                            <Trash2 className="mr-2 h-4 w-4" />
+                                                            <span>Delete</span>
+                                                        </div>
+                                                    </AlertDialogTrigger>
+                                                    {selectedTransactionPair && selectedTransactionPair[0].id === pair.from.id && (
+                                                        <AlertDialogContent>
+                                                            <AlertDialogHeader>
+                                                            <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                                            <AlertDialogDescription>
+                                                                This action cannot be undone. This will permanently delete both transactions related to this transfer: "{pair.from.description}".
+                                                            </AlertDialogDescription>
+                                                            </AlertDialogHeader>
+                                                            <AlertDialogFooter>
+                                                            <AlertDialogCancel onClick={() => setSelectedTransactionPair(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
+                                                            <AlertDialogAction onClick={handleDeleteTransferConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                                                {isDeleting ? "Deleting Transfer..." : "Delete Transfer"}
+                                                            </AlertDialogAction>
+                                                            </AlertDialogFooter>
+                                                        </AlertDialogContent>
+                                                    )}
+                                                </AlertDialog>
+                                            </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                );
+                            })}
+                        </TableBody>
+                        </Table>
+                    ) : (
+                        <div className="text-center py-10">
+                        <p className="text-muted-foreground">
+                            No transfer transactions found yet.
+                        </p>
+                        </div>
+                    )}
+                    </CardContent>
+                </Card>
             </div>
-          )}
-        </CardContent>
-         {!isLoading && transferTransactionPairs.length > 0 && (
-             <CardContent className="pt-4 border-t">
-             </CardContent>
-         )}
-      </Card>
+            <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
+                <MonthlySummarySidebar
+                    transactions={transferTransactionPairs.flatMap(p => [p.from, p.to])} // Combine pairs for summary
+                    accounts={accounts}
+                    preferredCurrency={preferredCurrency}
+                    transactionType="transfer"
+                />
+            </div>
+        </div>
+
 
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
         <DialogContent className="sm:max-w-[480px]">
@@ -428,6 +462,19 @@ export default function TransfersPage() {
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
+               initialData={
+                transactionTypeToAdd === 'transfer' && selectedTransaction // Check if editing context exists
+                  ? {
+                      type: 'transfer',
+                      fromAccountId: selectedTransaction.accountId, // Example: prefill 'from' if editing started from an outgoing leg
+                      toAccountId: accounts.find(acc => acc.id !== selectedTransaction.accountId)?.id, // Example: prefill 'to'
+                      amount: Math.abs(selectedTransaction.amount),
+                      date: parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z'),
+                      description: selectedTransaction.description,
+                      tags: selectedTransaction.tags,
+                    }
+                  : undefined
+              }
             />
           )}
            {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
@@ -442,3 +489,4 @@ export default function TransfersPage() {
     </div>
   );
 }
+
