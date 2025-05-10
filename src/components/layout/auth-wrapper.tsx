@@ -24,6 +24,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
+import { DateRangeProvider } from '@/contexts/DateRangeContext'; // Import Provider
+import GlobalHeader from './GlobalHeader'; // Import GlobalHeader
 import { Button } from '@/components/ui/button';
 
 // SVG Logo Component (moved from layout.tsx)
@@ -84,165 +86,170 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   }
 
   return (
-    <SidebarProvider>
-      <Sidebar side="left" variant="inset" collapsible="icon">
-        <SidebarHeader className="items-center justify-between">
-          <div className="flex items-center">
-             <LogoIcon />
-             <span className="text-lg font-semibold text-primary">The Golden Game</span>
-          </div>
-          <SidebarTrigger className="md:hidden" />
-        </SidebarHeader>
-        <SidebarContent>
-          <SidebarMenu>
-             <SidebarGroup>
-              <SidebarGroupLabel>Menu</SidebarGroupLabel>
-                <SidebarMenuItem>
-                  <Link href="/" passHref>
-                    <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
-                      <PiggyBank />
-                      <span>Dashboard</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <Link href="/accounts" passHref>
-                    <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
-                      <Landmark />
-                      <span>Accounts</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                     <SidebarMenuButton
-                        tooltip="Transactions"
-                        onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
-                        className="justify-between"
-                        isActive={isAnyTransactionRouteActive}
-                     >
-                       <div className="flex items-center gap-2">
-                         <ArrowLeftRight />
-                         <span>Transactions</span>
-                       </div>
-                       <ChevronDown
-                          className={cn(
-                             "h-4 w-4 transition-transform duration-200",
-                             isTransactionsOpen && "rotate-180"
-                          )}
-                       />
-                     </SidebarMenuButton>
-                </SidebarMenuItem>
-                {isTransactionsOpen && (
-                    <>
-                      <SidebarMenuItem className="ml-4">
-                         <Link href="/transactions" passHref>
-                             <SidebarMenuButton tooltip="Transactions Overview" size="sm" isActive={isActive('/transactions')}>
-                                 <LayoutList />
-                                 <span>Overview</span>
-                             </SidebarMenuButton>
-                         </Link>
-                     </SidebarMenuItem>
-                     <SidebarMenuItem className="ml-4">
-                         <Link href="/revenue" passHref>
-                             <SidebarMenuButton tooltip="View Revenue/Income" size="sm" isActive={isActive('/revenue')}>
-                                 <TrendingUp />
-                                 <span>Revenue/Income</span>
-                             </SidebarMenuButton>
-                         </Link>
-                     </SidebarMenuItem>
-                     <SidebarMenuItem className="ml-4">
-                         <Link href="/expenses" passHref>
-                             <SidebarMenuButton tooltip="View Expenses" size="sm" isActive={isActive('/expenses')}>
-                                 <TrendingDown />
-                                 <span>Expenses</span>
-                             </SidebarMenuButton>
-                         </Link>
-                     </SidebarMenuItem>
-                      <SidebarMenuItem className="ml-4">
-                         <Link href="/transfers" passHref>
-                             <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
-                                 <ArrowLeftRight />
-                                 <span>Transfers</span>
-                             </SidebarMenuButton>
-                         </Link>
-                     </SidebarMenuItem>
-                     </>
-                )}
-                <SidebarMenuItem>
-                    <Link href="/investments" passHref>
-                        <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
-                            <Wallet />
-                            <span>Investments</span>
-                        </SidebarMenuButton>
-                    </Link>
-                </SidebarMenuItem>
-            </SidebarGroup>
-             <SidebarGroup>
-                <SidebarGroupLabel>Organization</SidebarGroupLabel>
-                <SidebarMenuItem>
-                    <Link href="/categories" passHref>
-                        <SidebarMenuButton tooltip="Manage Categories" isActive={isActive('/categories')}>
-                            <ListTree />
-                            <span>Categories</span>
-                        </SidebarMenuButton>
-                    </Link>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                    <Link href="/tags" passHref>
-                        <SidebarMenuButton tooltip="Manage Tags" isActive={isActive('/tags')}>
-                            <Tag />
-                            <span>Tags</span>
-                        </SidebarMenuButton>
-                    </Link>
-                </SidebarMenuItem>
-                 <SidebarMenuItem>
-                    <Link href="/groups" passHref>
-                        <SidebarMenuButton tooltip="Manage Groups" isActive={isActive('/groups')}>
-                            <Users />
-                            <span>Groups</span>
-                        </SidebarMenuButton>
-                    </Link>
-                </SidebarMenuItem>
-            </SidebarGroup>
-             <SidebarGroup>
-              <SidebarGroupLabel>Settings</SidebarGroupLabel>
-                <SidebarMenuItem>
-                  <Link href="/preferences" passHref>
-                    <SidebarMenuButton tooltip="User Preferences" isActive={isActive('/preferences')}>
-                      <Settings />
-                      <span>Preferences</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-                <SidebarMenuItem>
-                  <Link href="/import" passHref>
-                    <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
-                      <Upload />
-                      <span>Import Data</span>
-                    </SidebarMenuButton>
-                  </Link>
-                </SidebarMenuItem>
-            </SidebarGroup>
-          </SidebarMenu>
-        </SidebarContent>
-        <SidebarFooter className="p-2 border-t border-sidebar-border">
-          <div className="flex items-center gap-3 p-2">
-            <Avatar className="h-9 w-9">
-              <AvatarImage src="https://picsum.photos/40/40" alt={user || "User"} data-ai-hint="user avatar" />
-              <AvatarFallback>{user ? user.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-                <span className="text-sm font-medium text-sidebar-foreground">{user || "User"}</span>
-                 <Button variant="link" size="sm" onClick={logout} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
-                    Logout
-                 </Button>
+    <DateRangeProvider> {/* Wrap with DateRangeProvider */}
+      <SidebarProvider>
+        <Sidebar side="left" variant="inset" collapsible="icon">
+          <SidebarHeader className="items-center justify-between">
+            <div className="flex items-center">
+               <LogoIcon />
+               <span className="text-lg font-semibold text-primary">The Golden Game</span>
             </div>
-          </div>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset className="flex-1 overflow-y-auto">
-          {children}
-      </SidebarInset>
-    </SidebarProvider>
+            <SidebarTrigger className="md:hidden" />
+          </SidebarHeader>
+          <SidebarContent>
+            <SidebarMenu>
+               <SidebarGroup>
+                <SidebarGroupLabel>Menu</SidebarGroupLabel>
+                  <SidebarMenuItem>
+                    <Link href="/" passHref>
+                      <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
+                        <PiggyBank />
+                        <span>Dashboard</span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <Link href="/accounts" passHref>
+                      <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
+                        <Landmark />
+                        <span>Accounts</span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                       <SidebarMenuButton
+                          tooltip="Transactions"
+                          onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
+                          className="justify-between"
+                          isActive={isAnyTransactionRouteActive}
+                       >
+                         <div className="flex items-center gap-2">
+                           <ArrowLeftRight />
+                           <span>Transactions</span>
+                         </div>
+                         <ChevronDown
+                            className={cn(
+                               "h-4 w-4 transition-transform duration-200",
+                               isTransactionsOpen && "rotate-180"
+                            )}
+                         />
+                       </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {isTransactionsOpen && (
+                      <>
+                        <SidebarMenuItem className="ml-4">
+                           <Link href="/transactions" passHref>
+                               <SidebarMenuButton tooltip="Transactions Overview" size="sm" isActive={isActive('/transactions')}>
+                                   <LayoutList />
+                                   <span>Overview</span>
+                               </SidebarMenuButton>
+                           </Link>
+                       </SidebarMenuItem>
+                       <SidebarMenuItem className="ml-4">
+                           <Link href="/revenue" passHref>
+                               <SidebarMenuButton tooltip="View Revenue/Income" size="sm" isActive={isActive('/revenue')}>
+                                   <TrendingUp />
+                                   <span>Revenue/Income</span>
+                               </SidebarMenuButton>
+                           </Link>
+                       </SidebarMenuItem>
+                       <SidebarMenuItem className="ml-4">
+                           <Link href="/expenses" passHref>
+                               <SidebarMenuButton tooltip="View Expenses" size="sm" isActive={isActive('/expenses')}>
+                                   <TrendingDown />
+                                   <span>Expenses</span>
+                               </SidebarMenuButton>
+                           </Link>
+                       </SidebarMenuItem>
+                        <SidebarMenuItem className="ml-4">
+                           <Link href="/transfers" passHref>
+                               <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
+                                   <ArrowLeftRight /> {/* Using ArrowLeftRight as TransferIconOriginal alias */}
+                                   <span>Transfers</span>
+                               </SidebarMenuButton>
+                           </Link>
+                       </SidebarMenuItem>
+                       </>
+                  )}
+                  <SidebarMenuItem>
+                      <Link href="/investments" passHref>
+                          <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
+                              <Wallet />
+                              <span>Investments</span>
+                          </SidebarMenuButton>
+                      </Link>
+                  </SidebarMenuItem>
+              </SidebarGroup>
+               <SidebarGroup>
+                  <SidebarGroupLabel>Organization</SidebarGroupLabel>
+                  <SidebarMenuItem>
+                      <Link href="/categories" passHref>
+                          <SidebarMenuButton tooltip="Manage Categories" isActive={isActive('/categories')}>
+                              <ListTree />
+                              <span>Categories</span>
+                          </SidebarMenuButton>
+                      </Link>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                      <Link href="/tags" passHref>
+                          <SidebarMenuButton tooltip="Manage Tags" isActive={isActive('/tags')}>
+                              <Tag />
+                              <span>Tags</span>
+                          </SidebarMenuButton>
+                      </Link>
+                  </SidebarMenuItem>
+                   <SidebarMenuItem>
+                      <Link href="/groups" passHref>
+                          <SidebarMenuButton tooltip="Manage Groups" isActive={isActive('/groups')}>
+                              <Users />
+                              <span>Groups</span>
+                          </SidebarMenuButton>
+                      </Link>
+                  </SidebarMenuItem>
+              </SidebarGroup>
+               <SidebarGroup>
+                <SidebarGroupLabel>Settings</SidebarGroupLabel>
+                  <SidebarMenuItem>
+                    <Link href="/preferences" passHref>
+                      <SidebarMenuButton tooltip="User Preferences" isActive={isActive('/preferences')}>
+                        <Settings />
+                        <span>Preferences</span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+                  <SidebarMenuItem>
+                    <Link href="/import" passHref>
+                      <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
+                        <Upload />
+                        <span>Import Data</span>
+                      </SidebarMenuButton>
+                    </Link>
+                  </SidebarMenuItem>
+              </SidebarGroup>
+            </SidebarMenu>
+          </SidebarContent>
+          <SidebarFooter className="p-2 border-t border-sidebar-border">
+            <div className="flex items-center gap-3 p-2">
+              <Avatar className="h-9 w-9">
+                <AvatarImage src="https://picsum.photos/40/40" alt={user || "User"} data-ai-hint="user avatar" />
+                <AvatarFallback>{user ? user.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
+              </Avatar>
+              <div className="flex flex-col">
+                  <span className="text-sm font-medium text-sidebar-foreground">{user || "User"}</span>
+                   <Button variant="link" size="sm" onClick={logout} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
+                      Logout
+                   </Button>
+              </div>
+            </div>
+          </SidebarFooter>
+        </Sidebar>
+        <SidebarInset className="flex flex-col flex-1"> {/* Ensure SidebarInset can grow and contain header + content */}
+            <GlobalHeader /> {/* Add GlobalHeader here */}
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8"> {/* Main content area */}
+              {children}
+            </main>
+        </SidebarInset>
+      </SidebarProvider>
+    </DateRangeProvider>
   );
 }

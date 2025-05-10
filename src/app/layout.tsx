@@ -33,10 +33,7 @@ export default function RootLayout({
           'min-h-screen flex flex-col'
         )}
       >
-        {/* 
-          The DateRangePicker was previously here conditionally. 
-          It's now moved to src/app/dashboard/page.tsx to be part of the sticky header there.
-        */}
+        {/* AuthWrapper now contains DateRangeProvider, SidebarProvider, GlobalHeader, and then children */}
         <AuthWrapper>{children}</AuthWrapper>
         <Toaster />
       </body>

@@ -18,12 +18,12 @@ import { getTransactions, addTransaction, type Transaction } from "@/services/tr
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
-import type { DateRange } from 'react-day-picker';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
+// import type { DateRange } from 'react-day-picker'; // No longer needed here
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // DialogTrigger removed as button is global
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import { useToast } from "@/hooks/use-toast";
-import DateRangePicker from '@/components/dashboard/date-range-picker';
+import { useDateRange } from '@/contexts/DateRangeContext'; // Import context hook
 
 
 export default function DashboardPage() {
@@ -39,10 +39,7 @@ export default function DashboardPage() {
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
-  const [selectedDateRange, setSelectedDateRange] = useState<DateRange>({
-    from: startOfMonth(new Date()),
-    to: endOfMonth(new Date()),
-  });
+  const { selectedDateRange, setSelectedDateRange: setGlobalDateRange } = useDateRange(); // Use global date range
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
@@ -246,85 +243,13 @@ export default function DashboardPage() {
     return data;
   }, [accounts, preferredCurrency, isLoading]);
 
-  const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (accounts.length === 0) {
-        toast({
-            title: "No Accounts",
-            description: "Please add an account first before adding transactions.",
-            variant: "destructive",
-        });
-        return;
-    }
-    if (type === 'transfer' && accounts.length < 2) {
-        toast({
-            title: "Not Enough Accounts for Transfer",
-            description: "You need at least two accounts to make a transfer.",
-            variant: "destructive",
-        });
-        return;
-    }
-    setTransactionTypeToAdd(type);
-    setIsAddTransactionDialogOpen(true);
-  };
-
-  const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
-    try {
-      await addTransaction(data);
-      toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await handleRefresh(); 
-      setIsAddTransactionDialogOpen(false);
-    } catch (error: any) {
-      console.error("Failed to add transaction:", error);
-      toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
-    }
-  };
-
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
-    try {
-      const transferAmount = Math.abs(data.amount);
-      const formattedDate = format(data.date, 'yyyy-MM-dd');
-      const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
-
-      await addTransaction({
-        accountId: data.fromAccountId,
-        amount: -transferAmount,
-        date: formattedDate,
-        description: desc,
-        category: 'Transfer', 
-        tags: data.tags || [],
-      });
-
-      await addTransaction({
-        accountId: data.toAccountId,
-        amount: transferAmount,
-        date: formattedDate,
-        description: desc,
-        category: 'Transfer',
-        tags: data.tags || [],
-      });
-
-      toast({ title: "Success", description: "Transfer recorded successfully." });
-      await handleRefresh(); 
-      setIsAddTransactionDialogOpen(false);
-    } catch (error: any) {
-      console.error("Failed to add transfer:", error);
-      toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
-    }
-  };
-
+  // openAddTransactionDialog and related handlers are moved to GlobalHeader or kept here if page-specific "Add" is needed
+  // For this refactor, assume "Add" button is global. If a page-specific one is desired, it would call similar logic.
 
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0) {
     return (
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-        <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 mb-4 -mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 border-b">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <Skeleton className="h-10 w-1/3 mb-2 sm:mb-0" />
-                 <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <Skeleton className="h-10 w-full sm:w-64" /> {/* Date Picker Skeleton */}
-                    <Skeleton className="h-10 w-24" /> {/* Add Button Skeleton */}
-                </div>
-            </div>
-        </div>
+      <div className="space-y-4"> {/* Removed container mx-auto and py/px padding */}
+        {/* Skeleton for sticky header (if it were here) */}
         <Card>
           <CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -350,42 +275,13 @@ export default function DashboardPage() {
 
   return (
     <TooltipProvider>
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-4">
-         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-4 mb-4 -mx-4 px-4 md:-mx-6 md:px-6 lg:-mx-8 lg:px-8 border-b">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center">
-                <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2 sm:mb-0">Dashboard</h1>
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                    <DateRangePicker
-                        initialRange={selectedDateRange}
-                        onRangeChange={setSelectedDateRange}
-                        className="w-full sm:w-auto md:min-w-[280px]"
-                    />
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="default" className="w-full sm:w-auto">
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Add
-                            <ChevronDown className="ml-2 h-4 w-4" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => openAddTransactionDialog('expense')}>
-                            <ArrowDownCircle className="mr-2 h-4 w-4" />
-                            Add Spend
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openAddTransactionDialog('income')}>
-                            <ArrowUpCircle className="mr-2 h-4 w-4" />
-                            Add Income
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
-                            <TransferIcon className="mr-2 h-4 w-4" />
-                            Add Transfer
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </div>
-        </div>
+      <div className="space-y-4"> {/* Removed container mx-auto and py/px padding */}
+         {/* GlobalHeader handles the sticky top bar with DateRangePicker and Add button */}
+         {/* Page specific title and actions (if any beyond global ones) could go here */}
+         <div className="flex justify-between items-center"> {/* Removed mb-6 to rely on space-y-4 from parent */}
+            <h1 className="text-3xl font-bold">Dashboard</h1>
+            {/* "Add" button can be here if specific to dashboard, or rely on GlobalHeader's button */}
+         </div>
 
 
         <Card>
@@ -522,34 +418,7 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
-          <DialogHeader>
-            <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
-            <DialogDescription>
-              Enter the details for your new {transactionTypeToAdd || 'transaction'}.
-            </DialogDescription>
-          </DialogHeader>
-          {accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd && (
-            <AddTransactionForm
-              accounts={accounts}
-              categories={categories}
-              tags={tags}
-              onTransactionAdded={handleTransactionAdded}
-              onTransferAdded={handleTransferAdded}
-              isLoading={isLoading}
-              initialType={transactionTypeToAdd}
-            />
-          )}
-           {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
-               <div className="py-4 text-center text-muted-foreground">
-                 Please ensure you have at least one account, category, and tag set up before adding transactions.
-                   You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.
-               </div>
-            )}
-             {isLoading && <Skeleton className="h-40 w-full" /> }
-        </DialogContent>
-      </Dialog>
+      {/* Dialog for adding transactions is now handled by GlobalHeader or a page-specific button if re-added */}
     </TooltipProvider>
   );
 }
