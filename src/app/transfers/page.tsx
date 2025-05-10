@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -49,6 +48,7 @@ export default function TransfersPage() {
 
   const [selectedTransactionPair, setSelectedTransactionPair] = useState<Transaction[] | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [editingTransferPair, setEditingTransferPair] = useState<{from: Transaction, to: Transaction} | null>(null);
 
 
   useEffect(() => {
@@ -145,17 +145,21 @@ export default function TransfersPage() {
     const processedIds = new Set<string>();
 
     const potentialTransfers = allTransactions.filter(
-        tx => tx.category?.toLowerCase() === 'transfer' || tx.description?.toLowerCase().includes('transfer')
+        tx => tx.category?.toLowerCase() === 'transfer' // Stricter check for 'transfer' category
     );
 
     potentialTransfers.forEach(txOut => {
-      if (txOut.amount < 0 && !processedIds.has(txOut.id)) {
+      if (txOut.amount < 0 && !processedIds.has(txOut.id)) { // txOut is the outgoing leg
         const txIn = potentialTransfers.find(tx =>
-          tx.amount === -txOut.amount &&
-          tx.accountId !== txOut.accountId &&
+          tx.amount === -txOut.amount && // txIn is the incoming leg, amount is positive opposite
+          tx.accountId !== txOut.accountId && // Different accounts
           !processedIds.has(tx.id) &&
-          tx.date === txOut.date &&
-          tx.description === txOut.description
+          tx.date === txOut.date && // Same date
+          // Descriptions might be slightly different due to "Transfer to X" vs "Transfer from Y"
+          // So, make this check more lenient or base it on a shared identifier if available
+          (tx.description === txOut.description || 
+           tx.description?.includes(getAccountName(txOut.accountId)) && txOut.description?.includes(getAccountName(tx.accountId)) ||
+           (tx.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer")))
         );
 
         if (txIn) {
@@ -167,31 +171,22 @@ export default function TransfersPage() {
     });
 
     return transfers.sort((a, b) => new Date(b.from.date).getTime() - new Date(a.from.date).getTime());
-  }, [allTransactions]);
+  }, [allTransactions, accounts]); // Added accounts to dependency array for getAccountName
 
    const getAccountName = (accountId: string): string => {
         return accounts.find(acc => acc.id === accountId)?.name || 'Unknown Account';
    };
 
     const openEditDialog = (transferPair: { from: Transaction, to: Transaction }) => {
-        // Editing transfers is complex as it involves two linked transactions.
-        // For now, direct to AddTransactionForm with 'transfer' type and prefill.
-        const { from, to } = transferPair;
-        const fromAccount = accounts.find(acc => acc.id === from.accountId);
-        if (!fromAccount) {
-            toast({ title: "Error", description: "Source account not found for editing.", variant: "destructive" });
-            return;
-        }
+        setEditingTransferPair(transferPair);
         setTransactionTypeToAdd('transfer');
-        // We cannot directly edit a "pair" with the current AddTransactionForm for income/expense.
-        // Instead, user might need to delete and re-add, or we build a specific transfer edit form.
-        // For now, opening the Add Transaction form with type 'transfer' is a placeholder.
-        // To truly edit, we'd need to pre-fill `fromAccountId`, `toAccountId`, `amount`, `date`, `description`, `tags`
-        // and then upon submit, delete the old pair and add the new pair.
-        setSelectedTransaction(from); // Store one leg for context if needed by AddTransactionForm, but it won't fully work for "editing a transfer pair"
-        setIsAddTransactionDialogOpen(true); // Open the general add dialog with transfer type
-        toast({title: "Edit Transfer", description: "To edit a transfer, please delete the old one and create a new one with updated details.", variant: "default", duration: 7000});
-
+        setIsAddTransactionDialogOpen(true);
+        // Note: The AddTransactionForm will need logic to handle the 'editingTransferPair'
+        // This means it would pre-fill 'fromAccount', 'toAccount', 'amount', 'date', 'description', 'tags'
+        // And the submit handler for transfers would need to:
+        // 1. Delete the old pair (editingTransferPair.from.id, editingTransferPair.to.id)
+        // 2. Add the new pair based on form values
+        toast({title: "Edit Transfer", description: "Modify transfer details. This will delete the old transfer and create a new one.", variant: "default", duration: 7000});
     };
 
      const openDeleteDialog = (transferPair: { from: Transaction, to: Transaction }) => {
@@ -224,23 +219,45 @@ export default function TransfersPage() {
         }
     };
 
-  const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
+  const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => { // Allow Transaction for updates
     try {
-      await addTransaction(data);
-      toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
+      if ('id' in data && data.id && editingTransferPair) { // Check if it's an update context for a transfer
+        // This means we are "updating" a transfer, which involves deleting old and adding new
+        // The new transfer data comes from the form, which should be passed to handleTransferAdded
+        console.warn("handleTransactionAdded called in edit transfer context. This should ideally go to a specific transfer update handler or onTransferAdded.");
+        // For now, we assume that if we are here, it's not an actual transfer update scenario
+        // or that the form correctly calls onTransferAdded.
+        // If we *must* handle it here, we'd need to ensure `data` has from/to accountId etc.
+         toast({title: "Update Logic", description: "Transfer updates should be handled by onTransferAdded.", variant: "destructive"})
+      } else if (!('id' in data)) { // It's a new non-transfer transaction
+        await addTransaction(data as Omit<Transaction, 'id'>);
+        toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
+      }
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
+      setEditingTransferPair(null); // Clear editing state
     } catch (error: any) {
-      console.error("Failed to add transaction:", error);
-      toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
+      console.error("Failed to add/update transaction:", error);
+      toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
     }
   };
 
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+    setIsLoading(true);
     try {
+       // If we are editing a transfer, delete the old one first
+       if (editingTransferPair) {
+           console.log("Deleting old transfer pair before adding updated one:", editingTransferPair);
+           await deleteTransaction(editingTransferPair.from.id, editingTransferPair.from.accountId);
+           await deleteTransaction(editingTransferPair.to.id, editingTransferPair.to.accountId);
+           console.log("Old transfer pair deleted.");
+       }
+
       const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
-      const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
+      const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
+      const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
+      const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
 
       await addTransaction({
         accountId: data.fromAccountId,
@@ -260,17 +277,20 @@ export default function TransfersPage() {
         tags: data.tags || [],
       });
 
-      toast({ title: "Success", description: "Transfer recorded successfully." });
+      toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
+      setEditingTransferPair(null); // Clear editing state
     } catch (error: any) {
-      console.error("Failed to add transfer:", error);
+      console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (accounts.length === 0) {
+    if (accounts.length === 0 && type !== 'transfer') { // Allow opening for transfer even with 0 accounts to show error
         toast({
             title: "No Accounts",
             description: "Please add an account first before adding transactions.",
@@ -284,11 +304,28 @@ export default function TransfersPage() {
             description: "You need at least two accounts to make a transfer.",
             variant: "destructive",
         });
-        return;
+        return; // Still show dialog but form will likely be problematic or show this error again
     }
     setTransactionTypeToAdd(type);
+    setEditingTransferPair(null); // Ensure we are not in edit mode when adding new
     setIsAddTransactionDialogOpen(true);
   };
+
+  const initialFormDataForEdit = useMemo(() => {
+    if (editingTransferPair && transactionTypeToAdd === 'transfer') {
+        return {
+            type: 'transfer' as 'transfer',
+            fromAccountId: editingTransferPair.from.accountId,
+            toAccountId: editingTransferPair.to.accountId,
+            amount: Math.abs(editingTransferPair.from.amount),
+            date: parseISO(editingTransferPair.from.date.includes('T') ? editingTransferPair.from.date : editingTransferPair.from.date + 'T00:00:00Z'),
+            description: editingTransferPair.from.description,
+            tags: editingTransferPair.from.tags || [],
+        };
+    }
+    return undefined;
+  }, [editingTransferPair, transactionTypeToAdd]);
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -342,7 +379,7 @@ export default function TransfersPage() {
                         </div>
                     </CardHeader>
                     <CardContent>
-                    {isLoading ? (
+                    {isLoading && transferTransactionPairs.length === 0 ? (
                         <div className="space-y-2">
                         {[...Array(3)].map((_, i) => (
                             <Skeleton key={i} className="h-12 w-full" />
@@ -429,6 +466,9 @@ export default function TransfersPage() {
                         <p className="text-muted-foreground">
                             No transfer transactions found yet.
                         </p>
+                         <Button variant="link" className="mt-2 px-0 h-auto text-primary" onClick={() => openAddTransactionDialog('transfer')}>
+                            Add your first transfer
+                        </Button>
                         </div>
                     )}
                     </CardContent>
@@ -436,7 +476,7 @@ export default function TransfersPage() {
             </div>
             <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
                 <MonthlySummarySidebar
-                    transactions={transferTransactionPairs.flatMap(p => [p.from, p.to])} // Combine pairs for summary
+                    transactions={transferTransactionPairs.flatMap(p => [p.from, p.to])} 
                     accounts={accounts}
                     preferredCurrency={preferredCurrency}
                     transactionType="transfer"
@@ -445,12 +485,17 @@ export default function TransfersPage() {
         </div>
 
 
-      <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
+      <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
+          setIsAddTransactionDialogOpen(open);
+          if (!open) setEditingTransferPair(null); // Clear editing state when dialog closes
+      }}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>
-            <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
+            <DialogTitle>
+                {editingTransferPair ? 'Edit Transfer' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}
+            </DialogTitle>
             <DialogDescription>
-              Enter the details for your new {transactionTypeToAdd || 'transaction'}.
+              {editingTransferPair ? 'Modify the details of your transfer.' : `Enter the details for your new ${transactionTypeToAdd || 'transaction'}.`}
             </DialogDescription>
           </DialogHeader>
           {accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd && (
@@ -458,23 +503,11 @@ export default function TransfersPage() {
               accounts={accounts}
               categories={categories}
               tags={tags}
-              onTransactionAdded={handleTransactionAdded}
+              onTransactionAdded={handleTransactionAdded} 
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
-               initialData={
-                transactionTypeToAdd === 'transfer' && selectedTransaction // Check if editing context exists
-                  ? {
-                      type: 'transfer',
-                      fromAccountId: selectedTransaction.accountId, // Example: prefill 'from' if editing started from an outgoing leg
-                      toAccountId: accounts.find(acc => acc.id !== selectedTransaction.accountId)?.id, // Example: prefill 'to'
-                      amount: Math.abs(selectedTransaction.amount),
-                      date: parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z'),
-                      description: selectedTransaction.description,
-                      tags: selectedTransaction.tags,
-                    }
-                  : undefined
-              }
+              initialData={initialFormDataForEdit}
             />
           )}
            {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
@@ -489,4 +522,3 @@ export default function TransfersPage() {
     </div>
   );
 }
-

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { FC, useMemo } from 'react';
@@ -14,14 +13,14 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, ArrowRightLeft } from 'lucide-react'; // Add transfer icon
 import { cn } from "@/lib/utils";
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 import type { Account } from '@/services/account-sync';
-import type { Category } from '@/services/categories.tsx';
-import type { Tag } from '@/services/tags.tsx'; // Import Tag type with .tsx
-import type { Transaction } from '@/services/transactions.tsx';
+import type { Category } from '@/services/categories';
+import type { Tag } from '@/services/tags'; 
+import type { Transaction } from '@/services/transactions';
 import { getCurrencySymbol } from '@/lib/currency';
-import { Textarea } from '@/components/ui/textarea'; // Import Textarea
-import { toast } from "@/hooks/use-toast"; // Import toast
+import { Textarea } from '@/components/ui/textarea'; 
+import { toast } from "@/hooks/use-toast"; 
 
 // Define allowed transaction types
 const transactionTypes = ['expense', 'income', 'transfer'] as const;
@@ -104,7 +103,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     defaultValues: initialData ? {
         ...initialData,
         // Ensure date is a Date object
-        date: initialData.date ? (typeof initialData.date === 'string' ? new Date(initialData.date.includes('T') ? initialData.date : initialData.date + 'T00:00:00Z') : initialData.date) : new Date(),
+        date: initialData.date ? (typeof initialData.date === 'string' ? parseISO(initialData.date.includes('T') ? initialData.date : initialData.date + 'T00:00:00Z') : initialData.date) : new Date(),
         tags: initialData.tags || [], // Use initial tags or empty array
     } : {
       type: initialType,
