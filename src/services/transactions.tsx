@@ -25,6 +25,10 @@ export interface Transaction {
 // Type for data passed to addTransaction - transactionCurrency is now mandatory
 export type NewTransactionData = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & {
     transactionCurrency: string;
+    originalImportData?: { // Ensure this is part of the type if passed directly
+        foreignAmount?: number | null;
+        foreignCurrency?: string | null;
+    }
 };
 
 
@@ -44,18 +48,14 @@ async function modifyAccountBalance(accountId: string, amountInTransactionCurren
 
     if (accountToUpdate) {
         let amountInAccountCurrency = amountInTransactionCurrency;
-        // Convert amount to account's native currency IF transaction currency is different
         if (transactionCurrency.toUpperCase() !== accountToUpdate.currency.toUpperCase()) {
             amountInAccountCurrency = convertCurrency(
                 amountInTransactionCurrency,
-                transactionCurrency, // Source currency is the transaction's currency
-                accountToUpdate.currency // Target is the account's native currency
+                transactionCurrency, 
+                accountToUpdate.currency 
             );
         }
-
-        // Amount is already signed. 'add' operation will correctly add/subtract.
-        // 'subtract' operation means we are reverting a previous 'add'.
-        const balanceChange = operation === 'add' ? amountInAccountCurrency : -amountInAccountCurrency;
+        const balanceChange = operation === 'add' ? amountInAccountCurrency : -amountInTransactionCurrency;
         const newBalance = accountToUpdate.balance + balanceChange;
 
         await updateAccountInDb({
@@ -101,7 +101,7 @@ export async function getTransactions(
 
 export async function addTransaction(transactionData: NewTransactionData): Promise<Transaction> {
   const currentUser = auth.currentUser;
-  const { accountId, amount, transactionCurrency, category } = transactionData; // amount is already signed
+  const { accountId, amount, transactionCurrency, category } = transactionData; 
   const transactionsRefPath = getTransactionsRefPath(currentUser, accountId);
   const accountTransactionsRef = ref(database, transactionsRefPath);
   const newTransactionRef = push(accountTransactionsRef);
@@ -111,29 +111,32 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
   }
 
   const newTransaction: Transaction = {
-    ...transactionData,
+    ...transactionData, 
     id: newTransactionRef.key,
     category: category?.trim() || 'Uncategorized',
     tags: transactionData.tags || [],
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    // transactionCurrency is already part of transactionData
+    originalImportData: { // Ensure this structure exists
+        foreignAmount: transactionData.originalImportData?.foreignAmount ?? null,
+        foreignCurrency: transactionData.originalImportData?.foreignCurrency ?? null,
+    }
   };
 
   console.log("Adding transaction to Firebase RTDB:", newTransaction);
   try {
-    const dataToSave = { ...newTransaction };
-    delete (dataToSave as any).id;
-    // Ensure foreignAmount and foreignCurrency are null if undefined, not removed
-    dataToSave.originalImportData = {
-        foreignAmount: transactionData.originalImportData?.foreignAmount ?? null,
-        foreignCurrency: transactionData.originalImportData?.foreignCurrency ?? null,
-    };
+    const dataToSave = { ...newTransaction } as any; 
+    delete dataToSave.id;
+    
+    // Ensure originalImportData structure is correctly saved, with nulls for missing fields
+    // This assignment is now redundant if newTransaction already has it structured.
+    // dataToSave.originalImportData = {
+    //     foreignAmount: newTransaction.originalImportData?.foreignAmount ?? null,
+    //     foreignCurrency: newTransaction.originalImportData?.foreignCurrency ?? null,
+    // };
 
 
     await set(newTransactionRef, dataToSave);
-    // Update account balance. 'amount' is already signed.
-    // Pass the transaction's own currency for conversion within modifyAccountBalance.
     if (category?.toLowerCase() !== 'opening balance') {
         await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
@@ -146,7 +149,7 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
 
 export async function updateTransaction(updatedTransaction: Transaction): Promise<Transaction> {
   const currentUser = auth.currentUser;
-  const { id, accountId, amount, transactionCurrency } = updatedTransaction; // amount is new signed amount
+  const { id, accountId, amount, transactionCurrency } = updatedTransaction; 
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, id);
   const transactionRef = ref(database, transactionRefPath);
 
@@ -161,23 +164,20 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
     category: updatedTransaction.category?.trim() || 'Uncategorized',
     tags: updatedTransaction.tags || [],
     updatedAt: serverTimestamp(),
-    // transactionCurrency is part of updatedTransaction
-  };
-  delete (dataToUpdate as any).id;
-  delete (dataToUpdate as any).createdAt;
-  dataToUpdate.originalImportData = {
-    foreignAmount: updatedTransaction.originalImportData?.foreignAmount ?? null,
-    foreignCurrency: updatedTransaction.originalImportData?.foreignCurrency ?? null,
-  };
+    originalImportData: { // Ensure this structure exists
+        foreignAmount: updatedTransaction.originalImportData?.foreignAmount ?? null,
+        foreignCurrency: updatedTransaction.originalImportData?.foreignCurrency ?? null,
+    }
+  } as any; 
+  delete dataToUpdate.id;
+  delete dataToUpdate.createdAt;
 
 
   console.log("Updating transaction in Firebase RTDB:", id, dataToUpdate);
   try {
     await update(transactionRef, dataToUpdate);
 
-    // 1. Revert old transaction amount using its original transaction currency
     await modifyAccountBalance(accountId, originalTransaction.amount, originalTransaction.transactionCurrency, 'subtract');
-    // 2. Apply new transaction amount using its specified transaction currency
     await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
 
     return updatedTransaction;
@@ -202,7 +202,6 @@ export async function deleteTransaction(transactionId: string, accountId: string
   console.log("Deleting transaction from Firebase RTDB:", transactionRefPath);
   try {
     await remove(transactionRef);
-    // Revert account balance using the transaction's currency
     await modifyAccountBalance(accountId, transactionToDelete.amount, transactionToDelete.transactionCurrency, 'subtract');
   } catch (error) {
     console.error("Error deleting transaction from Firebase:", error);
@@ -224,9 +223,6 @@ export async function clearAllSessionTransactions(): Promise<void> {
     await remove(userTransactionsRef);
     const accounts = await getAccounts();
     for (const acc of accounts) {
-        // Reset balance to 0 or to its original opening balance if tracked
-        // For simplicity, resetting to 0 here. A more robust solution might
-        // re-calculate from "opening balance" transactions if they exist.
         await updateAccountInDb({ ...acc, balance: 0, lastActivity: new Date().toISOString(), balanceDifference: 0 });
     }
     console.log("All transactions cleared from Firebase for user:", currentUser.uid);
