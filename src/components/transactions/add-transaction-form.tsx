@@ -14,7 +14,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { CalendarIcon, ArrowRightLeft } from 'lucide-react';
 import { cn } from "@/lib/utils";
-import { format, parseISO } from 'date-fns';
+import { format as formatDateFns, parseISO } from 'date-fns'; // Use aliased import
 import type { Account } from '@/services/account-sync';
 import type { Category } from '@/services/categories';
 import type { Tag } from '@/services/tags';
@@ -168,7 +168,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         accountId: values.accountId,
         amount: transactionAmount,
         transactionCurrency: values.transactionCurrency, // Pass transactionCurrency
-        date: format(values.date, 'yyyy-MM-dd'),
+        date: formatDateFns(values.date, 'yyyy-MM-dd'),
         description: values.description || values.category,
         category: values.category,
         tags: finalTags,
@@ -323,7 +323,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                             )}
                           >
                             {field.value ? (
-                              format(field.value, "PPP")
+                              formatDateFns(field.value, "PPP")
                             ) : (
                               <span>Pick a date</span>
                             )}
@@ -435,7 +435,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                               )}
                             >
                               {field.value ? (
-                                format(field.value, "PPP")
+                                formatDateFns(field.value, "PPP")
                               ) : (
                                 <span>Pick a date</span>
                               )}

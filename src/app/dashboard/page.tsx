@@ -17,7 +17,7 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, addTransaction, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
-import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
+import { format as formatDateFns, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameDay } from 'date-fns'; // Use aliased import
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; 
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -245,9 +245,9 @@ export default function DashboardPage() {
   const dateRangeLabel = useMemo(() => {
     if (selectedDateRange.from && selectedDateRange.to) {
         if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
-            return format(selectedDateRange.from, 'MMM d, yyyy');
+            return formatDateFns(selectedDateRange.from, 'MMM d, yyyy');
         }
-        return `${format(selectedDateRange.from, 'MMM d')} - ${format(selectedDateRange.to, 'MMM d, yyyy')}`;
+        return `${formatDateFns(selectedDateRange.from, 'MMM d')} - ${formatDateFns(selectedDateRange.to, 'MMM d, yyyy')}`;
     }
     return 'All Time';
   }, [selectedDateRange]);

@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -14,7 +15,7 @@ import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from 'react';
-import { format } from 'date-fns';
+import { format as formatDateFns } from 'date-fns'; // Use aliased import
 import { addTransaction } from '@/services/transactions';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -91,10 +92,10 @@ const GlobalHeader: FC = () => {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string }) => {
     try {
       const transferAmount = Math.abs(data.amount);
-      const formattedDate = format(data.date, 'yyyy-MM-dd');
+      const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
@@ -102,6 +103,7 @@ const GlobalHeader: FC = () => {
       await addTransaction({
         accountId: data.fromAccountId,
         amount: -transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -111,6 +113,7 @@ const GlobalHeader: FC = () => {
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',

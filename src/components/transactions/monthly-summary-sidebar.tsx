@@ -5,7 +5,7 @@ import type { FC } from 'react';
 import { useMemo } from 'react'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
+import { format as formatDateFns, parseISO, startOfMonth, endOfMonth } from 'date-fns'; // Use aliased import
 import type { Transaction } from '@/services/transactions';
 import type { Account } from '@/services/account-sync';
 import { formatCurrency, convertCurrency } from '@/lib/currency';
@@ -40,8 +40,8 @@ const MonthlySummarySidebar: FC<MonthlySummarySidebarProps> = ({
 
     transactions.forEach(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      const monthYearKey = format(txDate, 'yyyy-MM'); 
-      const displayMonthYear = format(txDate, 'MMMM yyyy'); 
+      const monthYearKey = formatDateFns(txDate, 'yyyy-MM'); 
+      const displayMonthYear = formatDateFns(txDate, 'MMMM yyyy'); 
 
       if (!summaries[monthYearKey]) {
         summaries[monthYearKey] = {

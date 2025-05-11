@@ -11,7 +11,7 @@ import { getTags, Tag } from '@/services/tags';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format, parseISO } from 'date-fns';
+import { format as formatDateFns, parseISO } from 'date-fns'; // Use aliased import
 import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -27,7 +27,7 @@ const formatDate = (dateString: string): string => {
     try {
         const date = parseISO(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return format(date, 'MMM do, yyyy');
+        return formatDateFns(date, 'MMM do, yyyy');
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -243,7 +243,7 @@ export default function TransfersPage() {
        }
 
       const transferAmount = Math.abs(data.amount);
-      const formattedDate = format(data.date, 'yyyy-MM-dd');
+      const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
@@ -361,7 +361,7 @@ export default function TransfersPage() {
                             <div>
                                 <CardTitle>All Transfers</CardTitle>
                                 <CardDescription>
-                                    Transfers between {format(new Date(2024,0,1), 'MMM do, yyyy')} and {format(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
+                                    Transfers between {formatDateFns(new Date(2024,0,1), 'MMM do, yyyy')} and {formatDateFns(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
                                 </CardDescription>
                             </div>
                              <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('transfer')}>

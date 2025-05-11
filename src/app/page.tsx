@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
 import SmallStatCard from "@/components/dashboard/small-stat-card";
@@ -240,9 +241,9 @@ export default function DashboardPage() {
   const dateRangeLabel = useMemo(() => {
     if (selectedDateRange.from && selectedDateRange.to) {
         if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
-            return format(selectedDateRange.from, 'MMM d, yyyy');
+            return formatDateFns(selectedDateRange.from, 'MMM d, yyyy');
         }
-        return `${format(selectedDateRange.from, 'MMM d')} - ${format(selectedDateRange.to, 'MMM d, yyyy')}`;
+        return `${formatDateFns(selectedDateRange.from, 'MMM d')} - ${formatDateFns(selectedDateRange.to, 'MMM d, yyyy')}`;
     }
     return 'All Time';
   }, [selectedDateRange]);

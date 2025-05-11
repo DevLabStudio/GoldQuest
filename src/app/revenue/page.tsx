@@ -12,7 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format, parseISO } from 'date-fns';
+import { format as formatDateFns, parseISO } from 'date-fns'; // Use aliased import
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -28,7 +28,7 @@ const formatDate = (dateString: string): string => {
     try {
         const date = parseISO(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return format(date, 'MMM do, yyyy'); 
+        return formatDateFns(date, 'MMM do, yyyy'); 
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -166,7 +166,7 @@ export default function RevenuePage() {
             ...selectedTransaction,
             amount: transactionAmount,
             transactionCurrency: formData.transactionCurrency, // Ensure this is passed
-            date: format(formData.date, 'yyyy-MM-dd'),
+            date: formatDateFns(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
             tags: formData.tags || [],
@@ -238,7 +238,7 @@ export default function RevenuePage() {
   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[], transactionCurrency: string; }) => {
     try {
       const transferAmount = Math.abs(data.amount);
-      const formattedDate = format(data.date, 'yyyy-MM-dd');
+      const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
 
       await addTransaction({
@@ -333,7 +333,7 @@ export default function RevenuePage() {
                             <div>
                                 <CardTitle>All Income</CardTitle>
                                 <CardDescription>
-                                    All income between {format(new Date(2024,0,1), 'MMM do, yyyy')} and {format(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
+                                    All income between {formatDateFns(new Date(2024,0,1), 'MMM do, yyyy')} and {formatDateFns(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
                                 </CardDescription>
                             </div>
                              <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('income')}>
