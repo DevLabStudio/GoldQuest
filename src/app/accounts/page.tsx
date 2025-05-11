@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -207,7 +206,8 @@ export default function AccountsPage() {
         };
     }
 
-    const relevantAccounts = allAccounts.filter(acc => acc.includeInNetWorth !== false);
+    // Show ALL accounts in this chart, regardless of includeInNetWorth
+    const relevantAccounts = [...allAccounts]; 
     if (relevantAccounts.length === 0) return { data: [], accountNames: [], chartConfig: {} };
 
     const accountColors = [
