@@ -1,12 +1,12 @@
+
 import type { Metadata } from 'next';
 import { Oxanium } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
 import AuthWrapper from '@/components/layout/auth-wrapper';
-import { AuthProvider } from '@/contexts/AuthContext'; // Import AuthProvider
+import { AuthProvider } from '@/contexts/AuthContext';
 
-// Configure Oxanium font
 const oxanium = Oxanium({
   variable: '--font-oxanium',
   subsets: ['latin'],
@@ -33,7 +33,7 @@ export default function RootLayout({
           'min-h-screen flex flex-col'
         )}
       >
-        <AuthProvider> {/* Wrap with AuthProvider */}
+        <AuthProvider>
           <AuthWrapper>{children}</AuthWrapper>
         </AuthProvider>
         <Toaster />

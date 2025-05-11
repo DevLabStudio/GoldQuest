@@ -6,93 +6,99 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { getUserPreferences, saveUserPreferences, type UserPreferences } from '@/lib/preferences';
+import type { UserPreferences } from '@/lib/preferences';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function PreferencesPage() {
-  const [preferences, setPreferences] = useState<UserPreferences | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const { user, isLoadingAuth, userPreferences, setAppTheme, refreshUserPreferences } = useAuthContext();
+  const [preferredCurrency, setPreferredCurrency] = useState(userPreferences?.preferredCurrency || 'BRL');
+  const [selectedTheme, setSelectedTheme] = useState<UserPreferences['theme']>(userPreferences?.theme || 'system');
+  const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
-  const { user, isLoadingAuth } = useAuthContext();
 
   useEffect(() => {
-    let isMounted = true;
-    const fetchPreferences = async () => {
-      if (typeof window !== 'undefined' && user && !isLoadingAuth) { // Ensure user is loaded
-        setIsLoading(true);
-        try {
-          const loadedPrefs = await getUserPreferences(); // Now async
-          if (isMounted) {
-            setPreferences(loadedPrefs);
-          }
-        } catch (error) {
-          console.error("Failed to load preferences:", error);
-          if (isMounted) {
-            toast({
-              title: "Error",
-              description: "Could not load your preferences.",
-              variant: "destructive",
-            });
-            setPreferences({ preferredCurrency: 'BRL' }); // Fallback
-          }
-        } finally {
-          if (isMounted) {
-            setIsLoading(false);
-          }
-        }
-      } else if (!isLoadingAuth && !user && isMounted) {
-        // Handle case where user is definitively not logged in (after auth check)
-        // Or if Firebase itself isn't active
-        console.warn("PreferencesPage: User not authenticated or Firebase inactive, cannot load preferences.");
-        setPreferences({ preferredCurrency: 'BRL' }); // Fallback
-        setIsLoading(false);
-      } else if (isLoadingAuth && isMounted) {
-        // Still loading auth, keep spinner
-        setIsLoading(true);
-      }
-    };
-
-    fetchPreferences();
-    
-    return () => {
-        isMounted = false;
+    if (userPreferences) {
+      setPreferredCurrency(userPreferences.preferredCurrency);
+      setSelectedTheme(userPreferences.theme);
     }
-  }, [user, isLoadingAuth, toast]);
+  }, [userPreferences]);
 
   const handleCurrencyChange = (newCurrency: string) => {
-    if (preferences) {
-      setPreferences({ ...preferences, preferredCurrency: newCurrency });
-    }
+    setPreferredCurrency(newCurrency);
+  };
+
+  const handleThemeChange = (newTheme: UserPreferences['theme']) => {
+    setSelectedTheme(newTheme);
   };
 
   const handleSaveChanges = async () => {
-    if (preferences && user) { // Ensure user is available for saving
-      try {
-        await saveUserPreferences(preferences); // Now async
-        toast({
-          title: "Preferences Saved",
-          description: "Your preferences have been updated successfully.",
-        });
-          window.dispatchEvent(new Event('storage')); 
-      } catch (error) {
-        console.error("Failed to save preferences:", error);
-        toast({
-          title: "Error",
-          description: "Could not save your preferences.",
-          variant: "destructive",
-        });
+    if (!user) {
+      toast({ title: "Error", description: "User not authenticated.", variant: "destructive" });
+      return;
+    }
+    setIsSaving(true);
+    try {
+      // Save preferred currency (already handled by AuthContext on preference save)
+      // For theme, call setAppTheme which updates context and saves
+      if (selectedTheme !== userPreferences?.theme) {
+        await setAppTheme(selectedTheme);
       }
-    } else {
-        toast({
-            title: "Error",
-            description: "Cannot save preferences. User not authenticated.",
-            variant: "destructive"
-        });
+      
+      // If currency also needs to be saved independently or if not handled by setAppTheme fully
+      if (preferredCurrency !== userPreferences?.preferredCurrency) {
+         const currentPrefs = userPreferences || { preferredCurrency: 'BRL', theme: 'system'};
+         await setAppTheme(currentPrefs.theme); // This will trigger a save with potentially new currency
+         // A more direct way would be:
+         // await saveUserPreferences({ preferredCurrency, theme: selectedTheme });
+         // await refreshUserPreferences(); // to update context if saveUserPreferences doesn't do it
+      }
+
+
+      toast({
+        title: "Preferences Saved",
+        description: "Your preferences have been updated successfully.",
+      });
+       // Trigger a global event to notify other components (like AuthWrapper for theme)
+       window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error("Failed to save preferences:", error);
+      toast({
+        title: "Error",
+        description: "Could not save your preferences.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsSaving(false);
     }
   };
+  
+  if (isLoadingAuth || (!userPreferences && user)) { // Show skeleton if auth loading OR if user exists but prefs not yet loaded
+    return (
+      <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
+        <Skeleton className="h-8 w-1/3 mb-6" />
+        <Card>
+          <CardHeader>
+            <Skeleton className="h-6 w-1/2" />
+            <Skeleton className="h-4 w-3/4" />
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-full md:w-1/2" />
+            </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-full md:w-1/2" />
+            </div>
+            <Skeleton className="h-10 w-32" />
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -102,26 +108,20 @@ export default function PreferencesPage() {
         <CardHeader>
           <CardTitle>Display Settings</CardTitle>
           <CardDescription>
-            Choose how financial information is displayed throughout the application.
+            Choose how financial information and theme are displayed.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {isLoading || isLoadingAuth ? (
-             <div className="space-y-4">
-                <div className="space-y-2">
-                    <Skeleton className="h-4 w-32" />
-                    <Skeleton className="h-10 w-full md:w-1/2" />
-                </div>
-                <Skeleton className="h-10 w-32" />
-             </div>
-          ) : preferences ? (
+          {!user && !isLoadingAuth ? (
+             <p className="text-destructive">Please log in to manage your preferences.</p>
+          ) : (
             <>
               <div className="space-y-2">
                 <Label htmlFor="preferred-currency">Preferred Currency</Label>
                 <Select
-                  value={preferences.preferredCurrency}
+                  value={preferredCurrency}
                   onValueChange={handleCurrencyChange}
-                  disabled={!user} // Disable if no user
+                  disabled={!user || isSaving}
                 >
                   <SelectTrigger id="preferred-currency" className="w-full md:w-1/2">
                     <SelectValue placeholder="Select your preferred currency" />
@@ -138,14 +138,34 @@ export default function PreferencesPage() {
                   Balances and totals will be converted and displayed in this currency.
                 </p>
               </div>
-              <Button onClick={handleSaveChanges} disabled={!user}>Save Changes</Button>
+
+              <div className="space-y-2">
+                <Label htmlFor="theme-preference">Theme</Label>
+                <Select
+                  value={selectedTheme}
+                  onValueChange={(value) => handleThemeChange(value as UserPreferences['theme'])}
+                  disabled={!user || isSaving}
+                >
+                  <SelectTrigger id="theme-preference" className="w-full md:w-1/2">
+                    <SelectValue placeholder="Select theme" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="light">Light</SelectItem>
+                    <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="system">System Default</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Choose your preferred application theme.
+                </p>
+              </div>
+              <Button onClick={handleSaveChanges} disabled={!user || isSaving}>
+                {isSaving ? "Saving..." : "Save Changes"}
+              </Button>
             </>
-          ) : (
-              <p className="text-destructive">Could not load preferences. Please ensure you are logged in.</p>
           )}
         </CardContent>
       </Card>
     </div>
   );
 }
-

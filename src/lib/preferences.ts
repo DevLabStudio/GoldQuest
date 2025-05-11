@@ -1,3 +1,4 @@
+
 'use client';
 
 import { database, auth } from '@/lib/firebase';
@@ -7,10 +8,12 @@ import { supportedCurrencies } from './currency';
 
 export interface UserPreferences {
   preferredCurrency: string;
+  theme?: 'light' | 'dark' | 'system'; // Added theme preference
 }
 
 const defaultPreferences: UserPreferences = {
   preferredCurrency: 'BRL',
+  theme: 'system', // Default theme
 };
 
 function getPreferencesRefPath(currentUser: User | null) {
@@ -21,9 +24,6 @@ function getPreferencesRefPath(currentUser: User | null) {
 export async function getUserPreferences(): Promise<UserPreferences> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
-    // For client components that might call this before auth is fully resolved,
-    // return default or handle appropriately.
-    // For server components, this function shouldn't be called without user context.
     console.warn("getUserPreferences called without authenticated user, returning default client-side.");
     return defaultPreferences;
   }
@@ -38,6 +38,9 @@ export async function getUserPreferences(): Promise<UserPreferences> {
         preferredCurrency: supportedCurrencies.includes(prefs.preferredCurrency?.toUpperCase() ?? '')
           ? prefs.preferredCurrency!.toUpperCase()
           : defaultPreferences.preferredCurrency,
+        theme: prefs.theme && ['light', 'dark', 'system'].includes(prefs.theme)
+          ? prefs.theme
+          : defaultPreferences.theme,
       };
     }
     // If no prefs in DB, save and return defaults
@@ -55,10 +58,12 @@ export async function saveUserPreferences(preferences: UserPreferences): Promise
   const preferencesRef = ref(database, preferencesRefPath);
 
   const prefsToSave: UserPreferences = {
-    ...preferences,
     preferredCurrency: supportedCurrencies.includes(preferences.preferredCurrency.toUpperCase())
         ? preferences.preferredCurrency.toUpperCase()
         : defaultPreferences.preferredCurrency,
+    theme: preferences.theme && ['light', 'dark', 'system'].includes(preferences.theme)
+        ? preferences.theme
+        : defaultPreferences.theme,
   };
 
   try {
@@ -70,7 +75,7 @@ export async function saveUserPreferences(preferences: UserPreferences): Promise
 }
 
 export async function updateUserPreferences(updates: Partial<UserPreferences>): Promise<void> {
-  const currentPrefs = await getUserPreferences(); // This now fetches from Firebase
+  const currentPrefs = await getUserPreferences();
   const newPrefs = { ...currentPrefs, ...updates };
-  await saveUserPreferences(newPrefs); // This now saves to Firebase
+  await saveUserPreferences(newPrefs);
 }

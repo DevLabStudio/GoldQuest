@@ -2,7 +2,7 @@
 'use client';
 
 import type { ReactNode } from 'react';
-import { useAuthContext } from '@/contexts/AuthContext'; // Use new AuthContext
+import { useAuthContext } from '@/contexts/AuthContext';
 import LoginPage from '@/app/login/page';
 import {
     SidebarProvider,
@@ -58,7 +58,7 @@ interface AuthWrapperProps {
 }
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive } = useAuthContext();
+  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences, refreshUserPreferences } = useAuthContext();
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
@@ -67,6 +67,35 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   useEffect(() => {
     setIsClient(true);
   }, []);
+  
+  useEffect(() => {
+      const applyTheme = () => {
+          if (!isClient) return;
+          const root = document.documentElement;
+          let currentTheme = theme;
+
+          if (currentTheme === 'system') {
+              const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+              currentTheme = systemPrefersDark ? 'dark' : 'light';
+          }
+
+          if (currentTheme === 'dark') {
+              root.classList.add('dark');
+          } else {
+              root.classList.remove('dark');
+          }
+      };
+
+      applyTheme(); // Apply on initial load/theme change
+
+      if (theme === 'system') {
+          const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+          const handleChange = () => applyTheme();
+          mediaQuery.addEventListener('change', handleChange);
+          return () => mediaQuery.removeEventListener('change', handleChange);
+      }
+  }, [theme, isClient]);
+
 
   useEffect(() => {
     if (isClient) {
@@ -76,19 +105,30 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
 
   useEffect(() => {
-    if (!isClient || isLoadingAuth || !isFirebaseActive) {
+    if (!isClient || isLoadingAuth || !isFirebaseActive || !user) {
       return;
     }
 
-    if (isAuthenticated && user) {
-      const firstLoginFlagKey = `hasLoggedInBefore-${user.uid}`;
-      const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
-      if (!hasLoggedInBefore && pathname !== '/preferences') {
-        localStorage.setItem(firstLoginFlagKey, 'true');
-        router.push('/preferences');
-      }
+    const firstLoginFlagKey = `hasLoggedInBefore-${user.uid}`;
+    const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
+
+    // Also check if userPreferences are loaded and if a theme is set
+    // If preferences are not loaded yet, or no theme is explicitly set (it defaults to 'system'),
+    // this check ensures we don't redirect prematurely if the default theme is 'system'.
+    const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
+
+    if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
+      localStorage.setItem(firstLoginFlagKey, 'true');
+      router.push('/preferences');
+    } else if (hasLoggedInBefore && !preferencesLoadedAndThemeSet && userPreferences?.theme === 'system' && pathname !== '/preferences') {
+        // If they've logged in before, but no specific theme is set (still system default)
+        // and they are not on preferences page, consider a redirect if needed.
+        // This case might be too aggressive if system default is fine.
+        // For now, let's assume if they logged in before, they are okay with system default unless they change it.
     }
-  }, [isAuthenticated, user, isLoadingAuth, router, pathname, isClient, isFirebaseActive]);
+
+  }, [user, isLoadingAuth, router, pathname, isClient, isFirebaseActive, userPreferences]);
+
 
 
   const isActive = (path: string) => isClient && pathname === path;
@@ -99,33 +139,25 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   }
 
   if (!isAuthenticated && isFirebaseActive) {
-    if (pathname !== '/signup' && pathname !== '/login') { // Allow access to login and signup
+    if (pathname !== '/signup' && pathname !== '/login') {
         return <LoginPage />;
     }
-    return <>{children}</>; // Render login/signup page
+    return <>{children}</>;
   }
 
   if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
-    // If firebase is not active and user is not on login/signup, redirect to login
-    // This case handles when firebase fails to initialize and user is on a protected route
     router.push('/login');
     return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Redirecting to login...</div>;
   }
 
-
-  // If authenticated or if Firebase is not active but user is on login/signup page
   if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup'))) {
      if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup')) {
-         // This case should ideally not be hit if the above logic is correct,
-         // but as a safeguard, if not authenticated and not on login/signup, show login.
          return <LoginPage />;
      }
-     // If authenticated, or on login/signup page without firebase active, proceed
       if (pathname === '/login' || pathname === '/signup') {
-        return <>{children}</>; // Allow login/signup pages to render
+        return <>{children}</>;
       }
 
-    // Authenticated user, show the main app layout
     return (
         <DateRangeProvider>
         <SidebarProvider>
@@ -294,12 +326,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         </DateRangeProvider>
     );
   }
-   // Fallback for scenarios where Firebase isn't active and user is trying to access a protected route
-   // This might already be covered by the logic to push to /login, but as an explicit return.
    if (!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
       return <LoginPage />;
    }
 
-  return <>{children}</>; // Default return if none of the above conditions are met (e.g. for /login, /signup when firebase inactive)
+  return <>{children}</>;
 }
-
