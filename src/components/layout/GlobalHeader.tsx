@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -31,52 +30,61 @@ const GlobalHeader: FC = () => {
   const [isLoadingDataForForm, setIsLoadingDataForForm] = useState(false);
 
   useEffect(() => {
-    const fetchFormData = async () => {
-      if (isAddTransactionDialogOpen) { // Only fetch if dialog is to be opened
+    const fetchAndPrepareFormData = async () => {
+      if (isAddTransactionDialogOpen && transactionTypeToAdd) {
         setIsLoadingDataForForm(true);
         try {
-          const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
-            getAccounts(),
+          const fetchedAccounts = await getAccounts();
+          
+          // Perform checks based on freshly fetched accounts
+          if (transactionTypeToAdd === 'transfer' && fetchedAccounts.length < 2) {
+            toast({
+              title: "Not Enough Accounts",
+              description: "You need at least two accounts to make a transfer.",
+              variant: "destructive",
+            });
+            setIsAddTransactionDialogOpen(false); // Abort opening
+            setIsLoadingDataForForm(false);
+            return;
+          }
+          if (transactionTypeToAdd !== 'transfer' && fetchedAccounts.length === 0) {
+            toast({
+              title: "No Accounts",
+              description: "Please add an account first before adding transactions.",
+              variant: "destructive",
+            });
+            setIsAddTransactionDialogOpen(false); // Abort opening
+            setIsLoadingDataForForm(false);
+            return;
+          }
+          
+          setAccounts(fetchedAccounts); // Set accounts state for the form
+
+          // If account checks pass, fetch categories and tags
+          const [fetchedCategories, fetchedTagsList] = await Promise.all([
             getCategories(),
             getTags()
           ]);
-          setAccounts(fetchedAccounts);
           setCategories(fetchedCategories);
           setTagsList(fetchedTagsList);
+
         } catch (error) {
           console.error("Failed to fetch data for transaction form:", error);
           toast({ title: "Error", description: "Could not load data for transaction form.", variant: "destructive" });
+          setIsAddTransactionDialogOpen(false); // Close dialog on error
         } finally {
           setIsLoadingDataForForm(false);
         }
       }
     };
-    fetchFormData();
-  }, [isAddTransactionDialogOpen, toast]);
+
+    fetchAndPrepareFormData();
+  }, [isAddTransactionDialogOpen, transactionTypeToAdd, toast]);
 
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    setIsLoadingDataForForm(true); // Set loading before opening dialog
-    if (type === 'transfer' && accounts.length < 2 && !isLoadingDataForForm) { // Check after data potentially loaded
-        toast({
-            title: "Not Enough Accounts",
-            description: "You need at least two accounts to make a transfer.",
-            variant: "destructive",
-        });
-        setIsLoadingDataForForm(false);
-        return;
-    }
-     if (accounts.length === 0 && type !== 'transfer' && !isLoadingDataForForm) {
-        toast({
-            title: "No Accounts",
-            description: "Please add an account first before adding transactions.",
-            variant: "destructive",
-        });
-        setIsLoadingDataForForm(false);
-        return;
-    }
-    setTransactionTypeToAdd(type);
-    setIsAddTransactionDialogOpen(true); // Open dialog after checks or if loading
+    setTransactionTypeToAdd(type); // Set the type, useEffect will handle fetching and checks
+    setIsAddTransactionDialogOpen(true);
   };
 
   const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
@@ -84,8 +92,7 @@ const GlobalHeader: FC = () => {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
-      // Optionally, trigger a refresh of dashboard data or relevant page data
-      window.dispatchEvent(new Event('storage')); // Notify other components of data change
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -96,8 +103,11 @@ const GlobalHeader: FC = () => {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
-      const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
+      
+      // Fetch fresh account names for description, in case local state 'accounts' is not fully up-to-date here
+      const currentAccounts = await getAccounts();
+      const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown Account';
+      const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown Account';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
 
       await addTransaction({
@@ -177,20 +187,30 @@ const GlobalHeader: FC = () => {
               <Skeleton className="h-20 w-full mb-4" />
               <Skeleton className="h-10 w-full" />
             </div>
-          ) : accounts.length > 0 && categories.length > 0 && tagsList.length > 0 && transactionTypeToAdd ? (
+          ) : (accounts.length > 0 && categories.length > 0 && tagsList.length > 0 && transactionTypeToAdd) ? (
+            // This condition implicitly handles the checks done in useEffect because
+            // if those checks failed, isAddTransactionDialogOpen would be false.
             <AddTransactionForm
               accounts={accounts}
               categories={categories}
               tags={tagsList}
               onTransactionAdded={handleTransactionAdded}
               onTransferAdded={handleTransferAdded}
-              isLoading={false} // Form's internal loading, not the data fetching for form
+              isLoading={false} 
               initialType={transactionTypeToAdd}
             />
           ) : (
+            // This message is shown if loading is false BUT the dialog is still trying to open
+            // (e.g., if checks in useEffect failed and set isAddTransactionDialogOpen to false,
+            // this part might not even be reached if the dialog truly closes.
+            // However, if there's a slight delay or if essential data like categories/tags are missing.)
             <div className="py-4 text-center text-muted-foreground">
-                {!isLoadingDataForForm && (accounts.length === 0 || categories.length === 0 || tagsList.length === 0) &&
-                "Please ensure you have at least one account, category, and tag set up."}
+                {!isLoadingDataForForm && 
+                 ( (accounts.length === 0 && transactionTypeToAdd !== 'transfer') || 
+                   (accounts.length < 2 && transactionTypeToAdd === 'transfer') || 
+                   categories.length === 0 || 
+                   tagsList.length === 0) &&
+                "Please ensure you have at least one account (or two for transfers), category, and tag set up."}
             </div>
           )}
         </DialogContent>
