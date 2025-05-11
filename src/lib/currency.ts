@@ -1,6 +1,7 @@
 'use client'; // This module depends on localStorage via getUserPreferences
 
 import { getUserPreferences } from './preferences'; // Import preference getter
+import type { UserPreferences } from './preferences';
 
 // --- Static Exchange Rates (Relative to BRL for simplicity) ---
 // Rates represent: 1 unit of the KEY currency = VALUE units of BRL
@@ -55,7 +56,10 @@ export function convertCurrency(amount: number, sourceCurrency: string, targetCu
  * @param currencyCode The currency code (e.g., 'BRL', 'USD').
  * @returns A locale string (e.g., 'pt-BR', 'en-US').
  */
-function getLocaleForCurrency(currencyCode: string): string {
+function getLocaleForCurrency(currencyCode: string | undefined | null): string {
+    if (!currencyCode) {
+      return 'en-US'; // Default fallback if currencyCode is undefined/null
+    }
     switch (currencyCode.toUpperCase()) {
         case 'BRL': return 'pt-BR';
         case 'USD': return 'en-US';
@@ -82,43 +86,59 @@ export function formatCurrency(
     locale?: string,
     convertToPreferred: boolean = true // Default to true
 ): string {
-    // getUserPreferences can only be called client-side
-    const { preferredCurrency } = (typeof window !== 'undefined') ? getUserPreferences() : { preferredCurrency: 'BRL' };
-
+    let userPrefs: UserPreferences = { preferredCurrency: 'BRL' }; // Default if not client-side
+    if (typeof window !== 'undefined') {
+      // This is a simplified synchronous call for client-side only.
+      // Consider making getUserPreferences async and handling it appropriately in calling components
+      // if more complex async logic is needed here. For now, this mimics previous behavior.
+      try {
+        const storedPrefs = localStorage.getItem('userPreferences');
+        if (storedPrefs) {
+          const parsedPrefs = JSON.parse(storedPrefs) as Partial<UserPreferences>;
+          if (parsedPrefs.preferredCurrency && supportedCurrencies.includes(parsedPrefs.preferredCurrency.toUpperCase())) {
+            userPrefs.preferredCurrency = parsedPrefs.preferredCurrency.toUpperCase();
+          }
+        }
+      } catch (e) {
+        console.warn("Could not parse user preferences from localStorage, using default.", e);
+      }
+    }
+    const { preferredCurrency } = userPrefs;
 
     let displayAmount = amount;
-    let displayCurrency = accountCurrency.toUpperCase();
+    let displayCurrency = accountCurrency?.toUpperCase(); // Handle potentially undefined accountCurrency
     let displayLocale = locale;
 
-    if (convertToPreferred && typeof window !== 'undefined') { // Ensure conversion only happens client-side
-        const targetCurrency = preferredCurrency || accountCurrency; // Fallback if preference somehow missing
-        if (accountCurrency.toUpperCase() !== targetCurrency.toUpperCase()) {
-             displayAmount = convertCurrency(amount, accountCurrency, targetCurrency);
-        }
-        displayCurrency = targetCurrency.toUpperCase();
-    } else {
-        // Keep original amount and currency if convertToPreferred is false or on server
-        displayAmount = amount;
-        displayCurrency = accountCurrency.toUpperCase();
+    if (!displayCurrency) {
+      // console.warn("formatCurrency: accountCurrency is undefined. Using preferredCurrency or default BRL.");
+      displayCurrency = preferredCurrency || 'BRL';
     }
 
-    // Determine locale based on the currency being displayed if locale wasn't provided
+    if (convertToPreferred && typeof window !== 'undefined') {
+        const targetCurrency = preferredCurrency || displayCurrency; // Fallback
+        if (displayCurrency !== targetCurrency.toUpperCase()) {
+             displayAmount = convertCurrency(amount, displayCurrency, targetCurrency);
+        }
+        displayCurrency = targetCurrency.toUpperCase();
+    }
+
     if (!displayLocale) {
         displayLocale = getLocaleForCurrency(displayCurrency);
     }
-
 
     try {
         return new Intl.NumberFormat(displayLocale, {
             style: 'currency',
             currency: displayCurrency,
-            // minimumFractionDigits: 2, // Ensure 2 decimal places
-            // maximumFractionDigits: 2, // Ensure 2 decimal places
         }).format(displayAmount);
-    } catch (error) {
+    } catch (error: any) {
+        // Handle cases where currency code might be invalid for Intl.NumberFormat
+        if (error.message.includes("Invalid currency code")) {
+            // console.warn(`formatCurrency: Invalid currency code "${displayCurrency}" for Intl.NumberFormat. Falling back to code and amount.`);
+            return `${displayCurrency} ${displayAmount.toFixed(2)}`;
+        }
         console.error(`Error formatting currency: Amount=${displayAmount}, Currency=${displayCurrency}, Locale=${displayLocale}`, error);
-        // Fallback formatting
-        return `${displayCurrency} ${displayAmount.toFixed(2)}`;
+        return `${displayCurrency} ${displayAmount.toFixed(2)}`; // Fallback formatting
     }
 }
 
@@ -126,9 +146,13 @@ export function formatCurrency(
  * Gets the symbol for a given currency code.
  * Note: This provides a basic symbol mapping. Intl.NumberFormat is more reliable for display.
  * @param currencyCode The currency code (e.g., 'BRL', 'USD').
- * @returns The currency symbol (e.g., 'R$', '$') or the code itself if not found.
+ * @returns The currency symbol (e.g., 'R$', '$') or the code itself if not found, or '¤' for invalid.
  */
-export function getCurrencySymbol(currencyCode: string): string {
+export function getCurrencySymbol(currencyCode: string | undefined | null): string {
+    if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === "") {
+        // console.warn(`getCurrencySymbol: currencyCode is invalid ('${currencyCode}'). Returning generic symbol '¤'.`);
+        return '¤'; // Generic currency symbol for undefined, null, or empty string
+    }
     const upperCaseCode = currencyCode.toUpperCase();
     switch (upperCaseCode) {
         case 'BRL': return 'R$';
@@ -136,13 +160,6 @@ export function getCurrencySymbol(currencyCode: string): string {
         case 'EUR': return '€';
         case 'GBP': return '£';
         // Add more symbols as needed
-        default: return upperCaseCode; // Fallback to the code itself
+        default: return upperCaseCode; // Fallback to the code itself if known symbol not found
     }
 }
-
-// You might add functions here later to fetch real-time exchange rates
-// async function getRealTimeRates() { ... }
-
-// Export convertCurrency for potential use elsewhere (like dashboard total calculation)
-// export { convertCurrency }; // Already implicitly exported by being a top-level function
-
