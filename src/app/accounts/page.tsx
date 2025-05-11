@@ -238,10 +238,10 @@ export default function AccountsPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-semibold text-primary">
-                        {formatCurrency(account.balance, account.currency, preferredCurrency, false)}
+                        {formatCurrency(account.balance, account.currency, account.currency, false)}
                       </span>
-                      {/* Always show converted value if preferredCurrency is set, even if same as account.currency */}
-                      {preferredCurrency && (
+                      {/* Show converted value if preferredCurrency is different from account.currency */}
+                      {preferredCurrency && account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                         <span className="text-xs text-muted-foreground mt-1">
                             (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
                         </span>
