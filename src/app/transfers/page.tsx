@@ -8,10 +8,10 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
 import { getCategories, Category } from '@/services/categories'; 
 import { getTags, Tag } from '@/services/tags'; 
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format as formatDateFns, parseISO } from 'date-fns'; // Use aliased import
+import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
 import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -20,6 +20,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useToast } from '@/hooks/use-toast';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
+import { useDateRange } from '@/contexts/DateRangeContext';
 
 const INITIAL_TRANSACTION_LIMIT = 50;
 
@@ -36,13 +37,14 @@ const formatDate = (dateString: string): string => {
 
 export default function TransfersPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
   const { toast } = useToast();
+  const { selectedDateRange } = useDateRange();
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
@@ -66,7 +68,7 @@ export default function TransfersPage() {
       if (isMounted) setIsLoading(true);
       if (isMounted) setError(null);
       try {
-        const prefs = await getUserPreferences(); // Await preferences
+        const prefs = await getUserPreferences(); 
         if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -86,9 +88,9 @@ export default function TransfersPage() {
             const transactionsByAccount = await Promise.all(transactionPromises);
             const combinedTransactions = transactionsByAccount.flat();
             combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            if (isMounted) setAllTransactions(combinedTransactions);
+            if (isMounted) setAllTransactionsUnfiltered(combinedTransactions);
         } else {
-            if(isMounted) setAllTransactions([]);
+            if(isMounted) setAllTransactionsUnfiltered([]);
         }
 
 
@@ -125,7 +127,7 @@ export default function TransfersPage() {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); // Await preferences
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([getAccounts(), getCategories(), getTags()]);
             setAccounts(fetchedAccounts);
             setCategories(fetchedCategories);
@@ -135,19 +137,25 @@ export default function TransfersPage() {
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                setAllTransactions(combinedTxs);
-            } else { setAllTransactions([]); }
+                setAllTransactionsUnfiltered(combinedTxs);
+            } else { setAllTransactionsUnfiltered([]); }
         } catch (e) { console.error(e); setError("Could not reload transfer data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
         finally { setIsLoading(false); }
     };
 
   const transferTransactionPairs = useMemo(() => {
+    if (isLoading) return [];
     const transfers: { from: Transaction, to: Transaction }[] = [];
     const processedIds = new Set<string>();
 
-    const potentialTransfers = allTransactions.filter(
-        tx => tx.category?.toLowerCase() === 'transfer'
-    );
+    const potentialTransfers = allTransactionsUnfiltered.filter(tx => {
+      const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+      const isInDateRange = selectedDateRange.from && selectedDateRange.to ?
+                            isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to }) :
+                            true;
+      return tx.category?.toLowerCase() === 'transfer' && isInDateRange;
+    });
+
 
     potentialTransfers.forEach(txOut => {
       if (txOut.amount < 0 && !processedIds.has(txOut.id)) { 
@@ -158,7 +166,7 @@ export default function TransfersPage() {
           txIn.date === txOut.date &&
           (txIn.description === txOut.description || 
            (txIn.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer"))) &&
-          txIn.transactionCurrency === txOut.transactionCurrency // Ensure currencies match for a pair
+          txIn.transactionCurrency === txOut.transactionCurrency 
         );
         
         if (matchingIncoming.length > 0) {
@@ -171,7 +179,7 @@ export default function TransfersPage() {
     });
 
     return transfers.sort((a, b) => new Date(b.from.date).getTime() - new Date(a.from.date).getTime());
-  }, [allTransactions]); 
+  }, [allTransactionsUnfiltered, isLoading, selectedDateRange]); 
 
    const getAccountName = (accountId: string): string => {
         return accounts.find(acc => acc.id === accountId)?.name || 'Unknown Account';
@@ -317,6 +325,16 @@ export default function TransfersPage() {
     return undefined;
   }, [editingTransferPair, transactionTypeToAdd]);
 
+  const dateRangeLabel = useMemo(() => {
+    if (selectedDateRange.from && selectedDateRange.to) {
+        if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
+            return formatDateFns(selectedDateRange.from, 'MMM d, yyyy');
+        }
+        return `${formatDateFns(selectedDateRange.from, 'MMM d')} - ${formatDateFns(selectedDateRange.to, 'MMM d, yyyy')}`;
+    }
+    return 'All Time';
+  }, [selectedDateRange]);
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -361,7 +379,7 @@ export default function TransfersPage() {
                             <div>
                                 <CardTitle>All Transfers</CardTitle>
                                 <CardDescription>
-                                    Transfers between {formatDateFns(new Date(2024,0,1), 'MMM do, yyyy')} and {formatDateFns(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
+                                    Transfers for {dateRangeLabel}.
                                 </CardDescription>
                             </div>
                              <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('transfer')}>
@@ -452,7 +470,7 @@ export default function TransfersPage() {
                     ) : (
                         <div className="text-center py-10">
                         <p className="text-muted-foreground">
-                            No transfer transactions found yet.
+                            No transfer transactions found for {dateRangeLabel}.
                         </p>
                          <Button variant="link" className="mt-2 px-0 h-auto text-primary" onClick={() => openAddTransactionDialog('transfer')}>
                             Add your first transfer
@@ -510,3 +528,4 @@ export default function TransfersPage() {
     </div>
   );
 }
+

@@ -9,10 +9,10 @@ import { getTransactions, updateTransaction, deleteTransaction, type Transaction
 import { getCategories, getCategoryStyle, Category } from '@/services/categories';
 import { getTags, type Tag, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
-import { Skeleton } from '@/components/ui/skeleton';
+import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format as formatDateFns, parseISO } from 'date-fns'; // Use aliased import
+import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -22,6 +22,7 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
+import { useDateRange } from '@/contexts/DateRangeContext';
 
 
 const formatDate = (dateString: string): string => {
@@ -40,11 +41,12 @@ export default function ExpensesPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
-  const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
+  const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
   const { toast } = useToast();
+  const { selectedDateRange } = useDateRange();
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
@@ -66,7 +68,7 @@ export default function ExpensesPage() {
         if(isMounted) setIsLoading(true);
         if(isMounted) setError(null);
         try {
-            const prefs = await getUserPreferences(); // Await preferences
+            const prefs = await getUserPreferences(); 
             if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -84,9 +86,9 @@ export default function ExpensesPage() {
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
                 combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                if(isMounted) setAllTransactions(combinedTransactions);
+                if(isMounted) setAllTransactionsUnfiltered(combinedTransactions);
             } else {
-                if(isMounted) setAllTransactions([]);
+                if(isMounted) setAllTransactionsUnfiltered([]);
             }
 
         } catch (err) {
@@ -124,8 +126,15 @@ export default function ExpensesPage() {
   }, [toast]); 
 
   const expenseTransactions = useMemo(() => {
-    return allTransactions.filter(tx => tx.amount < 0);
-  }, [allTransactions]);
+    if (isLoading) return [];
+    return allTransactionsUnfiltered.filter(tx => {
+      const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+      const isInDateRange = selectedDateRange.from && selectedDateRange.to ?
+                            isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to }) :
+                            true; // True if no range selected (All Time)
+      return tx.amount < 0 && tx.category !== 'Transfer' && isInDateRange;
+    });
+  }, [allTransactionsUnfiltered, isLoading, selectedDateRange]);
 
    const getAccountForTransaction = (accountId: string): Account | undefined => {
         return accounts.find(acc => acc.id === accountId);
@@ -135,7 +144,7 @@ export default function ExpensesPage() {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); // Await preferences
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
@@ -143,8 +152,8 @@ export default function ExpensesPage() {
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                setAllTransactions(combinedTxs);
-            } else { setAllTransactions([]); }
+                setAllTransactionsUnfiltered(combinedTxs);
+            } else { setAllTransactionsUnfiltered([]); }
         } catch (e) { console.error(e); setError("Could not reload expense data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
         finally { setIsLoading(false); }
     };
@@ -169,7 +178,7 @@ export default function ExpensesPage() {
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
             amount: transactionAmount,
-            transactionCurrency: formData.transactionCurrency, // Ensure this is passed
+            transactionCurrency: formData.transactionCurrency, 
             date: formatDateFns(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
@@ -294,6 +303,16 @@ export default function ExpensesPage() {
     setIsAddTransactionDialogOpen(true);
   };
 
+  const dateRangeLabel = useMemo(() => {
+    if (selectedDateRange.from && selectedDateRange.to) {
+        if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
+            return formatDateFns(selectedDateRange.from, 'MMM d, yyyy');
+        }
+        return `${formatDateFns(selectedDateRange.from, 'MMM d')} - ${formatDateFns(selectedDateRange.to, 'MMM d, yyyy')}`;
+    }
+    return 'All Time';
+  }, [selectedDateRange]);
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-6">
@@ -337,7 +356,7 @@ export default function ExpensesPage() {
                             <div>
                                 <CardTitle>All Expenses</CardTitle>
                                 <CardDescription>
-                                    All expenses between {formatDateFns(new Date(2024,0,1), 'MMM do, yyyy')} and {formatDateFns(new Date(2024,11,31), 'MMM do, yyyy')} {/* Placeholder dates */}
+                                    All expenses for {dateRangeLabel}.
                                 </CardDescription>
                             </div>
                             <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('expense')}>
@@ -452,7 +471,7 @@ export default function ExpensesPage() {
                     ) : (
                         <div className="text-center py-10">
                         <p className="text-muted-foreground">
-                            No expense transactions found yet.
+                            No expense transactions found for {dateRangeLabel}.
                         </p>
                         </div>
                     )}
