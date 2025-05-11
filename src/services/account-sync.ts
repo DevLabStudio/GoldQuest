@@ -64,8 +64,8 @@ export async function getAccounts(): Promise<Account[]> {
     }
     return []; // No accounts found
   } catch (error: any) {
-    if (error.message && error.message.toLowerCase().includes("permission denied")) {
-        console.error(`Firebase Permission Denied: Could not fetch accounts from ${accountsRefPath}. Please check your Firebase Realtime Database security rules to ensure authenticated users have read access to their data under 'users/\${uid}/accounts'.`);
+    if (error.message && (error.message.toLowerCase().includes("permission_denied") || error.message.toLowerCase().includes("permission denied"))) {
+        console.error(`Firebase Permission Denied: Could not fetch accounts from ${accountsRefPath}. Please check your Firebase Realtime Database security rules to ensure authenticated users have read access to their data under 'users/\${uid}/accounts'. Example rule: { "rules": { "users": { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } } } }`);
         throw new Error(`Permission Denied: Cannot read accounts. Please verify Firebase security rules.`);
     }
     console.error("Error fetching accounts from Firebase:", error);
