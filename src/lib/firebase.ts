@@ -4,15 +4,16 @@ import { getAuth, GoogleAuthProvider, type Auth } from "firebase/auth";
 import { getDatabase, type Database } from "firebase/database";
 
 // Your web app's Firebase configuration
+// Use environment variables if available, otherwise fallback to provided defaults
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  // measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID // Optional
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyDMq0mZrKW_FguLwdlYzH7SV4PP67mPvOk",
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "financiosimples.firebaseapp.com",
+  databaseURL: process.env.NEXT_PUBLIC_FIREBASE_DATABASE_URL || "https://financiosimples-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "financiosimples",
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "financiosimples.firebasestorage.app",
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "628788872755",
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "1:628788872755:web:3e407d6120cb9e05ab8546",
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || "G-K2XNJ9F87T" // Optional
 };
 
 let app: FirebaseApp | null = null;
@@ -24,10 +25,10 @@ let firebaseInitializationError: string | null = null;
 
 // Critical config keys that must be present and non-empty
 const criticalConfigKeysMap: { [key in keyof typeof firebaseConfig]?: string } = {
-  apiKey: 'NEXT_PUBLIC_FIREBASE_API_KEY',
-  authDomain: 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN',
-  projectId: 'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
-  databaseURL: 'NEXT_PUBLIC_FIREBASE_DATABASE_URL',
+  apiKey: 'NEXT_PUBLIC_FIREBASE_API_KEY or fallback',
+  authDomain: 'NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN or fallback',
+  projectId: 'NEXT_PUBLIC_FIREBASE_PROJECT_ID or fallback',
+  databaseURL: 'NEXT_PUBLIC_FIREBASE_DATABASE_URL or fallback',
   // Add other keys if they are absolutely critical for your app's core Firebase functionality
 };
 
@@ -35,8 +36,9 @@ for (const key of Object.keys(criticalConfigKeysMap) as (keyof typeof firebaseCo
     const value = firebaseConfig[key];
     const envVarName = criticalConfigKeysMap[key];
     if (!value || typeof value !== 'string' || value.trim() === "") {
-        firebaseInitializationError = `Firebase config key '${key}' (env: ${envVarName}) is missing, empty, or invalid. Firebase features will be disabled. Please ensure all NEXT_PUBLIC_FIREBASE_* environment variables are correctly set.`;
-        break; // Stop at the first missing/empty critical key
+        // This error message will now reflect that a fallback was also attempted if env var was missing
+        firebaseInitializationError = `Firebase config key '${key}' (from env var ${envVarName}) is missing, empty, or invalid. Firebase features will be disabled. Please ensure all NEXT_PUBLIC_FIREBASE_* environment variables are correctly set or hardcoded fallbacks are valid.`;
+        break; 
     }
 }
 
@@ -55,17 +57,15 @@ if (firebaseInitializationError) {
     databaseInstance = getDatabase(app);
     googleAuthProviderInstance = new GoogleAuthProvider();
     firebaseInitialized = true;
-    console.log("Firebase initialized successfully.");
+    console.log("Firebase initialized successfully with provided config.");
   } catch (error: any) {
-    // This catch is for errors *during* Firebase SDK initialization itself
-    // (e.g., network, or if Firebase itself deems a non-empty key invalid for some reason)
     firebaseInitializationError = `Firebase SDK initialization failed: ${error.message}. This might be due to an invalid API key or project configuration. Firebase features will be disabled.`;
     console.error("Firebase SDK Initialization Error (firebase.ts catch block):", error);
     app = null;
     authInstance = null;
     databaseInstance = null;
     googleAuthProviderInstance = null;
-    firebaseInitialized = false; // Explicitly set to false on SDK error
+    firebaseInitialized = false; 
   }
 }
 
