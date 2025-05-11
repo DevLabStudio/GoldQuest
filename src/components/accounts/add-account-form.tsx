@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -65,129 +64,129 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
-        <FormField
-          control={form.control}
-          name="providerName" 
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Bank/Institution Name</FormLabel> 
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select a bank or institution" /> 
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  {popularBanks.map((bank: BankInfo) => (
-                    <SelectItem key={bank.name} value={bank.name}>
-                      <div className="flex items-center">
-                        <Image 
-                            src={bank.iconUrl} 
-                            alt={`${bank.name} logo placeholder`} 
-                            width={20} 
-                            height={20} 
-                            className="mr-2 rounded-sm" 
-                            data-ai-hint={bank.dataAiHint}
-                        />
-                        {bank.name}
-                      </div>
-                    </SelectItem>
-                  ))}
-                   <SelectItem value="Other">
-                     <div className="flex items-center">
-                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span> 
-                        Other (Specify in Name)
-                      </div>
-                    </SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="accountName"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Account Name</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., My Primary Checking" {...field} />
-              </FormControl>
-              <FormDescription>
-                Give your account a nickname.
-              </FormDescription>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-        <FormField
-          control={form.control}
-          name="accountType"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Account Type</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value}>
-                <FormControl>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select account type" />
-                  </SelectTrigger>
-                </FormControl>
-                <SelectContent>
-                  <SelectItem value="checking">Checking</SelectItem>
-                  <SelectItem value="savings">Savings</SelectItem>
-                  <SelectItem value="credit card">Credit Card</SelectItem>
-                  <SelectItem value="investment">Investment</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-         <div className="grid grid-cols-2 gap-4">
-             <FormField
-              control={form.control}
-              name="currency"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Currency</FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value}>
-                    <FormControl>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {supportedCurrencies.map((curr) => (
-                        <SelectItem key={curr} value={curr}>
-                          {curr} ({getCurrencySymbol(curr)})
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="balance"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="providerName" 
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Bank/Institution Name</FormLabel> 
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
-                    <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a bank or institution" /> 
+                    </SelectTrigger>
                   </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                  <SelectContent>
+                    {popularBanks.map((bank: BankInfo) => (
+                      <SelectItem key={bank.name} value={bank.name}>
+                        <div className="flex items-center">
+                          <Image 
+                              src={bank.iconUrl} 
+                              alt={`${bank.name} logo placeholder`} 
+                              width={20} 
+                              height={20} 
+                              className="mr-2 rounded-sm" 
+                              data-ai-hint={bank.dataAiHint}
+                          />
+                          {bank.name}
+                        </div>
+                      </SelectItem>
+                    ))}
+                    <SelectItem value="Other">
+                      <div className="flex items-center">
+                          <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span> 
+                          Other (Specify in Name)
+                        </div>
+                      </SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+            control={form.control}
+            name="accountName"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Account Name</FormLabel>
+                <FormControl>
+                  <Input placeholder="e.g., My Primary Checking" {...field} />
+                </FormControl>
+                <FormDescription>
+                  Give your account a nickname.
+                </FormDescription>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
         </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <FormField
+            control={form.control}
+            name="accountType"
+            render={({ field }) => (
+              <FormItem>
+                <FormLabel>Account Type</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                  <FormControl>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select account type" />
+                    </SelectTrigger>
+                  </FormControl>
+                  <SelectContent>
+                    <SelectItem value="checking">Checking</SelectItem>
+                    <SelectItem value="savings">Savings</SelectItem>
+                    <SelectItem value="credit card">Credit Card</SelectItem>
+                    <SelectItem value="investment">Investment</SelectItem>
+                    <SelectItem value="other">Other</SelectItem>
+                  </SelectContent>
+                </Select>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
+          <FormField
+                control={form.control}
+                name="currency"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Currency</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select currency" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        {supportedCurrencies.map((curr) => (
+                          <SelectItem key={curr} value={curr}>
+                            {curr} ({getCurrencySymbol(curr)})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+        </div>
+        
+        <FormField
+            control={form.control}
+            name="balance"
+            render={({ field }) => (
+            <FormItem>
+                <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                <FormControl>
+                <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                </FormControl>
+                <FormMessage />
+            </FormItem>
+            )}
+        />
          <FormDescription>
             Enter the current balance in the selected currency.
          </FormDescription>

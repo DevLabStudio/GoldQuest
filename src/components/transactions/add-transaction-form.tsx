@@ -1,4 +1,3 @@
-
 'use client';
 
 import { FC, useMemo, useEffect } from 'react';
@@ -236,7 +235,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
         {transactionType === 'transfer' ? (
           <>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                <FormField
                 control={form.control}
                 name="fromAccountId"
@@ -290,7 +289,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 )}
               />
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <FormField
                 control={form.control}
                 name="amount"
@@ -333,35 +332,35 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
           </>
         ) : (
            <>
-              <FormField
-                control={form.control}
-                name="accountId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Account</FormLabel>
-                    <Select onValueChange={(value) => {
-                        field.onChange(value);
-                        const acc = accounts.find(a => a.id === value);
-                        if (acc) form.setValue('transactionCurrency', acc.currency);
-                    }} defaultValue={field.value} disabled={!!initialData}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select account" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {accounts.map((acc) => (
-                          <SelectItem key={acc.id} value={acc.id}>
-                             {acc.name} ({getCurrencySymbol(acc.currency)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <FormField
+                    control={form.control}
+                    name="accountId"
+                    render={({ field }) => (
+                    <FormItem>
+                        <FormLabel>Account</FormLabel>
+                        <Select onValueChange={(value) => {
+                            field.onChange(value);
+                            const acc = accounts.find(a => a.id === value);
+                            if (acc) form.setValue('transactionCurrency', acc.currency);
+                        }} defaultValue={field.value} disabled={!!initialData}>
+                        <FormControl>
+                            <SelectTrigger>
+                            <SelectValue placeholder="Select account" />
+                            </SelectTrigger>
+                        </FormControl>
+                        <SelectContent>
+                            {accounts.map((acc) => (
+                            <SelectItem key={acc.id} value={acc.id}>
+                                {acc.name} ({getCurrencySymbol(acc.currency)})
+                            </SelectItem>
+                            ))}
+                        </SelectContent>
+                        </Select>
+                        <FormMessage />
+                    </FormItem>
+                    )}
+                />
                 <FormField
                     control={form.control}
                     name="amount"
@@ -375,36 +374,36 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     </FormItem>
                     )}
                 />
-                <FormField
+              </div>
+              <FormField
                   control={form.control}
                   name="transactionCurrency"
                   render={({ field }) => (
-                    <FormItem>
+                  <FormItem>
                       <FormLabel>Transaction Currency</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={true}>
-                        <FormControl>
+                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={true}>
+                      <FormControl>
                           <SelectTrigger>
-                            <SelectValue placeholder="Select transaction currency" />
+                          <SelectValue placeholder="Select transaction currency" />
                           </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
+                      </FormControl>
+                      <SelectContent>
                           {supportedCurrencies.map((curr) => (
-                            <SelectItem key={curr} value={curr}>
+                          <SelectItem key={curr} value={curr}>
                               {curr} ({getCurrencySymbol(curr)})
-                            </SelectItem>
+                          </SelectItem>
                           ))}
-                        </SelectContent>
+                      </SelectContent>
                       </Select>
                       <FormDescription>Determined by selected Account.</FormDescription>
                       <FormMessage />
-                    </FormItem>
+                  </FormItem>
                   )}
-                />
-              </div>
+              />
            </>
         )}
         
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
             name="date"
@@ -536,4 +535,3 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 };
 
 export default AddTransactionForm;
-
