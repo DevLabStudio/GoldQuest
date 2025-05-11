@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -235,8 +234,10 @@ export default function AccountsPage() {
               accounts.map((account) => (
                 <TableRow key={account.id} className="hover:bg-muted/50">
                   <TableCell className="font-medium">
-                     <Link href={`/accounts/${account.id}`} className="hover:underline text-primary">
-                        {account.name}
+                     <Link href={`/accounts/${account.id}`} passHref>
+                       <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline">
+                          {account.name}
+                       </Button>
                      </Link>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell>
