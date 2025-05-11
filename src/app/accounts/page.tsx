@@ -240,7 +240,8 @@ export default function AccountsPage() {
                       <span className="font-semibold text-primary">
                         {formatCurrency(account.balance, account.currency, preferredCurrency, false)}
                       </span>
-                      {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                      {/* Always show converted value if preferredCurrency is set, even if same as account.currency */}
+                      {preferredCurrency && (
                         <span className="text-xs text-muted-foreground mt-1">
                             (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
                         </span>
