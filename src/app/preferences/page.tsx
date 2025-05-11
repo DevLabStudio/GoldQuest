@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -9,36 +10,57 @@ import { getUserPreferences, saveUserPreferences, type UserPreferences } from '@
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function PreferencesPage() {
   const [preferences, setPreferences] = useState<UserPreferences | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const { toast } = useToast();
+  const { user, isLoadingAuth } = useAuthContext();
 
   useEffect(() => {
     let isMounted = true;
-    if (typeof window !== 'undefined') {
-      try {
-        const loadedPrefs = getUserPreferences();
-        if (isMounted) setPreferences(loadedPrefs);
-      } catch (error) {
-        console.error("Failed to load preferences:", error);
-        if (isMounted) toast({
-          title: "Error",
-          description: "Could not load your preferences.",
-          variant: "destructive",
-        });
-        if (isMounted) setPreferences({ preferredCurrency: 'BRL' });
-      } finally {
-          if (isMounted) setIsLoading(false);
+    const fetchPreferences = async () => {
+      if (typeof window !== 'undefined' && user && !isLoadingAuth) { // Ensure user is loaded
+        setIsLoading(true);
+        try {
+          const loadedPrefs = await getUserPreferences(); // Now async
+          if (isMounted) {
+            setPreferences(loadedPrefs);
+          }
+        } catch (error) {
+          console.error("Failed to load preferences:", error);
+          if (isMounted) {
+            toast({
+              title: "Error",
+              description: "Could not load your preferences.",
+              variant: "destructive",
+            });
+            setPreferences({ preferredCurrency: 'BRL' }); // Fallback
+          }
+        } finally {
+          if (isMounted) {
+            setIsLoading(false);
+          }
+        }
+      } else if (!isLoadingAuth && !user && isMounted) {
+        // Handle case where user is definitively not logged in (after auth check)
+        // Or if Firebase itself isn't active
+        console.warn("PreferencesPage: User not authenticated or Firebase inactive, cannot load preferences.");
+        setPreferences({ preferredCurrency: 'BRL' }); // Fallback
+        setIsLoading(false);
+      } else if (isLoadingAuth && isMounted) {
+        // Still loading auth, keep spinner
+        setIsLoading(true);
       }
-    } else {
-        if (isMounted) setIsLoading(false); 
-    }
+    };
+
+    fetchPreferences();
+    
     return () => {
         isMounted = false;
     }
-  }, []); // Corrected dependency array
+  }, [user, isLoadingAuth, toast]);
 
   const handleCurrencyChange = (newCurrency: string) => {
     if (preferences) {
@@ -46,10 +68,10 @@ export default function PreferencesPage() {
     }
   };
 
-  const handleSaveChanges = () => {
-    if (preferences) {
+  const handleSaveChanges = async () => {
+    if (preferences && user) { // Ensure user is available for saving
       try {
-        saveUserPreferences(preferences);
+        await saveUserPreferences(preferences); // Now async
         toast({
           title: "Preferences Saved",
           description: "Your preferences have been updated successfully.",
@@ -63,6 +85,12 @@ export default function PreferencesPage() {
           variant: "destructive",
         });
       }
+    } else {
+        toast({
+            title: "Error",
+            description: "Cannot save preferences. User not authenticated.",
+            variant: "destructive"
+        });
     }
   };
 
@@ -78,7 +106,7 @@ export default function PreferencesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          {isLoading ? (
+          {isLoading || isLoadingAuth ? (
              <div className="space-y-4">
                 <div className="space-y-2">
                     <Skeleton className="h-4 w-32" />
@@ -93,6 +121,7 @@ export default function PreferencesPage() {
                 <Select
                   value={preferences.preferredCurrency}
                   onValueChange={handleCurrencyChange}
+                  disabled={!user} // Disable if no user
                 >
                   <SelectTrigger id="preferred-currency" className="w-full md:w-1/2">
                     <SelectValue placeholder="Select your preferred currency" />
@@ -109,12 +138,10 @@ export default function PreferencesPage() {
                   Balances and totals will be converted and displayed in this currency.
                 </p>
               </div>
-
-
-              <Button onClick={handleSaveChanges}>Save Changes</Button>
+              <Button onClick={handleSaveChanges} disabled={!user}>Save Changes</Button>
             </>
           ) : (
-              <p className="text-destructive">Could not load preferences.</p>
+              <p className="text-destructive">Could not load preferences. Please ensure you are logged in.</p>
           )}
         </CardContent>
       </Card>

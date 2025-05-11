@@ -2,7 +2,7 @@
 'use client';
 
 import type { FC } from 'react';
-import { useMemo } from 'react'; // Import useMemo
+import { useMemo } from 'react'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { format, parseISO, startOfMonth, endOfMonth } from 'date-fns';
@@ -14,14 +14,14 @@ interface MonthlySummarySidebarProps {
   transactions: Transaction[];
   accounts: Account[];
   preferredCurrency: string;
-  transactionType: 'expense' | 'income' | 'transfer' | 'all'; // To tailor summary
+  transactionType: 'expense' | 'income' | 'transfer' | 'all'; 
   isLoading?: boolean;
 }
 
 interface MonthlySummary {
-  monthYear: string; // e.g., "May 2025"
+  monthYear: string; 
   transactionCount: number;
-  totalAmountByCurrency: Record<string, number>; // e.g., { "BRL": -100, "USD": -50 }
+  totalAmountByCurrency: Record<string, number>; 
 }
 
 const MonthlySummarySidebar: FC<MonthlySummarySidebarProps> = ({
@@ -40,8 +40,8 @@ const MonthlySummarySidebar: FC<MonthlySummarySidebarProps> = ({
 
     transactions.forEach(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      const monthYearKey = format(txDate, 'yyyy-MM'); // Key for grouping: "2025-05"
-      const displayMonthYear = format(txDate, 'MMMM yyyy'); // For display: "May 2025"
+      const monthYearKey = format(txDate, 'yyyy-MM'); 
+      const displayMonthYear = format(txDate, 'MMMM yyyy'); 
 
       if (!summaries[monthYearKey]) {
         summaries[monthYearKey] = {
@@ -54,14 +54,14 @@ const MonthlySummarySidebar: FC<MonthlySummarySidebarProps> = ({
       summaries[monthYearKey].transactionCount++;
       const account = accounts.find(acc => acc.id === tx.accountId);
       if (account) {
-        const currency = account.currency;
-        summaries[monthYearKey].totalAmountByCurrency[currency] =
-          (summaries[monthYearKey].totalAmountByCurrency[currency] || 0) + tx.amount;
+        // Use transaction.transactionCurrency for the original amount's currency
+        const currencyOfTransaction = tx.transactionCurrency;
+        summaries[monthYearKey].totalAmountByCurrency[currencyOfTransaction] =
+          (summaries[monthYearKey].totalAmountByCurrency[currencyOfTransaction] || 0) + tx.amount;
       }
     });
 
     return Object.values(summaries).sort((a, b) => {
-      // Sort by date, newest first
       const dateA = parseISO(Object.keys(summaries).find(key => summaries[key].monthYear === a.monthYear)! + '-01');
       const dateB = parseISO(Object.keys(summaries).find(key => summaries[key].monthYear === b.monthYear)! + '-01');
       return dateB.getTime() - dateA.getTime();
@@ -125,12 +125,10 @@ const MonthlySummarySidebar: FC<MonthlySummarySidebarProps> = ({
               Transactions: {summary.transactionCount}
             </div>
             {Object.entries(summary.totalAmountByCurrency).map(([currency, amount]) => {
-              // For "all" or "transfer", show net. For specific types, filter.
               let displayAmount = amount;
-              if (transactionType === 'expense' && amount > 0) return null; // Don't show income in expense summary
-              if (transactionType === 'income' && amount < 0) return null;  // Don't show expense in income summary
+              if (transactionType === 'expense' && amount > 0) return null; 
+              if (transactionType === 'income' && amount < 0) return null;  
               
-              // For transfers, we typically show absolute amount moved.
               if (transactionType === 'transfer') displayAmount = Math.abs(amount);
 
               return (
@@ -139,7 +137,12 @@ const MonthlySummarySidebar: FC<MonthlySummarySidebarProps> = ({
                   <span className={`font-medium ${
                     displayAmount < 0 ? 'text-red-500 dark:text-red-400' : (displayAmount > 0 ? 'text-green-500 dark:text-green-400' : '')
                   }`}>
-                    {formatCurrency(displayAmount, currency, undefined, false)}
+                    {formatCurrency(displayAmount, currency, preferredCurrency, false)} {/* Display in original currency first */}
+                    {currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                             (≈ {formatCurrency(displayAmount, currency, preferredCurrency, true)}) {/* Then converted to preferred */}
+                        </span>
+                    )}
                   </span>
                 </div>
               );

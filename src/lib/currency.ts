@@ -1,16 +1,17 @@
-'use client'; // This module depends on localStorage via getUserPreferences
 
-import { getUserPreferences } from './preferences'; // Import preference getter
-import type { UserPreferences } from './preferences';
+'use client'; 
+
+import type { UserPreferences } from './preferences'; // Assuming preferences.ts is also updated
+import { supportedCurrencies as staticSupportedCurrencies, getCurrencySymbol as staticGetCurrencySymbol } from './static-currency-data'; // Renamed original content
 
 // --- Static Exchange Rates (Relative to BRL for simplicity) ---
 // Rates represent: 1 unit of the KEY currency = VALUE units of BRL
 // In a real app, fetch these from an API (e.g., Open Exchange Rates, Fixer.io)
 const exchangeRates: { [key: string]: number } = {
   BRL: 1,    // 1 BRL = 1 BRL (Base)
-  USD: 5.30, // 1 USD = 5.30 BRL (Example rate)
-  EUR: 5.70, // 1 EUR = 5.70 BRL (Example rate)
-  GBP: 6.50, // 1 GBP = 6.50 BRL (Example rate)
+  USD: 5.00, // Updated example rate
+  EUR: 5.40, // Updated example rate
+  GBP: 6.20, // Updated example rate
   // Add more currencies as needed
 };
 
@@ -25,27 +26,27 @@ export const supportedCurrencies = Object.keys(exchangeRates);
  * @returns The converted amount in the target currency, or the original amount if conversion fails.
  */
 export function convertCurrency(amount: number, sourceCurrency: string, targetCurrency: string): number {
-  const sourceUpper = sourceCurrency.toUpperCase();
-  const targetUpper = targetCurrency.toUpperCase();
+  const sourceUpper = sourceCurrency?.toUpperCase();
+  const targetUpper = targetCurrency?.toUpperCase();
+
+  if (!sourceUpper || !targetUpper) {
+    // console.warn("convertCurrency: Source or target currency is undefined. Returning original amount.");
+    return amount;
+  }
 
   if (sourceUpper === targetUpper) {
       return amount; // No conversion needed
   }
 
-  const sourceRate = exchangeRates[sourceUpper]; // Rate: 1 SOURCE = sourceRate BASE (BRL)
-  const targetRate = exchangeRates[targetUpper]; // Rate: 1 TARGET = targetRate BASE (BRL)
+  const sourceRate = exchangeRates[sourceUpper]; 
+  const targetRate = exchangeRates[targetUpper]; 
 
-  if (!sourceRate || !targetRate) {
-    console.warn(`Cannot convert currency: Invalid source (${sourceCurrency}) or target (${targetCurrency}) currency.`);
-    return amount; // Return original amount if rates are missing
+  if (sourceRate === undefined || targetRate === undefined) { // Check for undefined specifically
+    console.warn(`Cannot convert currency: Invalid or unsupported source (${sourceCurrency}) or target (${targetCurrency}) currency.`);
+    return amount; 
   }
-
-  // 1. Convert source amount to base currency (BRL)
-  // Example: 100 USD to BRL -> 100 * 5.30 = 530 BRL
+  
   const amountInBase = amount * sourceRate;
-
-  // 2. Convert base amount (BRL) to target currency
-  // Example: 530 BRL to EUR -> 530 / 5.70 = 92.98 EUR
   const convertedAmount = amountInBase / targetRate;
 
   return convertedAmount;
@@ -58,14 +59,14 @@ export function convertCurrency(amount: number, sourceCurrency: string, targetCu
  */
 function getLocaleForCurrency(currencyCode: string | undefined | null): string {
     if (!currencyCode) {
-      return 'en-US'; // Default fallback if currencyCode is undefined/null
+      return 'en-US'; 
     }
     switch (currencyCode.toUpperCase()) {
         case 'BRL': return 'pt-BR';
         case 'USD': return 'en-US';
-        case 'EUR': return 'de-DE'; // Example European locale (Germany uses EUR)
+        case 'EUR': return 'de-DE'; 
         case 'GBP': return 'en-GB';
-        default: return 'en-US'; // Default fallback locale
+        default: return 'en-US'; 
     }
 }
 
@@ -76,51 +77,40 @@ function getLocaleForCurrency(currencyCode: string | undefined | null): string {
  *
  * @param amount The numeric amount.
  * @param accountCurrency The currency code of the account (e.g., 'USD', 'BRL').
+ * @param preferredCurrencyFromCaller Optional The user's preferred currency code. If provided and convertToPreferred is true, amount will be converted.
  * @param locale Optional The locale string for formatting (e.g., 'pt-BR', 'en-US'). If omitted, derived from target currency.
- * @param convertToPreferred Optional If true (default), converts to user's preferred currency. If false, formats in accountCurrency.
+ * @param convertToPreferred Optional If true (default), converts to user's preferred currency (if provided). If false, formats in accountCurrency.
  * @returns A formatted currency string (e.g., "R$ 1.234,56", "$1,234.56").
  */
 export function formatCurrency(
     amount: number,
     accountCurrency: string,
+    preferredCurrencyFromCaller?: string,
     locale?: string,
-    convertToPreferred: boolean = true // Default to true
+    convertToPreferred: boolean = true
 ): string {
-    let userPrefs: UserPreferences = { preferredCurrency: 'BRL' }; // Default if not client-side
-    if (typeof window !== 'undefined') {
-      // This is a simplified synchronous call for client-side only.
-      // Consider making getUserPreferences async and handling it appropriately in calling components
-      // if more complex async logic is needed here. For now, this mimics previous behavior.
-      try {
-        const storedPrefs = localStorage.getItem('userPreferences');
-        if (storedPrefs) {
-          const parsedPrefs = JSON.parse(storedPrefs) as Partial<UserPreferences>;
-          if (parsedPrefs.preferredCurrency && supportedCurrencies.includes(parsedPrefs.preferredCurrency.toUpperCase())) {
-            userPrefs.preferredCurrency = parsedPrefs.preferredCurrency.toUpperCase();
-          }
-        }
-      } catch (e) {
-        console.warn("Could not parse user preferences from localStorage, using default.", e);
-      }
-    }
-    const { preferredCurrency } = userPrefs;
-
     let displayAmount = amount;
-    let displayCurrency = accountCurrency?.toUpperCase(); // Handle potentially undefined accountCurrency
+    let displayCurrency = accountCurrency?.toUpperCase();
     let displayLocale = locale;
 
     if (!displayCurrency) {
-      // console.warn("formatCurrency: accountCurrency is undefined. Using preferredCurrency or default BRL.");
-      displayCurrency = preferredCurrency || 'BRL';
+      // console.warn("formatCurrency: accountCurrency is undefined. Using preferredCurrencyFromCaller or default BRL.");
+      displayCurrency = preferredCurrencyFromCaller?.toUpperCase() || 'BRL';
     }
 
-    if (convertToPreferred && typeof window !== 'undefined') {
-        const targetCurrency = preferredCurrency || displayCurrency; // Fallback
-        if (displayCurrency !== targetCurrency.toUpperCase()) {
+    if (convertToPreferred && preferredCurrencyFromCaller) {
+        const targetCurrency = preferredCurrencyFromCaller.toUpperCase();
+        if (displayCurrency !== targetCurrency) {
              displayAmount = convertCurrency(amount, displayCurrency, targetCurrency);
         }
-        displayCurrency = targetCurrency.toUpperCase();
+        displayCurrency = targetCurrency;
+    } else if (convertToPreferred && !preferredCurrencyFromCaller && typeof window !== 'undefined') {
+        // This case implies convertToPreferred is true, but the caller didn't supply the preference.
+        // This is a fallback and ideally, callers should provide the preference.
+        // console.warn("formatCurrency: convertToPreferred is true, but preferredCurrencyFromCaller not provided. Attempting to use a default or account currency.");
+        // It will just format in accountCurrency if preferredCurrencyFromCaller is missing.
     }
+
 
     if (!displayLocale) {
         displayLocale = getLocaleForCurrency(displayCurrency);
@@ -132,13 +122,11 @@ export function formatCurrency(
             currency: displayCurrency,
         }).format(displayAmount);
     } catch (error: any) {
-        // Handle cases where currency code might be invalid for Intl.NumberFormat
         if (error.message.includes("Invalid currency code")) {
-            // console.warn(`formatCurrency: Invalid currency code "${displayCurrency}" for Intl.NumberFormat. Falling back to code and amount.`);
             return `${displayCurrency} ${displayAmount.toFixed(2)}`;
         }
         console.error(`Error formatting currency: Amount=${displayAmount}, Currency=${displayCurrency}, Locale=${displayLocale}`, error);
-        return `${displayCurrency} ${displayAmount.toFixed(2)}`; // Fallback formatting
+        return `${displayCurrency} ${displayAmount.toFixed(2)}`; 
     }
 }
 
@@ -150,8 +138,7 @@ export function formatCurrency(
  */
 export function getCurrencySymbol(currencyCode: string | undefined | null): string {
     if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === "") {
-        // console.warn(`getCurrencySymbol: currencyCode is invalid ('${currencyCode}'). Returning generic symbol '¤'.`);
-        return '¤'; // Generic currency symbol for undefined, null, or empty string
+        return '¤'; 
     }
     const upperCaseCode = currencyCode.toUpperCase();
     switch (upperCaseCode) {
@@ -159,7 +146,7 @@ export function getCurrencySymbol(currencyCode: string | undefined | null): stri
         case 'USD': return '$';
         case 'EUR': return '€';
         case 'GBP': return '£';
-        // Add more symbols as needed
-        default: return upperCaseCode; // Fallback to the code itself if known symbol not found
+        default: return upperCaseCode; 
     }
 }
+

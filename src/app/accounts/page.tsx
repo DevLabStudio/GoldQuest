@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -28,14 +29,16 @@ export default function AccountsPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedAccount, setSelectedAccount] = useState<Account | null>(null);
   const { toast } = useToast();
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
 
    useEffect(() => {
-    // Client-side only check for preferences
-    if (typeof window !== 'undefined') {
-        const prefs = getUserPreferences();
-        setPreferredCurrency(prefs.preferredCurrency);
-    }
+    const fetchPrefs = async () => {
+        if (typeof window !== 'undefined') {
+            const prefs = await getUserPreferences();
+            setPreferredCurrency(prefs.preferredCurrency);
+        }
+    };
+    fetchPrefs();
   }, []);
 
 
@@ -61,9 +64,6 @@ export default function AccountsPage() {
                 description: "Failed to load accounts.",
                 variant: "destructive",
             });
-            if (typeof window !== 'undefined') {
-                localStorage.removeItem('userAccounts');
-            }
         } finally {
             if(isMounted) setIsLoading(false);
         }
@@ -75,8 +75,11 @@ export default function AccountsPage() {
         if (event.key === 'userAccounts' || event.key === 'userPreferences') {
             console.log("Storage changed, refetching data...");
             if (typeof window !== 'undefined' && isMounted) {
-                const prefs = getUserPreferences();
-                setPreferredCurrency(prefs.preferredCurrency);
+                const fetchPrefs = async () => {
+                    const prefs = await getUserPreferences();
+                    setPreferredCurrency(prefs.preferredCurrency);
+                };
+                fetchPrefs();
                 fetchAccountsData();
             }
         }
@@ -92,7 +95,7 @@ export default function AccountsPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, [toast]);
 
   const localFetchAccountsData = async () => {
     if (typeof window === 'undefined') return;
@@ -235,11 +238,11 @@ export default function AccountsPage() {
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-semibold text-primary">
-                        {formatCurrency(account.balance, account.currency, undefined, false)}
+                        {formatCurrency(account.balance, account.currency, preferredCurrency, false)}
                       </span>
                       {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                         <span className="text-xs text-muted-foreground mt-1">
-                            (≈ {formatCurrency(account.balance, account.currency, undefined, true)})
+                            (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
                         </span>
                       )}
                     </div>
@@ -248,7 +251,7 @@ export default function AccountsPage() {
                        {format(new Date(account.lastActivity || Date.now()), 'PP')}
                    </TableCell>
                    <TableCell className="text-muted-foreground">
-                       {formatCurrency(account.balanceDifference ?? 0, account.currency, undefined, false)}
+                       {formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false)}
                    </TableCell>
                   <TableCell className="text-right">
                     <DropdownMenu>

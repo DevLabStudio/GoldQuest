@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -20,7 +21,7 @@ import {
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users, LogOut } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
 import { DateRangeProvider } from '@/contexts/DateRangeContext';
@@ -57,7 +58,8 @@ interface AuthWrapperProps {
 }
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isAuthenticated, user, signOut, isLoadingAuth } = useAuthContext(); // Use new context
+  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive } = useAuthContext();
+  const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
@@ -72,6 +74,23 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     }
   }, [pathname, isClient]);
 
+
+  useEffect(() => {
+    if (!isClient || isLoadingAuth || !isFirebaseActive) {
+      return;
+    }
+
+    if (isAuthenticated && user) {
+      const firstLoginFlagKey = `hasLoggedInBefore-${user.uid}`;
+      const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
+      if (!hasLoggedInBefore && pathname !== '/preferences') {
+        localStorage.setItem(firstLoginFlagKey, 'true');
+        router.push('/preferences');
+      }
+    }
+  }, [isAuthenticated, user, isLoadingAuth, router, pathname, isClient, isFirebaseActive]);
+
+
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
 
@@ -79,180 +98,208 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Loading authentication...</div>;
   }
 
-  if (!isAuthenticated) {
-    // Only render LoginPage if not on signup page to avoid redirect loops
-    if (pathname !== '/signup') {
+  if (!isAuthenticated && isFirebaseActive) {
+    if (pathname !== '/signup' && pathname !== '/login') { // Allow access to login and signup
         return <LoginPage />;
     }
-    // Allow signup page to render for unauthenticated users
-    return <>{children}</>;
+    return <>{children}</>; // Render login/signup page
   }
 
-  return (
-    <DateRangeProvider>
-      <SidebarProvider>
-        <Sidebar side="left" variant="inset" collapsible="icon">
-          <SidebarHeader className="items-center justify-between">
-            <div className="flex items-center">
-               <LogoIcon />
-               <span className="text-lg font-semibold text-primary">The Golden Game</span>
-            </div>
-            <SidebarTrigger className="md:hidden" />
-          </SidebarHeader>
-          <SidebarContent>
-            <SidebarMenu>
-               <SidebarGroup>
-                <SidebarGroupLabel>Menu</SidebarGroupLabel>
-                  <SidebarMenuItem>
-                    <Link href="/" passHref>
-                      <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
-                        <PiggyBank />
-                        <span>Dashboard</span>
-                      </SidebarMenuButton>
-                    </Link>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <Link href="/accounts" passHref>
-                      <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
-                        <Landmark />
-                        <span>Accounts</span>
-                      </SidebarMenuButton>
-                    </Link>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                       <SidebarMenuButton
-                          tooltip="Transactions"
-                          onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
-                          className="justify-between"
-                          isActive={isAnyTransactionRouteActive}
-                       >
-                         <div className="flex items-center gap-2">
-                           <ArrowLeftRight />
-                           <span>Transactions</span>
-                         </div>
-                         <ChevronDown
-                            className={cn(
-                               "h-4 w-4 transition-transform duration-200",
-                               isTransactionsOpen && "rotate-180"
-                            )}
-                         />
-                       </SidebarMenuButton>
-                  </SidebarMenuItem>
-                  {isTransactionsOpen && (
-                      <>
+  if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
+    // If firebase is not active and user is not on login/signup, redirect to login
+    // This case handles when firebase fails to initialize and user is on a protected route
+    router.push('/login');
+    return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Redirecting to login...</div>;
+  }
+
+
+  // If authenticated or if Firebase is not active but user is on login/signup page
+  if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup'))) {
+     if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup')) {
+         // This case should ideally not be hit if the above logic is correct,
+         // but as a safeguard, if not authenticated and not on login/signup, show login.
+         return <LoginPage />;
+     }
+     // If authenticated, or on login/signup page without firebase active, proceed
+      if (pathname === '/login' || pathname === '/signup') {
+        return <>{children}</>; // Allow login/signup pages to render
+      }
+
+    // Authenticated user, show the main app layout
+    return (
+        <DateRangeProvider>
+        <SidebarProvider>
+            <Sidebar side="left" variant="inset" collapsible="icon">
+            <SidebarHeader className="items-center justify-between">
+                <div className="flex items-center">
+                <LogoIcon />
+                <span className="text-lg font-semibold text-primary">The Golden Game</span>
+                </div>
+                <SidebarTrigger className="md:hidden" />
+            </SidebarHeader>
+            <SidebarContent>
+                <SidebarMenu>
+                <SidebarGroup>
+                    <SidebarGroupLabel>Menu</SidebarGroupLabel>
+                    <SidebarMenuItem>
+                        <Link href="/" passHref>
+                        <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
+                            <PiggyBank />
+                            <span>Dashboard</span>
+                        </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <Link href="/accounts" passHref>
+                        <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
+                            <Landmark />
+                            <span>Accounts</span>
+                        </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <SidebarMenuButton
+                            tooltip="Transactions"
+                            onClick={() => setIsTransactionsOpen(!isTransactionsOpen)}
+                            className="justify-between"
+                            isActive={isAnyTransactionRouteActive}
+                        >
+                            <div className="flex items-center gap-2">
+                            <ArrowLeftRight />
+                            <span>Transactions</span>
+                            </div>
+                            <ChevronDown
+                                className={cn(
+                                    "h-4 w-4 transition-transform duration-200",
+                                    isTransactionsOpen && "rotate-180"
+                                )}
+                            />
+                        </SidebarMenuButton>
+                    </SidebarMenuItem>
+                    {isTransactionsOpen && (
+                        <>
+                            <SidebarMenuItem className="ml-4">
+                            <Link href="/transactions" passHref>
+                                <SidebarMenuButton tooltip="Transactions Overview" size="sm" isActive={isActive('/transactions')}>
+                                    <LayoutList />
+                                    <span>Overview</span>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
                         <SidebarMenuItem className="ml-4">
-                           <Link href="/transactions" passHref>
-                               <SidebarMenuButton tooltip="Transactions Overview" size="sm" isActive={isActive('/transactions')}>
-                                   <LayoutList />
-                                   <span>Overview</span>
-                               </SidebarMenuButton>
-                           </Link>
-                       </SidebarMenuItem>
-                       <SidebarMenuItem className="ml-4">
-                           <Link href="/revenue" passHref>
-                               <SidebarMenuButton tooltip="View Revenue/Income" size="sm" isActive={isActive('/revenue')}>
-                                   <TrendingUp />
-                                   <span>Revenue/Income</span>
-                               </SidebarMenuButton>
-                           </Link>
-                       </SidebarMenuItem>
-                       <SidebarMenuItem className="ml-4">
-                           <Link href="/expenses" passHref>
-                               <SidebarMenuButton tooltip="View Expenses" size="sm" isActive={isActive('/expenses')}>
-                                   <TrendingDown />
-                                   <span>Expenses</span>
-                               </SidebarMenuButton>
-                           </Link>
-                       </SidebarMenuItem>
+                            <Link href="/revenue" passHref>
+                                <SidebarMenuButton tooltip="View Revenue/Income" size="sm" isActive={isActive('/revenue')}>
+                                    <TrendingUp />
+                                    <span>Revenue/Income</span>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
                         <SidebarMenuItem className="ml-4">
-                           <Link href="/transfers" passHref>
-                               <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
-                                   <ArrowLeftRight />
-                                   <span>Transfers</span>
-                               </SidebarMenuButton>
-                           </Link>
-                       </SidebarMenuItem>
-                       </>
-                  )}
-                  <SidebarMenuItem>
-                      <Link href="/investments" passHref>
-                          <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
-                              <Wallet />
-                              <span>Investments</span>
-                          </SidebarMenuButton>
-                      </Link>
-                  </SidebarMenuItem>
-              </SidebarGroup>
-               <SidebarGroup>
-                  <SidebarGroupLabel>Organization</SidebarGroupLabel>
-                  <SidebarMenuItem>
-                      <Link href="/categories" passHref>
-                          <SidebarMenuButton tooltip="Manage Categories" isActive={isActive('/categories')}>
-                              <ListTree />
-                              <span>Categories</span>
-                          </SidebarMenuButton>
-                      </Link>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                      <Link href="/tags" passHref>
-                          <SidebarMenuButton tooltip="Manage Tags" isActive={isActive('/tags')}>
-                              <Tag />
-                              <span>Tags</span>
-                          </SidebarMenuButton>
-                      </Link>
-                  </SidebarMenuItem>
-                   <SidebarMenuItem>
-                      <Link href="/groups" passHref>
-                          <SidebarMenuButton tooltip="Manage Groups" isActive={isActive('/groups')}>
-                              <Users />
-                              <span>Groups</span>
-                          </SidebarMenuButton>
-                      </Link>
-                  </SidebarMenuItem>
-              </SidebarGroup>
-               <SidebarGroup>
-                <SidebarGroupLabel>Settings</SidebarGroupLabel>
-                  <SidebarMenuItem>
-                    <Link href="/preferences" passHref>
-                      <SidebarMenuButton tooltip="User Preferences" isActive={isActive('/preferences')}>
-                        <Settings />
-                        <span>Preferences</span>
-                      </SidebarMenuButton>
-                    </Link>
-                  </SidebarMenuItem>
-                  <SidebarMenuItem>
-                    <Link href="/import" passHref>
-                      <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
-                        <Upload />
-                        <span>Import Data</span>
-                      </SidebarMenuButton>
-                    </Link>
-                  </SidebarMenuItem>
-              </SidebarGroup>
-            </SidebarMenu>
-          </SidebarContent>
-          <SidebarFooter className="p-2 border-t border-sidebar-border">
-            <div className="flex items-center gap-3 p-2">
-              <Avatar className="h-9 w-9">
-                <AvatarImage src={user?.photoURL || "https://picsum.photos/40/40"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
-                <AvatarFallback>{user?.email ? user.email.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
-              </Avatar>
-              <div className="flex flex-col">
-                  <span className="text-sm font-medium text-sidebar-foreground">{user?.displayName || user?.email || "User"}</span>
-                   <Button variant="link" size="sm" onClick={signOut} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
-                      Logout
-                   </Button>
-              </div>
-            </div>
-          </SidebarFooter>
-        </Sidebar>
-        <SidebarInset className="flex flex-col flex-1">
-            <GlobalHeader />
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
-              {children}
-            </main>
-        </SidebarInset>
-      </SidebarProvider>
-    </DateRangeProvider>
-  );
+                            <Link href="/expenses" passHref>
+                                <SidebarMenuButton tooltip="View Expenses" size="sm" isActive={isActive('/expenses')}>
+                                    <TrendingDown />
+                                    <span>Expenses</span>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                            <SidebarMenuItem className="ml-4">
+                            <Link href="/transfers" passHref>
+                                <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
+                                    <ArrowLeftRight />
+                                    <span>Transfers</span>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                        </>
+                    )}
+                    <SidebarMenuItem>
+                        <Link href="/investments" passHref>
+                            <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
+                                <Wallet />
+                                <span>Investments</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>Organization</SidebarGroupLabel>
+                    <SidebarMenuItem>
+                        <Link href="/categories" passHref>
+                            <SidebarMenuButton tooltip="Manage Categories" isActive={isActive('/categories')}>
+                                <ListTree />
+                                <span>Categories</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <Link href="/tags" passHref>
+                            <SidebarMenuButton tooltip="Manage Tags" isActive={isActive('/tags')}>
+                                <Tag />
+                                <span>Tags</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <Link href="/groups" passHref>
+                            <SidebarMenuButton tooltip="Manage Groups" isActive={isActive('/groups')}>
+                                <Users />
+                                <span>Groups</span>
+                            </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>Settings</SidebarGroupLabel>
+                    <SidebarMenuItem>
+                        <Link href="/preferences" passHref>
+                        <SidebarMenuButton tooltip="User Preferences" isActive={isActive('/preferences')}>
+                            <Settings />
+                            <span>Preferences</span>
+                        </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                    <SidebarMenuItem>
+                        <Link href="/import" passHref>
+                        <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
+                            <Upload />
+                            <span>Import Data</span>
+                        </SidebarMenuButton>
+                        </Link>
+                    </SidebarMenuItem>
+                </SidebarGroup>
+                </SidebarMenu>
+            </SidebarContent>
+            <SidebarFooter className="p-2 border-t border-sidebar-border">
+                <div className="flex items-center gap-3 p-2">
+                <Avatar className="h-9 w-9">
+                    <AvatarImage src={user?.photoURL || "https://picsum.photos/40/40"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
+                    <AvatarFallback>{user?.email ? user.email.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
+                </Avatar>
+                <div className="flex flex-col">
+                    <span className="text-sm font-medium text-sidebar-foreground">{user?.displayName || user?.email || "User"}</span>
+                    <Button variant="link" size="sm" onClick={signOut} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
+                        Logout
+                    </Button>
+                </div>
+                </div>
+            </SidebarFooter>
+            </Sidebar>
+            <SidebarInset className="flex flex-col flex-1">
+                <GlobalHeader />
+                <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
+                {children}
+                </main>
+            </SidebarInset>
+        </SidebarProvider>
+        </DateRangeProvider>
+    );
+  }
+   // Fallback for scenarios where Firebase isn't active and user is trying to access a protected route
+   // This might already be covered by the logic to push to /login, but as an explicit return.
+   if (!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
+      return <LoginPage />;
+   }
+
+  return <>{children}</>; // Default return if none of the above conditions are met (e.g. for /login, /signup when firebase inactive)
 }
+

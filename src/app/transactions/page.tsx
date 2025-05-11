@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; // Renamed TransferIcon
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; 
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -44,7 +44,7 @@ export default function TransactionsOverviewPage() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const { toast } = useToast();
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
@@ -66,7 +66,7 @@ export default function TransactionsOverviewPage() {
         if(isMounted) setIsLoading(true);
         if(isMounted) setError(null);
         try {
-            const prefs = getUserPreferences();
+            const prefs = await getUserPreferences(); // Await preferences
             if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -132,7 +132,7 @@ export default function TransactionsOverviewPage() {
           if (tx.amount < 0) {
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
-                 const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+                 const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
                  const category = tx.category || 'Uncategorized';
                  categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
               }
@@ -154,7 +154,7 @@ export default function TransactionsOverviewPage() {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); // Await preferences
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
@@ -188,6 +188,7 @@ export default function TransactionsOverviewPage() {
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
             amount: transactionAmount,
+            transactionCurrency: formData.transactionCurrency, // Ensure this is passed
             date: format(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
@@ -256,7 +257,7 @@ export default function TransactionsOverviewPage() {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; }) => {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
@@ -265,6 +266,7 @@ export default function TransactionsOverviewPage() {
       await addTransaction({
         accountId: data.fromAccountId,
         amount: -transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -274,6 +276,7 @@ export default function TransactionsOverviewPage() {
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -377,7 +380,7 @@ export default function TransactionsOverviewPage() {
                                         All recent transactions.
                                 </CardDescription>
                             </div>
-                            <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('expense')}> {/* Default to expense for generic button */}
+                            <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('expense')}> 
                                 <PlusCircle className="mr-2 h-4 w-4" /> Create new transaction
                             </Button>
                         </div>
@@ -408,7 +411,7 @@ export default function TransactionsOverviewPage() {
                                 if (!account) return null;
 
                                 const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                                const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true);
+                                const formattedAmount = formatCurrency(transaction.amount, transaction.transactionCurrency, preferredCurrency, true);
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -495,10 +498,10 @@ export default function TransactionsOverviewPage() {
             </div>
             <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
                  <MonthlySummarySidebar
-                    transactions={allTransactions} // Pass all for overview, sidebar can filter
+                    transactions={allTransactions} 
                     accounts={accounts}
                     preferredCurrency={preferredCurrency}
-                    transactionType="all" // Indicate to summarize all types or net
+                    transactionType="all" 
                  />
             </div>
         </div>
@@ -526,11 +529,11 @@ export default function TransactionsOverviewPage() {
                             type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
                             accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
+                            transactionCurrency: selectedTransaction.transactionCurrency,
                             date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,
                             tags: selectedTransaction.tags || []
-                            // For transfers, fromAccountId and toAccountId would need to be handled if editing transfers directly from this form
                         }}
                     />
                 )}

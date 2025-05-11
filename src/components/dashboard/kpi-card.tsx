@@ -5,18 +5,28 @@ import type { FC, ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
+import { formatCurrency as formatCurrencyUtil } from '@/lib/currency'; // Renamed to avoid conflict
 
 interface KpiCardProps {
   title: string;
-  value: string | number;
+  value: string | number; // Can be a pre-formatted string or a number
   tooltip: string;
   icon: ReactNode;
   valueClassName?: string;
-  isPercentage?: boolean; // To handle formatting of percentages
+  isPercentage?: boolean; 
+  currency?: string; // Optional: currency code for formatting if value is a number
+  href?: string; // For navigation link
 }
 
-const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName, isPercentage }) => {
-  return (
+const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName, isPercentage, currency, href }) => {
+  let displayValue = value;
+  if (typeof value === 'number' && !isPercentage && currency) {
+    displayValue = formatCurrencyUtil(value, currency, currency, false); // Format in the given currency, don't convert
+  } else if (typeof value === 'number' && isPercentage) {
+    displayValue = `${value.toFixed(1)}%`;
+  }
+
+  const cardContent = (
     <Tooltip>
       <TooltipTrigger asChild>
         <Card className="shadow-lg hover:shadow-primary/20 transition-shadow duration-300 h-full">
@@ -26,11 +36,10 @@ const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName
             </CardTitle>
             {icon}
           </CardHeader>
-          <CardContent className="p-4 pt-0"> {/* Reduced padding from p-6 to p-4 */}
+          <CardContent className="p-4 pt-0"> 
             <div className={cn("text-2xl font-bold", valueClassName)}>
-              {value}
+              {displayValue}
             </div>
-            {/* Optional: Add a small trend indicator or comparison here if needed */}
           </CardContent>
         </Card>
       </TooltipTrigger>
@@ -39,6 +48,13 @@ const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName
       </TooltipContent>
     </Tooltip>
   );
+  
+  if (href) {
+      return <a href={href} className="block h-full">{cardContent}</a>;
+  }
+
+  return cardContent;
 };
 
 export default KpiCard;
+

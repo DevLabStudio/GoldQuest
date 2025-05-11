@@ -18,16 +18,15 @@ import { getTransactions, addTransaction, type Transaction } from "@/services/tr
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
 import { format, startOfMonth, endOfMonth, isWithinInterval, parseISO } from 'date-fns';
-// import type { DateRange } from 'react-day-picker'; // No longer needed here
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; // DialogTrigger removed as button is global
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; 
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import { useToast } from "@/hooks/use-toast";
-import { useDateRange } from '@/contexts/DateRangeContext'; // Import context hook
+import { useDateRange } from '@/contexts/DateRangeContext'; 
 
 
 export default function DashboardPage() {
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -39,7 +38,7 @@ export default function DashboardPage() {
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
   const [transactionTypeToAdd, setTransactionTypeToAdd] = useState<'expense' | 'income' | 'transfer' | null>(null);
 
-  const { selectedDateRange, setSelectedDateRange: setGlobalDateRange } = useDateRange(); // Use global date range
+  const { selectedDateRange, setSelectedDateRange: setGlobalDateRange } = useDateRange(); 
   const [selectedAccountFilter, setSelectedAccountFilter] = useState<string>('all');
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
@@ -54,7 +53,7 @@ export default function DashboardPage() {
       }
       if(isMounted) setIsLoading(true);
       try {
-        const prefs = getUserPreferences();
+        const prefs = await getUserPreferences(); // Await preferences
         if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
@@ -110,7 +109,7 @@ export default function DashboardPage() {
   const handleRefresh = async () => {
      setIsLoading(true);
      try {
-       const prefs = getUserPreferences();
+       const prefs = await getUserPreferences(); // Await preferences
        setPreferredCurrency(prefs.preferredCurrency);
 
        const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
@@ -174,7 +173,7 @@ export default function DashboardPage() {
   const periodIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return selectedPeriodTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers
+      if (tx.amount > 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           return sum + convertCurrency(tx.amount, account.currency, preferredCurrency);
@@ -187,7 +186,7 @@ export default function DashboardPage() {
   const periodExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return selectedPeriodTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
+      if (tx.amount < 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
@@ -243,13 +242,10 @@ export default function DashboardPage() {
     return data;
   }, [accounts, preferredCurrency, isLoading]);
 
-  // openAddTransactionDialog and related handlers are moved to GlobalHeader or kept here if page-specific "Add" is needed
-  // For this refactor, assume "Add" button is global. If a page-specific one is desired, it would call similar logic.
 
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0) {
     return (
-      <div className="space-y-4"> {/* Removed container mx-auto and py/px padding */}
-        {/* Skeleton for sticky header (if it were here) */}
+      <div className="space-y-4"> 
         <Card>
           <CardHeader><Skeleton className="h-8 w-1/2" /></CardHeader>
           <CardContent className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -275,12 +271,9 @@ export default function DashboardPage() {
 
   return (
     <TooltipProvider>
-      <div className="space-y-4"> {/* Removed container mx-auto and py/px padding */}
-         {/* GlobalHeader handles the sticky top bar with DateRangePicker and Add button */}
-         {/* Page specific title and actions (if any beyond global ones) could go here */}
-         <div className="flex justify-between items-center"> {/* Removed mb-6 to rely on space-y-4 from parent */}
+      <div className="space-y-4"> 
+         <div className="flex justify-between items-center"> 
             <h1 className="text-3xl font-bold">Dashboard</h1>
-            {/* "Add" button can be here if specific to dashboard, or rely on GlobalHeader's button */}
          </div>
 
 
@@ -336,13 +329,13 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
           <KpiCard
             title="Net Worth"
-            value={formatCurrency(totalNetWorth, preferredCurrency, undefined, false)}
+            value={formatCurrency(totalNetWorth, preferredCurrency, preferredCurrency, false)}
             tooltip="Your total assets minus liabilities."
             icon={<Wallet className="text-primary" />}
           />
           <KpiCard
             title={`Income (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
-            value={formatCurrency(periodIncome, preferredCurrency, undefined, false)}
+            value={formatCurrency(periodIncome, preferredCurrency, preferredCurrency, false)}
             tooltip={`Total income received in the selected period.`}
             icon={<TrendingUp className="text-green-500" />} 
             valueClassName="text-green-600 dark:text-green-500" 
@@ -350,7 +343,7 @@ export default function DashboardPage() {
           />
           <KpiCard
             title={`Expenses (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
-            value={formatCurrency(periodExpenses, preferredCurrency, undefined, false)}
+            value={formatCurrency(periodExpenses, preferredCurrency, preferredCurrency, false)}
             tooltip={`Total expenses in the selected period.`}
             icon={<TrendingDown className="text-red-500" />} 
             valueClassName="text-red-600 dark:text-red-500" 
@@ -360,13 +353,13 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
            <KpiCard
             title="Total Assets"
-            value={formatCurrency(totalAssetsValue, preferredCurrency, undefined, false)}
+            value={formatCurrency(totalAssetsValue, preferredCurrency, preferredCurrency, false)}
             tooltip="Sum of all your assets."
             icon={<Landmark className="text-primary" />}
           />
           <KpiCard
             title="Total Liabilities"
-            value={formatCurrency(totalLiabilitiesValue, preferredCurrency, undefined, false)}
+            value={formatCurrency(totalLiabilitiesValue, preferredCurrency, preferredCurrency, false)}
             tooltip="Sum of all your debts and obligations."
             icon={<Scale className="text-primary" />}
           />
@@ -417,8 +410,7 @@ export default function DashboardPage() {
           </Card>
         </div>
       </div>
-
-      {/* Dialog for adding transactions is now handled by GlobalHeader or a page-specific button if re-added */}
     </TooltipProvider>
   );
 }
+

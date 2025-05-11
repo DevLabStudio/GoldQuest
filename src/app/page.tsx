@@ -33,7 +33,7 @@ export default function DashboardPage() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const { toast } = useToast();
 
   useEffect(() => {
@@ -45,7 +45,7 @@ export default function DashboardPage() {
       }
       if (isMounted) setIsLoading(true);
       try {
-        const prefs = getUserPreferences();
+        const prefs = await getUserPreferences(); // Await preferences
         if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
         const fetchedAccounts = await getAccounts();
@@ -92,7 +92,7 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); // Added toast to dependency array
+  }, [toast]); 
 
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
@@ -115,10 +115,10 @@ export default function DashboardPage() {
   const monthlyIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return currentMonthTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0) {
+      if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers from income
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(tx.amount, account.currency, preferredCurrency);
+          return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
         }
       }
       return sum;
@@ -128,26 +128,27 @@ export default function DashboardPage() {
   const monthlyExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return currentMonthTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0) {
+      if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers from expenses
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+          return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
         }
       }
       return sum;
     }, 0);
   }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
 
+
   const spendingsBreakdownDataActual = useMemo(() => {
     if (isLoading || typeof window === 'undefined' || !categories.length || !allTransactions.length) return [];
     const expenseCategoryTotals: { [key: string]: number } = {};
 
     currentMonthTransactions.forEach(tx => {
-      if (tx.amount < 0) {
+      if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           const categoryName = tx.category || 'Uncategorized';
-          const convertedAmount = convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+          const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
           expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
         }
       }
@@ -178,11 +179,11 @@ export default function DashboardPage() {
     let colorIndex = 0;
 
     currentMonthTransactions.forEach(tx => {
-      if (tx.amount > 0) {
+      if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
           const categoryName = tx.category || 'Uncategorized Income';
-          const convertedAmount = convertCurrency(tx.amount, account.currency, preferredCurrency);
+          const convertedAmount = convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
           incomeCategoryTotals[categoryName] = (incomeCategoryTotals[categoryName] || 0) + convertedAmount;
         }
       }
@@ -207,7 +208,7 @@ export default function DashboardPage() {
     const last12MonthsKeys: string[] = [];
     for (let i = 11; i >= 0; i--) {
         const targetMonthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthKey = formatDateFns(targetMonthDate, 'MMM'); // e.g., "Jan", "Feb"
+        const monthKey = formatDateFns(targetMonthDate, 'MMM'); 
         monthlyData[monthKey] = { income: 0, expenses: 0 };
         last12MonthsKeys.push(monthKey);
     }
@@ -218,16 +219,15 @@ export default function DashboardPage() {
         const monthKey = formatDateFns(txDate, 'MMM');
         const account = accounts.find(acc => acc.id === tx.accountId);
 
-        if (account && monthlyData[monthKey]) { // Check if monthKey is one of the last 12
+        if (account && monthlyData[monthKey] && tx.category !== 'Transfer') { // Exclude transfers
             if (tx.amount > 0) {
-                monthlyData[monthKey].income += convertCurrency(tx.amount, account.currency, preferredCurrency);
+                monthlyData[monthKey].income += convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
             } else if (tx.amount < 0) {
-                monthlyData[monthKey].expenses += convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+                monthlyData[monthKey].expenses += convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
             }
         }
     });
     
-    // Return data in the correct order of months
     return last12MonthsKeys.map(monthKey => ({
         month: monthKey,
         income: monthlyData[monthKey].income,
@@ -258,9 +258,6 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      {/* The fixed header with DateRangePicker has been moved to src/app/dashboard/page.tsx */}
-      {/* This page will now just display the content below the header */}
-
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
           <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />

@@ -42,7 +42,7 @@ export default function RevenuePage() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const { toast } = useToast();
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
@@ -65,7 +65,7 @@ export default function RevenuePage() {
         if(isMounted) setIsLoading(true);
         if(isMounted) setError(null);
         try {
-            const prefs = getUserPreferences();
+            const prefs = await getUserPreferences(); // Await preferences
             if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -132,7 +132,7 @@ export default function RevenuePage() {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); // Await preferences
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
@@ -165,6 +165,7 @@ export default function RevenuePage() {
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
             amount: transactionAmount,
+            transactionCurrency: formData.transactionCurrency, // Ensure this is passed
             date: format(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
@@ -234,7 +235,7 @@ export default function RevenuePage() {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[], transactionCurrency: string; }) => {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
@@ -243,6 +244,7 @@ export default function RevenuePage() {
       await addTransaction({
         accountId: data.fromAccountId,
         amount: -transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -252,6 +254,7 @@ export default function RevenuePage() {
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -365,7 +368,7 @@ export default function RevenuePage() {
                                 if (!account) return null;
 
                                 const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                                const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true); 
+                                const formattedAmount = formatCurrency(transaction.amount, transaction.transactionCurrency, preferredCurrency, true); 
 
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
@@ -485,6 +488,7 @@ export default function RevenuePage() {
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
                             accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
+                            transactionCurrency: selectedTransaction.transactionCurrency,
                             date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,

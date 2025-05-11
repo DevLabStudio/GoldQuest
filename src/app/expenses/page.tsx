@@ -43,7 +43,7 @@ export default function ExpensesPage() {
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const { toast } = useToast();
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
@@ -66,7 +66,7 @@ export default function ExpensesPage() {
         if(isMounted) setIsLoading(true);
         if(isMounted) setError(null);
         try {
-            const prefs = getUserPreferences();
+            const prefs = await getUserPreferences(); // Await preferences
             if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -135,7 +135,7 @@ export default function ExpensesPage() {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); // Await preferences
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
             setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
@@ -169,6 +169,7 @@ export default function ExpensesPage() {
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
             amount: transactionAmount,
+            transactionCurrency: formData.transactionCurrency, // Ensure this is passed
             date: format(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
@@ -237,7 +238,7 @@ export default function ExpensesPage() {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[], transactionCurrency: string }) => {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = format(data.date, 'yyyy-MM-dd');
@@ -246,6 +247,7 @@ export default function ExpensesPage() {
       await addTransaction({
         accountId: data.fromAccountId,
         amount: -transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -255,6 +257,7 @@ export default function ExpensesPage() {
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
+        transactionCurrency: data.transactionCurrency, // Assuming transfer happens in same currency or it's handled by form logic
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -295,7 +298,6 @@ export default function ExpensesPage() {
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <div className="flex justify-between items-center mb-6">
             <h1 className="text-3xl font-bold">Expenses</h1>
-            {/* Button maintained from original ExpensesPage for consistency */}
             <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button variant="default" size="sm">
@@ -328,7 +330,7 @@ export default function ExpensesPage() {
         )}
 
         <div className="flex flex-col md:flex-row gap-8">
-            <div className="flex-grow"> {/* Main content area */}
+            <div className="flex-grow"> 
                 <Card>
                     <CardHeader>
                         <div className="flex justify-between items-center">
@@ -370,7 +372,7 @@ export default function ExpensesPage() {
                                 if (!account) return null;
 
                                 const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                                const formattedAmount = formatCurrency(transaction.amount, account.currency, undefined, true);
+                                const formattedAmount = formatCurrency(transaction.amount, transaction.transactionCurrency, preferredCurrency, true);
 
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
@@ -380,7 +382,7 @@ export default function ExpensesPage() {
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(transaction.date)}</TableCell>
                                         <TableCell className="text-muted-foreground">{account.name}</TableCell>
-                                        <TableCell className="text-muted-foreground">{transaction.description}</TableCell> {/* Payee as destination */}
+                                        <TableCell className="text-muted-foreground">{transaction.description}</TableCell> 
                                         <TableCell>
                                             <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
                                                 <CategoryIcon />
@@ -457,7 +459,7 @@ export default function ExpensesPage() {
                     </CardContent>
                 </Card>
             </div>
-            <div className="w-full md:w-72 lg:w-80 flex-shrink-0"> {/* Monthly Summary Sidebar */}
+            <div className="w-full md:w-72 lg:w-80 flex-shrink-0"> 
                  <MonthlySummarySidebar
                     transactions={expenseTransactions}
                     accounts={accounts}
@@ -490,6 +492,7 @@ export default function ExpensesPage() {
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
                             accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
+                            transactionCurrency: selectedTransaction.transactionCurrency,
                             date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                             category: selectedTransaction.category,
                             description: selectedTransaction.description,

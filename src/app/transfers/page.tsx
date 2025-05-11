@@ -12,7 +12,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format, parseISO } from 'date-fns';
-import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; // Renamed TransferIcon
+import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -41,7 +41,7 @@ export default function TransfersPage() {
   const [tags, setTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const { toast } = useToast();
 
   const [isAddTransactionDialogOpen, setIsAddTransactionDialogOpen] = useState(false);
@@ -66,7 +66,7 @@ export default function TransfersPage() {
       if (isMounted) setIsLoading(true);
       if (isMounted) setError(null);
       try {
-        const prefs = getUserPreferences();
+        const prefs = await getUserPreferences(); // Await preferences
         if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -82,8 +82,7 @@ export default function TransfersPage() {
 
 
         if (fetchedAccounts.length > 0) {
-            // Fetch a larger set for pairing, or all if performance allows
-            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); // Potentially remove limit for pairing
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); 
             const transactionsByAccount = await Promise.all(transactionPromises);
             const combinedTransactions = transactionsByAccount.flat();
             combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -126,13 +125,13 @@ export default function TransfersPage() {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); // Await preferences
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([getAccounts(), getCategories(), getTags()]);
             setAccounts(fetchedAccounts);
             setCategories(fetchedCategories);
             setTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); // Potentially remove limit
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); 
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -151,19 +150,18 @@ export default function TransfersPage() {
     );
 
     potentialTransfers.forEach(txOut => {
-      if (txOut.amount < 0 && !processedIds.has(txOut.id)) { // txOut is the outgoing leg
+      if (txOut.amount < 0 && !processedIds.has(txOut.id)) { 
         const matchingIncoming = potentialTransfers.filter(txIn =>
-          txIn.amount === -txOut.amount && // txIn is the incoming leg, amount is positive opposite
-          txIn.accountId !== txOut.accountId && // Different accounts
+          txIn.amount === -txOut.amount && 
+          txIn.accountId !== txOut.accountId && 
           !processedIds.has(txIn.id) &&
           txIn.date === txOut.date &&
           (txIn.description === txOut.description || 
-           (txIn.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer")))
+           (txIn.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer"))) &&
+          txIn.transactionCurrency === txOut.transactionCurrency // Ensure currencies match for a pair
         );
         
-        // If multiple potential matches, try to find the best one (e.g., closest timestamp if available, or just take first)
         if (matchingIncoming.length > 0) {
-            // For simplicity, taking the first match. More sophisticated logic could be added.
             const txIn = matchingIncoming[0]; 
             transfers.push({ from: txOut, to: txIn });
             processedIds.add(txOut.id);
@@ -173,7 +171,7 @@ export default function TransfersPage() {
     });
 
     return transfers.sort((a, b) => new Date(b.from.date).getTime() - new Date(a.from.date).getTime());
-  }, [allTransactions, accounts]); // Added accounts to dependency array for getAccountName
+  }, [allTransactions]); 
 
    const getAccountName = (accountId: string): string => {
         return accounts.find(acc => acc.id === accountId)?.name || 'Unknown Account';
@@ -234,7 +232,7 @@ export default function TransfersPage() {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[] }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; }) => {
     setIsLoading(true);
     try {
        if (editingTransferPair) {
@@ -253,6 +251,7 @@ export default function TransfersPage() {
       await addTransaction({
         accountId: data.fromAccountId,
         amount: -transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -262,6 +261,7 @@ export default function TransfersPage() {
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -308,6 +308,7 @@ export default function TransfersPage() {
             fromAccountId: editingTransferPair.from.accountId,
             toAccountId: editingTransferPair.to.accountId,
             amount: Math.abs(editingTransferPair.from.amount),
+            transactionCurrency: editingTransferPair.from.transactionCurrency,
             date: parseISO(editingTransferPair.from.date.includes('T') ? editingTransferPair.from.date : editingTransferPair.from.date + 'T00:00:00Z'),
             description: editingTransferPair.from.description,
             tags: editingTransferPair.from.tags || [],
@@ -389,10 +390,7 @@ export default function TransfersPage() {
                         </TableHeader>
                         <TableBody>
                             {transferTransactionPairs.map((pair) => {
-                                const fromAccount = accounts.find(acc => acc.id === pair.from.accountId);
-                                if (!fromAccount) return null;
-
-                                const formattedAmount = formatCurrency(Math.abs(pair.from.amount), fromAccount.currency, undefined, true);
+                                const formattedAmount = formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true);
 
                                 return (
                                     <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
@@ -419,7 +417,7 @@ export default function TransfersPage() {
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <div
-                                                            className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                                            className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
                                                             onClick={() => openDeleteDialog(pair)}
                                                         >
                                                             <Trash2 className="mr-2 h-4 w-4" />
@@ -477,7 +475,7 @@ export default function TransfersPage() {
 
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
           setIsAddTransactionDialogOpen(open);
-          if (!open) setEditingTransferPair(null); // Clear editing state when dialog closes
+          if (!open) setEditingTransferPair(null); 
       }}>
         <DialogContent className="sm:max-w-[480px]">
           <DialogHeader>

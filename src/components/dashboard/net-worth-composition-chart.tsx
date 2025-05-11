@@ -5,17 +5,17 @@ import type { FC } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip, Legend } from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
-import { formatCurrency } from '@/lib/currency'; // Import formatCurrency
+import { formatCurrency } from '@/lib/currency'; 
 
 export interface NetWorthChartDataPoint {
   name: string;
   value: number;
-  fill: string; // Color for the pie slice and legend
+  fill: string; 
 }
 
 interface NetWorthCompositionChartProps {
   data: NetWorthChartDataPoint[];
-  currency: string;
+  currency: string; // User's preferred currency code
 }
 
 const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({ data, currency }) => {
@@ -56,7 +56,7 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({ data, cur
                       style={{ backgroundColor: props.payload.fill }}
                     />
                     <span>
-                      {props.payload.name}: {formatCurrency(Number(value), currency, undefined, false)} (
+                      {props.payload.name}: {formatCurrency(Number(value), currency, currency, false)} (
                       {totalValue > 0 ? ((Number(value) / totalValue) * 100).toFixed(1) : 0}%)
                     </span>
                   </div>
@@ -71,9 +71,9 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({ data, cur
             cx="50%"
             cy="50%"
             outerRadius="80%"
-            innerRadius="50%" // Make it a donut chart
+            innerRadius="50%" 
             labelLine={false}
-            label={false} // Disable default labels, legend will be used
+            label={false} 
           >
             {data.map((entry, index) => (
               <Cell key={`cell-${index}`} fill={entry.fill} stroke={entry.fill} />
@@ -93,3 +93,4 @@ const NetWorthCompositionChart: FC<NetWorthCompositionChartProps> = ({ data, cur
 };
 
 export default NetWorthCompositionChart;
+
