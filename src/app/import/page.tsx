@@ -18,7 +18,7 @@ import { getTags, addTag, type Tag, getTagStyle } from '@/services/tags';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog"; 
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, isValid } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency } from '@/lib/currency'; 
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
 import { AlertCircle, Trash2 } from 'lucide-react'; 
@@ -29,132 +29,146 @@ type CsvRecord = {
 };
 
 const APP_FIELDS_VALUES = [
-    'date', 'amount', 'amount_income', 'amount_expense', 'description', 'account',
-    'source_account', 'destination_account', 'category', 'accountCurrency',
-    'tags', 'initialBalance', 'notes', 'transaction_type', 'destination_name'
+    'date', 'amount', 
+    // 'amount_income', 'amount_expense', // Less common in Firefly CSV, 'amount' is signed
+    'description', 
+    'source_name', 'destination_name', 'source_type', 'destination_type', // Firefly specific
+    'category', 'currency_code', // 'currency_code' is primary for Firefly
+    // 'foreign_currency_code', 'foreign_amount', // For later enhancement
+    'tags', 'notes', 'transaction_type' // 'transaction_type' is critical for Firefly
 ] as const;
+
 type AppField = typeof APP_FIELDS_VALUES[number];
 
 type MappedTransaction = {
-  csvAccountNameKey?: string; // Lowercase CSV account name key for primary account (income/expense)
-  csvSourceAccountNameKey?: string; // For transfers
-  csvDestAccountNameKey?: string; // For transfers
-  date: string;
-  amount: number;
+  // Store raw CSV values for account names to be resolved later
+  csvRawSourceName?: string; 
+  csvRawDestinationName?: string;
+  csvTransactionType?: string; // Raw 'type' from CSV (e.g., Withdrawal, Transfer)
+  
+  date: string; // Parsed and formatted YYYY-MM-DD
+  amount: number; // Parsed amount, sign based on CSV 'type' or original 'amount'
   description: string;
   category: string;
+  currency: string; // Parsed currency code
   tags?: string[];
   originalRecord: CsvRecord;
   importStatus: 'pending' | 'success' | 'error' | 'skipped';
   errorMessage?: string;
+
+  // These will be resolved to our app's account IDs during/after account creation
+  appSourceAccountId?: string; 
+  appDestinationAccountId?: string;
 };
 
 
 interface AccountPreview {
     name: string;
     currency: string;
-    initialBalance?: number; 
+    initialBalance: number; // Firefly opening balances are explicit
     action: 'create' | 'update' | 'no change'; 
     existingId?: string; 
+    category: 'asset' | 'crypto'; // Determine based on name or keep 'asset' default
 }
 
 
 const findColumnName = (headers: string[], targetName: string): string | undefined => {
-    return headers.find(header => header?.trim().toLowerCase() === targetName.toLowerCase());
+    // Trim and lowercase both header and target for robust matching
+    const normalizedTargetName = targetName.trim().toLowerCase();
+    return headers.find(header => header?.trim().toLowerCase() === normalizedTargetName);
 };
 
+
 const parseAmount = (amountStr: string | undefined): number => {
-    if (typeof amountStr !== 'string' || amountStr.trim() === '') return NaN; 
-    let cleaned = amountStr.replace(/[^\d.,-]/g, '').trim(); 
+    if (typeof amountStr !== 'string' || amountStr.trim() === '') return NaN;
+    let cleaned = amountStr.replace(/[^\d.,-]/g, '').trim();
 
-    const numPeriods = (cleaned.match(/\./g) || []).length;
-    const numCommas = (cleaned.match(/,/g) || []).length;
+    const hasPeriod = cleaned.includes('.');
+    const hasComma = cleaned.includes(',');
 
-    if (numCommas === 1 && numPeriods > 0 && cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
+    // Scenario 1: "1.234,56" (German/European style) -> 1234.56
+    if (hasComma && hasPeriod && cleaned.lastIndexOf(',') > cleaned.lastIndexOf('.')) {
         cleaned = cleaned.replace(/\./g, '').replace(',', '.');
-    } else if (numPeriods === 1 && numCommas > 0 && cleaned.lastIndexOf('.') > cleaned.lastIndexOf(',')) {
-        cleaned = cleaned.replace(/,/g, '');
-    } else if (numCommas === 1 && numPeriods === 0) {
-         cleaned = cleaned.replace(',', '.');
-    } else if (numPeriods === 1 && numCommas === 0) {
-    } else if (numPeriods > 1) {
-         cleaned = cleaned.replace(/,/g, ''); // Assuming . as thousands separator
-    } else if (numCommas > 1) {
-          const lastChar = cleaned[cleaned.length - 1];
-          const secondLastChar = cleaned[cleaned.length - 2];
-          if (lastChar === ',' && !isNaN(parseInt(secondLastChar))) {
-              // Handle cases like "1.234,56" - typical European
-              const lastCommaIndex = cleaned.lastIndexOf(',');
-              cleaned = cleaned.substring(0, lastCommaIndex).replace(/,/g, '') + '.' + cleaned.substring(lastCommaIndex + 1);
-          } else {
-               cleaned = cleaned.replace(/,/g, ''); // Assuming , as thousands separator
-          }
     }
+    // Scenario 2: "1,234.56" (US/UK style) -> 1234.56
+    else if (hasComma && hasPeriod && cleaned.lastIndexOf('.') > cleaned.lastIndexOf(',')) {
+        cleaned = cleaned.replace(/,/g, '');
+    }
+    // Scenario 3: "1234,56" (Only comma as decimal) -> 1234.56
+    else if (hasComma && !hasPeriod) {
+        cleaned = cleaned.replace(',', '.');
+    }
+    // Scenario 4: "1234.56" (Only period as decimal) - no change needed if it's the only one
+    // Scenario 5: Multiple commas (e.g. "1,234,567") -> 1234567 (treat as thousands separators)
+    else if (cleaned.match(/,/g) && cleaned.match(/,/g)!.length > 1 && !hasPeriod) {
+        cleaned = cleaned.replace(/,/g, '');
+    }
+     // Scenario 6: Multiple periods (e.g. "1.234.567") -> 1234567 (treat as thousands separators if no comma)
+    else if (cleaned.match(/\./g) && cleaned.match(/\./g)!.length > 1 && !hasComma) {
+         cleaned = cleaned.replace(/\./g, '');
+    }
+
     // If it ends with a decimal separator, append a zero
     if (cleaned.endsWith('.') || cleaned.endsWith(',')) {
         cleaned += '0';
     }
-
-    // Remove any leading/trailing decimal separators after processing
-    cleaned = cleaned.replace(/^[,.]+|[,.]+$/g, '');
-
+    cleaned = cleaned.replace(/^[,.]+|[,.]+$/g, ''); // Remove any leading/trailing decimal separators
 
     const parsed = parseFloat(cleaned);
-    return parsed; // NaN if parsing fails
+    return parsed;
 };
 
 
 const parseDate = (dateStr: string | undefined): string => {
-    if (!dateStr) return format(new Date(), 'yyyy-MM-dd');
+    if (!dateStr) return format(new Date(), 'yyyy-MM-dd'); // Default to today if no date string
     try {
-        let parsedDate: Date | null = null;
-
-         // Try ISO format first (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)
-         if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
-            // Ensure UTC interpretation if no time/timezone is specified
-            parsedDate = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00Z');
-         }
-
-        // If ISO parsing fails or wasn't the format, try common variations
-        if (!parsedDate || isNaN(parsedDate.getTime())) {
-             // Common formats: DD/MM/YYYY, MM/DD/YYYY, DD.MM.YYYY, MM.DD.YYYY, DD-MM-YYYY, MM-DD-YYYY
-             const parts = dateStr.split(/[\/\-\.]/);
-             if (parts.length === 3) {
-                 const [p1_str, p2_str, p3_str] = parts;
-                 let p1 = parseInt(p1_str, 10);
-                 let p2 = parseInt(p2_str, 10);
-                 let year_part = parseInt(p3_str, 10);
-
-                 // Handle two-digit year (e.g., 23 for 2023)
-                 let year = year_part;
-                 if (year < 100) {
-                     year = year > 50 ? 1900 + year : 2000 + year; // Adjust pivot year as needed
-                 }
-
-                 // Try DD/MM/YYYY or DD.MM.YYYY or DD-MM-YYYY
-                  if (p1 > 0 && p1 <= 31 && p2 > 0 && p2 <= 12 && year >= 1900 && year < 2100) { // p1 is day, p2 is month
-                      const dateAttempt = new Date(Date.UTC(year, p2 - 1, p1)); // Month is 0-indexed
-                      if (!isNaN(dateAttempt.getTime())) parsedDate = dateAttempt;
-                  }
-                 // Try MM/DD/YYYY or MM.DD.YYYY or MM-DD-YYYY
-                 if ((!parsedDate || isNaN(parsedDate.getTime())) && p1 > 0 && p1 <= 12 && p2 > 0 && p2 <= 31 && year >= 1900 && year < 2100) { // p1 is month, p2 is day
-                      const dateAttempt = new Date(Date.UTC(year, p1 - 1, p2)); // Month is 0-indexed
-                      if (!isNaN(dateAttempt.getTime())) parsedDate = dateAttempt;
-                 }
-             }
+        // Attempt to parse ISO 8601 format (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ etc.)
+        let parsedDate = parseISO(dateStr);
+        if (isValid(parsedDate)) {
+            return format(parsedDate, 'yyyy-MM-dd');
         }
 
-        // Add more robust parsing logic if needed (e.g., using date-fns parse if formats are known)
+        // Try common formats DD/MM/YYYY, MM/DD/YYYY, DD.MM.YYYY, etc.
+        const parts = dateStr.split(/[\/\-\.]/);
+        if (parts.length === 3) {
+            const [p1_str, p2_str, p3_str] = parts;
+            let day: number, month: number, year: number;
 
-         if (parsedDate && !isNaN(parsedDate.getTime())) {
-            return format(parsedDate, 'yyyy-MM-dd'); // Standardize to YYYY-MM-DD
-         }
+            const p1 = parseInt(p1_str, 10);
+            const p2 = parseInt(p2_str, 10);
+            const p3 = parseInt(p3_str, 10);
+
+            // Try DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+            if (p1 > 0 && p1 <= 31 && p2 > 0 && p2 <= 12 && p3 >= 1900 && p3 < 2100) {
+                day = p1; month = p2; year = p3;
+                parsedDate = new Date(Date.UTC(year, month - 1, day));
+                if (isValid(parsedDate)) return format(parsedDate, 'yyyy-MM-dd');
+            }
+            // Try MM/DD/YYYY or MM-DD-YYYY or MM.DD.YYYY
+            if (p1 > 0 && p1 <= 12 && p2 > 0 && p2 <= 31 && p3 >= 1900 && p3 < 2100) {
+                 day = p2; month = p1; year = p3;
+                 parsedDate = new Date(Date.UTC(year, month - 1, day));
+                 if (isValid(parsedDate)) return format(parsedDate, 'yyyy-MM-dd');
+            }
+             // Try YYYY/MM/DD or YYYY-MM-DD or YYYY.MM.DD (less common for input but good to check)
+            if (p1 >= 1900 && p1 < 2100 && p2 > 0 && p2 <= 12 && p3 > 0 && p3 <= 31) {
+                 day = p3; month = p2; year = p1;
+                 parsedDate = new Date(Date.UTC(year, month - 1, day));
+                 if (isValid(parsedDate)) return format(parsedDate, 'yyyy-MM-dd');
+            }
+        }
+        
+        // Fallback to direct Date constructor if specific parsing fails but might be a valid string for it
+        parsedDate = new Date(dateStr);
+        if (isValid(parsedDate)) {
+            return format(parsedDate, 'yyyy-MM-dd');
+        }
 
     } catch (e) {
         console.error("Error parsing date:", dateStr, e);
     }
     console.warn(`Could not parse date "${dateStr}", defaulting to today.`);
-    return format(new Date(), 'yyyy-MM-dd'); // Fallback
+    return format(new Date(), 'yyyy-MM-dd');
 };
 
 export default function ImportDataPage() {
@@ -197,8 +211,6 @@ export default function ImportDataPage() {
                 setCategories(fetchedCategories);
                 setTags(fetchedTags);
             }
-            console.log("Initial data fetched for import:", { numAccounts: fetchedAccounts.length, numCategories: fetchedCategories.length, numTags: fetchedTags.length });
-
         } catch (err) {
             console.error("Failed to fetch initial data for import:", err);
             if (isMounted) {
@@ -215,7 +227,6 @@ export default function ImportDataPage() {
     const handleStorageChange = (event: StorageEvent) => {
         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key === 'userTags')) {
             if (isMounted) {
-                console.log("Storage changed, refetching initial data for import...");
                 fetchData();
             }
         }
@@ -242,7 +253,7 @@ export default function ImportDataPage() {
       setRawData([]);
       setCsvHeaders([]);
       setImportProgress(0);
-      setColumnMappings({}); // Reset mappings
+      setColumnMappings({});
       setFinalAccountMapForImport({}); 
     }
   };
@@ -264,7 +275,7 @@ export default function ImportDataPage() {
       header: true,
       skipEmptyLines: true,
       complete: (results: ParseResult<CsvRecord>) => {
-         if (results.errors.length > 0 && !results.data.length) { // Critical error if no data and errors exist
+         if (results.errors.length > 0 && !results.data.length) {
              const criticalError = results.errors[0];
              setError(`CSV Parsing Error: ${criticalError.message}. Code: ${criticalError.code}. Ensure headers are correct.`);
              setIsLoading(false);
@@ -284,58 +295,28 @@ export default function ImportDataPage() {
              return;
          }
 
-         setCsvHeaders(headers.filter(h => h != null) as string[]); // Filter out null/undefined headers
+         setCsvHeaders(headers.filter(h => h != null) as string[]);
          setRawData(results.data);
 
-         // Attempt to auto-detect common Firefly III / general column names
          const detectedHeaders = headers.filter(h => h != null) as string[];
          const initialMappings: ColumnMapping = {};
-         // Firefly specific with fallbacks
-         initialMappings.date = findColumnName(detectedHeaders, 'Date') || findColumnName(detectedHeaders, 'date');
-         initialMappings.amount = findColumnName(detectedHeaders, 'Amount') || findColumnName(detectedHeaders, 'amount');
-         initialMappings.amount_income = findColumnName(detectedHeaders, 'Amount income');
-         initialMappings.amount_expense = findColumnName(detectedHeaders, 'Amount expense');
-         initialMappings.description = findColumnName(detectedHeaders, 'Description') || findColumnName(detectedHeaders, 'description');
-         initialMappings.account = findColumnName(detectedHeaders, 'Asset account (name)') || findColumnName(detectedHeaders, 'Account') || findColumnName(detectedHeaders, 'account'); // Primary account
-         initialMappings.source_account = findColumnName(detectedHeaders, 'Source account (name)');
-         initialMappings.destination_account = findColumnName(detectedHeaders, 'Destination account (name)');
-         initialMappings.destination_name = findColumnName(detectedHeaders, 'Destination name'); // Firefly uses "Destination name" for payee
-         initialMappings.category = findColumnName(detectedHeaders, 'Category') || findColumnName(detectedHeaders, 'category');
-         initialMappings.accountCurrency = findColumnName(detectedHeaders, 'Currency code') || findColumnName(detectedHeaders, 'currency') || findColumnName(detectedHeaders, 'Amount currency') || findColumnName(detectedHeaders, 'Source currency') || findColumnName(detectedHeaders, 'Destination currency');
-         initialMappings.tags = findColumnName(detectedHeaders, 'Tags') || findColumnName(detectedHeaders, 'tags');
-         initialMappings.initialBalance = findColumnName(detectedHeaders, 'Initial balance') || findColumnName(detectedHeaders, 'Starting balance') || findColumnName(detectedHeaders, 'Account balance'); // For account creation
-         initialMappings.notes = findColumnName(detectedHeaders, 'Notes') || findColumnName(detectedHeaders, 'Memo'); // Firefly often uses "Notes"
-         initialMappings.transaction_type = findColumnName(detectedHeaders, 'Type') || findColumnName(detectedHeaders, 'Transaction type'); // Firefly 'Type' can be 'withdrawal', 'deposit', 'transfer', 'opening balance'
-
-         // Logic if 'Amount' isn't present but income/expense are
-         if (!initialMappings.amount && initialMappings.amount_income && initialMappings.amount_expense) {
-             console.log("No 'Amount' column found, using 'Amount income' and 'Amount expense'.");
-         } else if (!initialMappings.amount && !initialMappings.amount_income && !initialMappings.amount_expense) {
-            // Try to find specific currency amount columns like "Amount in BRL"
-            const specificAmountCol = detectedHeaders.find(h => h.toLowerCase().startsWith('amount in '));
-            if(specificAmountCol) {
-                console.log(`Using specific amount column: ${specificAmountCol}`);
-                initialMappings.amount = specificAmountCol; // Map it as the primary amount
-                // Try to infer currency from this column if not already mapped
-                if (!initialMappings.accountCurrency) {
-                    const currencyMatch = specificAmountCol.match(/Amount in (\w+)/i);
-                    if (currencyMatch && currencyMatch[1]) {
-                        const inferredCurrency = currencyMatch[1].toUpperCase();
-                        if (supportedCurrencies.includes(inferredCurrency)) {
-                             console.log(`Inferred currency ${inferredCurrency} from amount column header.`);
-                            // initialMappings.accountCurrency = inferredCurrency; // Optionally pre-fill
-                        }
-                    }
-                }
-            } else {
-                 console.warn("Could not automatically map an amount column ('Amount', 'Amount income'/'Amount expense', or 'Amount in XXX'). Please map manually.");
-            }
-         }
-
+         
+         // Prioritize Firefly III specific column names
+         initialMappings.date = findColumnName(detectedHeaders, 'date');
+         initialMappings.amount = findColumnName(detectedHeaders, 'amount');
+         initialMappings.description = findColumnName(detectedHeaders, 'description');
+         initialMappings.source_name = findColumnName(detectedHeaders, 'source_name');
+         initialMappings.destination_name = findColumnName(detectedHeaders, 'destination_name');
+         initialMappings.source_type = findColumnName(detectedHeaders, 'source_type');
+         initialMappings.destination_type = findColumnName(detectedHeaders, 'destination_type');
+         initialMappings.category = findColumnName(detectedHeaders, 'category');
+         initialMappings.currency_code = findColumnName(detectedHeaders, 'currency_code') || findColumnName(detectedHeaders, 'currency'); // Common fallback
+         initialMappings.tags = findColumnName(detectedHeaders, 'tags');
+         initialMappings.notes = findColumnName(detectedHeaders, 'notes');
+         initialMappings.transaction_type = findColumnName(detectedHeaders, 'type'); // Firefly's 'type' column
 
          setColumnMappings(initialMappings);
-
-         setIsMappingDialogOpen(true); // Open mapping dialog
+         setIsMappingDialogOpen(true);
          setIsLoading(false);
       },
       error: (err: Error) => {
@@ -350,304 +331,87 @@ export default function ImportDataPage() {
         setError(null);
         setParsedData([]);
         setAccountPreviewData([]); 
-        setColumnMappings(confirmedMappings); // Store the confirmed mappings
-        setFinalAccountMapForImport({}); // Reset final map
+        setColumnMappings(confirmedMappings);
+        setFinalAccountMapForImport({});
 
-        // Basic validation for required mappings
-        const hasSignedAmount = !!confirmedMappings.amount;
-        const hasIncomeExpense = !!confirmedMappings.amount_income && !!confirmedMappings.amount_expense;
-        const amountRequirementMet = hasSignedAmount || hasIncomeExpense;
-
-        const requiredBaseFields: AppField[] = ['date']; 
-        const missingBaseMappings = requiredBaseFields.filter(field => !confirmedMappings[field]);
-        let missingFieldLabels = missingBaseMappings.map(f => APP_FIELDS_VALUES.find(val => val === f) || f); 
-
-        if (!amountRequirementMet) {
-            missingFieldLabels.push("Amount (Signed +/-) *OR* both Income Amount + Expense Amount");
-        }
-
-        const hasPrimaryAccount = !!confirmedMappings.account;
-        const hasTransferAccounts = !!confirmedMappings.source_account && !!confirmedMappings.destination_account;
-        if (!hasPrimaryAccount && !hasTransferAccounts) {
-            missingFieldLabels.push("Account Name *OR* both Source Account + Destination Account");
-        }
-
+        const requiredFields: AppField[] = ['date', 'amount', 'currency_code', 'transaction_type', 'source_name', 'destination_name'];
+        const missingFieldLabels = requiredFields
+            .filter(field => !confirmedMappings[field])
+            .map(field => APP_FIELDS_VALUES.find(val => val === field) || field);
 
         if (missingFieldLabels.length > 0) {
-            setError(`Missing required column mappings: ${missingFieldLabels.join(', ')}. Please map these fields.`);
+            setError(`Missing required column mappings for Firefly III import: ${missingFieldLabels.join(', ')}. Please map these fields.`);
             setIsLoading(false);
             setIsMappingDialogOpen(true); 
             return;
         }
-
-        const dateCol = confirmedMappings.date!; 
-        const amountCol = confirmedMappings.amount; 
-        const incomeCol = confirmedMappings.amount_income; 
-        const expenseCol = confirmedMappings.amount_expense; 
-        const descCol = confirmedMappings.description;
-        const accountCol = confirmedMappings.account; 
-        const sourceAccountCol = confirmedMappings.source_account; 
-        const destAccountCol = confirmedMappings.destination_account; 
-        const destNameCol = confirmedMappings.destination_name; // For payee from Firefly
-        const catCol = confirmedMappings.category;
-        const accountCurrencyCol = confirmedMappings.accountCurrency;
-        const tagsCol = confirmedMappings.tags;
-        const initialBalanceCol = confirmedMappings.initialBalance;
-        const notesCol = confirmedMappings.notes;
-        const typeCol = confirmedMappings.transaction_type; 
-
+        
         const { preview } = await previewAccountChanges(rawData, confirmedMappings, accounts);
         setAccountPreviewData(preview);
-        console.log("Account preview generated:", preview);
 
         const { map: tempAccountMap } = await createOrUpdateAccountsAndGetMap(rawData, confirmedMappings, accounts, true);
-        console.log("Generated temporary account map for transaction linking:", tempAccountMap);
-
 
         const mapped: MappedTransaction[] = rawData.map((record, index) => {
+          const rowNumber = index + 2;
           try {
-              const rowNumber = index + 2; 
+              const csvTypeRaw = record[confirmedMappings.transaction_type!];
+              const csvType = csvTypeRaw?.trim().toLowerCase();
+              
+              const dateValue = record[confirmedMappings.date!];
+              const amountValue = record[confirmedMappings.amount!];
+              const currencyValue = record[confirmedMappings.currency_code!];
+              const descriptionValue = record[confirmedMappings.description!] || '';
+              const categoryValue = record[confirmedMappings.category!] || 'Uncategorized';
+              const tagsValue = record[confirmedMappings.tags!] || '';
+              const notesValue = record[confirmedMappings.notes!] || '';
 
-              const dateValue = record[dateCol];
-              // Get raw string values from the record
-              const accountNameValue = accountCol ? record[accountCol] : undefined;
-              const sourceAccountNameValue = sourceAccountCol ? record[sourceAccountCol] : undefined;
-              const destAccountNameValue = destAccountCol ? record[destAccountCol] : undefined;
-              let descriptionFromRecord = descCol ? record[descCol] : undefined;
-              const destinationNameValue = destNameCol ? record[destNameCol] : undefined; // Payee from Firefly
-              const categoryValue = catCol ? record[catCol] : undefined;
-              const tagsValue = tagsCol ? record[tagsCol] : undefined;
-              const notesValue = notesCol ? record[notesCol] : undefined;
-              const typeFromRecord = typeCol ? record[typeCol] : undefined;
-
-              let descriptionValue = descriptionFromRecord;
-              if (!descriptionValue && destinationNameValue) {
-                  descriptionValue = destinationNameValue;
-              }
-
-              const descriptionLower = descriptionValue?.toLowerCase(); // Safe with optional chaining
-              const typeValue = typeFromRecord?.trim().toLowerCase(); // Safe with optional chaining
-
-
-              let parsedAmount: number = NaN; 
-              const signedAmountValue = amountCol ? record[amountCol] : undefined;
-              const incomeAmountValue = incomeCol ? record[incomeCol] : undefined;
-              const expenseAmountValue = expenseCol ? record[expenseCol] : undefined;
-
-              if (amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
-                  parsedAmount = parseAmount(signedAmountValue);
-                   console.log(`Row ${rowNumber}: Parsed amount from signed column ('${amountCol}')='${signedAmountValue}' as ${parsedAmount}`);
-              } else if (incomeCol && expenseCol && (incomeAmountValue !== undefined || expenseAmountValue !== undefined)) {
-                  const income = parseAmount(incomeAmountValue);
-                  const expense = parseAmount(expenseAmountValue);
-                   if (!isNaN(income) && income > 0 && (isNaN(expense) || expense === 0)) {
-                       parsedAmount = income; 
-                       console.log(`Row ${rowNumber}: Parsed amount from income column ('${incomeCol}')='${incomeAmountValue}' as ${parsedAmount}`);
-                   } else if (!isNaN(expense) && expense > 0 && (isNaN(income) || income === 0)) {
-                       parsedAmount = -expense; 
-                       console.log(`Row ${rowNumber}: Parsed amount from expense column ('${expenseCol}')='${expenseAmountValue}' as ${parsedAmount}`);
-                   } else if (!isNaN(income) && income === 0 && !isNaN(expense) && expense === 0) {
-                       parsedAmount = 0; 
-                       console.log(`Row ${rowNumber}: Parsed amount as 0 from income/expense columns.`);
-                   } else if (!isNaN(income) && income > 0 && !isNaN(expense) && expense > 0) {
-                       console.warn(`Row ${rowNumber}: Both income (${income}) and expense (${expense}) have values. Transfer logic will attempt to resolve.`);
-                       parsedAmount = NaN; 
-                   } else {
-                       throw new Error(`Could not determine amount from Income ('${incomeAmountValue}') and Expense ('${expenseAmountValue}') columns.`);
-                   }
-              }
-
-              if (isNaN(parsedAmount)) {
-                   const initialBalanceMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/); 
-                    if (initialBalanceMatch) {
-                        if (amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
-                            parsedAmount = parseAmount(signedAmountValue);
-                            if (isNaN(parsedAmount)) {
-                                console.error(`Row ${rowNumber}: Could not parse amount for 'Saldo inicial para:'. Signed='${signedAmountValue}'.`);
-                                throw new Error(`Could not parse amount for 'Saldo inicial para:'.`);
-                            } else {
-                                console.log(`Row ${rowNumber}: Used amount column for 'Saldo inicial para:': ${parsedAmount}`);
-                            }
-                        } else {
-                            console.error(`Row ${rowNumber}: 'Saldo inicial para:' detected, but amount column ('${amountCol}') is missing or empty. Signed='${signedAmountValue}'.`);
-                            throw new Error(`'Saldo inicial para:' detected, but amount column is missing or empty.`);
-                        }
-                    } else if (typeValue === 'opening balance') { 
-                      if (amountCol && signedAmountValue !== undefined && signedAmountValue.trim() !== '') {
-                           parsedAmount = parseAmount(signedAmountValue);
-                           if (isNaN(parsedAmount)) {
-                               console.error(`Row ${rowNumber}: Could not parse amount for 'opening balance'. Signed='${signedAmountValue}'.`);
-                               throw new Error(`Could not parse amount for 'opening balance'.`);
-                           } else {
-                               console.log(`Row ${rowNumber}: Used amount column for 'opening balance': ${parsedAmount}`);
-                           }
-                       } else {
-                           console.error(`Row ${rowNumber}: 'opening balance' type found, but amount column ('${amountCol}') is missing or empty.`);
-                           throw new Error(`'opening balance' type found, but amount column is missing or empty.`);
-                       }
-                    } else {
-                       console.error(`Row ${rowNumber}: Amount could not be determined. Signed='${signedAmountValue}', Income='${incomeAmountValue}', Expense='${expenseAmountValue}'.`);
-                       throw new Error(`Could not determine a valid amount.`);
-                    }
-              }
-
+              const rawSourceName = record[confirmedMappings.source_name!]?.trim();
+              const rawDestName = record[confirmedMappings.destination_name!]?.trim();
 
               if (!dateValue) throw new Error(`Row ${rowNumber}: Missing mapped 'Date' data.`);
+              if (amountValue === undefined || amountValue.trim() === '') throw new Error(`Row ${rowNumber}: Missing or empty 'Amount' data.`);
+              if (!currencyValue || currencyValue.trim() === '') throw new Error(`Row ${rowNumber}: Missing or empty 'Currency Code' data.`);
+              if (!csvType) throw new Error(`Row ${rowNumber}: Missing or empty 'Transaction Type' (Firefly 'type') data.`);
+              if (!rawSourceName) throw new Error(`Row ${rowNumber}: Missing or empty 'Source Name' (Firefly 'source_name') data.`);
+              if (!rawDestName) throw new Error(`Row ${rowNumber}: Missing or empty 'Destination Name' (Firefly 'destination_name') data.`);
 
-              let description = descriptionValue?.trim() || 'Imported Transaction'; // Safe
-              let category = categoryValue?.trim() || 'Uncategorized'; // Safe
-              const parsedTags = tagsValue?.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0) || []; // Safe
-               if (notesValue) { // notesValue is raw from record
-                   description += ` (Notes: ${notesValue.trim()})`;  // Safe due to if check
-               }
+              const parsedAmount = parseAmount(amountValue);
+              if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Could not parse amount "${amountValue}".`);
 
-              let transactionTypeInternal: 'income' | 'expense' | 'transfer' | 'skip' = 'skip';
-              let csvAccountNameKey: string | undefined = undefined;
-              let csvSourceAccountNameKey: string | undefined = undefined;
-              let csvDestAccountNameKey: string | undefined = undefined;
-              let isOpeningBalance = false;
-
-
-               const initialBalanceDescMatch = descriptionLower?.match(/^saldo inicial para:\s*(.+)$/);
-               if (initialBalanceDescMatch) {
-                   const accountNameFromDesc = initialBalanceDescMatch[1].trim(); // Safe, match ensures group 1 is string
-                   csvAccountNameKey = accountNameFromDesc.toLowerCase();
-                   if (!tempAccountMap[csvAccountNameKey]) {
-                       console.warn(`Row ${rowNumber}: Initial balance for account "${accountNameFromDesc}" (from desc), but not in temp map. Placeholder will be used.`);
-                       tempAccountMap[csvAccountNameKey] = `preview_create_${csvAccountNameKey}`;
-                   }
-                   if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid amount for 'Saldo inicial para'.`);
-                   isOpeningBalance = true;
-                   transactionTypeInternal = 'skip'; 
-                   description = descriptionValue || `Saldo inicial para: ${accountNameFromDesc}`; 
-                   category = 'Opening Balance'; 
-                   console.log(`Row ${rowNumber}: Identified 'Saldo inicial para:' for account ${accountNameFromDesc}. Amount: ${parsedAmount}. This will set initial account balance.`);
-               } else if (typeValue === 'opening balance') {
-                    // accountNameValue comes from record[accountCol]
-                    if (!accountNameValue || typeof accountNameValue !== 'string' || accountNameValue.trim() === '') {
-                        throw new Error(`Row ${rowNumber}: 'opening balance' type detected, but 'Account Name' column ('${accountCol || 'Not Mapped'}') is missing, empty, or not a string.`);
-                    }
-                    const accountNameForOpening = accountNameValue.trim();
-                    csvAccountNameKey = accountNameForOpening.toLowerCase();
-                    if (!tempAccountMap[csvAccountNameKey]) throw new Error(`Row ${rowNumber}: Opening balance type, but Account '${accountNameForOpening}' not in temp map.`);
-                    if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid amount for 'opening balance'.`);
-                    isOpeningBalance = true;
-                    transactionTypeInternal = 'skip'; 
-                    description = descriptionValue || `Opening Balance for ${accountNameForOpening}`;
-                    category = 'Opening Balance';
-                    console.log(`Row ${rowNumber}: Identified 'opening balance' type for account ${accountNameForOpening}. Amount: ${parsedAmount}. This will set initial account balance.`);
-               } else if (typeValue === 'transfer') { // CSV type is explicitly 'transfer'
-                    // This row is one leg of a Firefly III transfer.
-                    // We need to identify the primary account for THIS ROW and the counterparty.
-                    if (!accountNameValue || typeof accountNameValue !== 'string' || accountNameValue.trim() === '') {
-                        throw new Error(`Row ${rowNumber}: CSV 'transfer' type, but primary 'Asset Account Name' ('${accountCol || 'Not Mapped'}') is missing or invalid for this row.`);
-                    }
-                    const primaryAccountNameForRow = accountNameValue.trim().toLowerCase();
-                    if (!tempAccountMap[primaryAccountNameForRow]) throw new Error(`Row ${rowNumber}: Primary Asset Account ('${accountNameValue}') for transfer row not found in temp map.`);
-
-                    if (parsedAmount < 0) { // This row is the outgoing leg
-                        csvSourceAccountNameKey = primaryAccountNameForRow;
-                        if (!destAccountNameValue || typeof destAccountNameValue !== 'string' || destAccountNameValue.trim() === '') {
-                            throw new Error(`Row ${rowNumber}: Outgoing CSV 'transfer', but 'Destination Account Name' ('${destAccountCol || 'Not Mapped'}') is missing or invalid.`);
-                        }
-                        csvDestAccountNameKey = destAccountNameValue.trim().toLowerCase();
-                        if (!tempAccountMap[csvDestAccountNameKey]) throw new Error(`Row ${rowNumber}: Transfer, Destination account ('${destAccountNameValue}') not found in your accounts list.`);
-                    } else if (parsedAmount > 0) { // This row is the incoming leg
-                        csvDestAccountNameKey = primaryAccountNameForRow;
-                        if (!sourceAccountNameValue || typeof sourceAccountNameValue !== 'string' || sourceAccountNameValue.trim() === '') {
-                             throw new Error(`Row ${rowNumber}: Incoming CSV 'transfer', but 'Source Account Name' ('${sourceAccountCol || 'Not Mapped'}') is missing or invalid.`);
-                        }
-                        csvSourceAccountNameKey = sourceAccountNameValue.trim().toLowerCase();
-                        if (!tempAccountMap[csvSourceAccountNameKey]) throw new Error(`Row ${rowNumber}: Transfer, Source account ('${sourceAccountNameValue}') not found in your accounts list.`);
-                    } else { // Amount is zero for a transfer type
-                        throw new Error(`Row ${rowNumber}: CSV 'transfer' type has zero amount.`);
-                    }
-
-                    if (csvSourceAccountNameKey === csvDestAccountNameKey) {
-                        // This specific check might still be relevant if, after the above logic, they are the same.
-                        // This implies the "other" account was the same as the primary account for the row.
-                        // Firefly often uses this for transfers to/from expense/revenue accounts.
-                        // Treat as a regular transaction on the primary account of THIS ROW.
-                        console.warn(`Row ${rowNumber}: CSV 'transfer' type for row concerning account '${primaryAccountNameForRow}' has its counterparty as the same account ('${csvSourceAccountNameKey}'). This is likely a transfer to/from a non-asset account (e.g., expense category). Treating as regular transaction.`);
-                        csvAccountNameKey = primaryAccountNameForRow; // Set the main account for this "apparent self-transfer"
-                        transactionTypeInternal = parsedAmount >= 0 ? 'income' : 'expense';
-                        category = categoryValue?.trim() || (parsedAmount >= 0 ? 'Income' : 'Expense');
-                        // Clear csvSource/Dest to prevent handleImport from creating two txs
-                        csvSourceAccountNameKey = undefined; 
-                        csvDestAccountNameKey = undefined;
-                    } else {
-                        transactionTypeInternal = 'transfer';
-                        category = 'Transfer'; // This category will signal handleImport to create two transactions
-                        description = description || `Transfer: ${primaryAccountNameForRow} to/from ${parsedAmount < 0 ? csvDestAccountNameKey : csvSourceAccountNameKey}`;
-                        parsedAmount = Math.abs(parsedAmount); // For handleImport, amount is positive
-                        if (parsedAmount <= 0) throw new Error(`Row ${rowNumber}: Transfer amount resolved to zero or negative after processing.`);
-                    }
-               } else if (accountNameValue) { // Regular income/expense (not 'opening balance', not 'transfer' type)
-                   if (typeof accountNameValue !== 'string' || accountNameValue.trim() === '') {
-                       throw new Error(`Row ${rowNumber}: CSV Account Name ('${accountCol || 'Not Mapped'}') is missing, empty, or not a string for income/expense transaction.`);
-                   }
-                   csvAccountNameKey = accountNameValue.trim().toLowerCase();
-                   if (!tempAccountMap[csvAccountNameKey]) throw new Error(`Row ${rowNumber}: Account '${accountNameValue}' not in temp map.`);
-
-                   if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Invalid or missing amount value ('${signedAmountValue || incomeAmountValue || expenseAmountValue || 'N/A'}').`);
-
-                   if (typeValue === 'deposit' || (parsedAmount > 0)) { 
-                       parsedAmount = Math.abs(parsedAmount); 
-                       transactionTypeInternal = 'income';
-                   } else if (typeValue === 'withdrawal' || (parsedAmount < 0)) { 
-                       parsedAmount = -Math.abs(parsedAmount); 
-                       transactionTypeInternal = 'expense';
-                   } else { // Amount is 0
-                       transactionTypeInternal = 'income'; // Or 'expense', doesn't matter for amount 0
-                   }
-               } else { 
-                   // Fallback/Error: if not opening balance, not transfer type, and no primary account name
-                   if (!isOpeningBalance) {
-                         throw new Error(`Row ${rowNumber}: Missing required account information (Primary Account Name for income/expense, or 'Type: transfer' with valid source/destination).`);
-                   }
-                   // If it's an opening balance that somehow reached here without accountNameValue, it's an error covered earlier.
-               }
+              const parsedDate = parseDate(dateValue);
+              const parsedTags = tagsValue.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
+              
+              let finalDescription = descriptionValue.trim();
+              if (notesValue.trim()) {
+                  finalDescription = finalDescription ? `${finalDescription} (Notes: ${notesValue.trim()})` : `Notes: ${notesValue.trim()}`;
+              }
+              if (!finalDescription && csvType === 'withdrawal') finalDescription = rawDestName; // Payee
+              if (!finalDescription && csvType === 'deposit') finalDescription = rawSourceName; // Payer
+              if (!finalDescription) finalDescription = 'Imported Transaction';
 
 
-               if (transactionTypeInternal !== 'skip' && isNaN(parsedAmount)) {
-                    throw new Error(`Row ${rowNumber}: Failed to determine a valid transaction amount.`);
-               }
-
-
-               if (transactionTypeInternal === 'skip') {
-                    return {
-                        csvAccountNameKey: csvAccountNameKey, 
-                        date: parseDate(dateValue),
-                        amount: parsedAmount || 0, 
-                        description: description,
-                        category: category, 
-                        tags: parsedTags,
-                        originalRecord: record,
-                        importStatus: 'skipped',
-                        errorMessage: isOpeningBalance ? 'Opening Balance (sets initial account value)' : 'Skipped (e.g., non-opening initial balance).',
-                    };
-               } else {
-                   return {
-                       csvAccountNameKey: csvAccountNameKey,
-                       csvSourceAccountNameKey: csvSourceAccountNameKey, // Populated for 'transfer' category
-                       csvDestAccountNameKey: csvDestAccountNameKey,   // Populated for 'transfer' category
-                       date: parseDate(dateValue),
-                       amount: parsedAmount, 
-                       description: description,
-                       category: category,
-                       tags: parsedTags,
-                       originalRecord: record,
-                       importStatus: 'pending', 
-                   };
-               }
+              return {
+                  csvRawSourceName: rawSourceName,
+                  csvRawDestinationName: rawDestName,
+                  csvTransactionType: csvType,
+                  date: parsedDate,
+                  amount: parsedAmount, // Keep original sign from CSV 'amount' for now
+                  description: finalDescription,
+                  category: categoryValue.trim(),
+                  currency: currencyValue.trim().toUpperCase(),
+                  tags: parsedTags,
+                  originalRecord: record,
+                  importStatus: 'pending',
+              };
 
             } catch (rowError: any) {
-                console.error(`Error processing row ${index + 2} with mappings:`, confirmedMappings, `and record:`, record, `Error:`, rowError);
+                console.error(`Error processing row ${rowNumber} with mappings:`, confirmedMappings, `and record:`, record, `Error:`, rowError);
                  return {
-                    date: parseDate(record[dateCol]), 
+                    date: parseDate(record[confirmedMappings.date!]), 
                     amount: 0, 
-                    description: `Error Processing Row ${index + 2}`,
+                    description: `Error Processing Row ${rowNumber}`,
                     category: 'Uncategorized',
+                    currency: record[confirmedMappings.currency_code!]?.trim().toUpperCase() || 'N/A',
                     tags: [],
                     originalRecord: record,
                     importStatus: 'error',
@@ -657,16 +421,8 @@ export default function ImportDataPage() {
         });
 
         const errorMappedData = mapped.filter(item => item.importStatus === 'error');
-        const skippedMappedData = mapped.filter(item => item.importStatus === 'skipped');
-        const errorMessages: string[] = [];
         if (errorMappedData.length > 0) {
-             errorMessages.push(`${errorMappedData.length} row(s) had processing errors (e.g., missing account, invalid amount).`);
-        }
-        if (skippedMappedData.length > 0) {
-             errorMessages.push(`${skippedMappedData.length} row(s) were skipped (e.g., opening balance entries or other skipped types).`);
-        }
-        if (errorMessages.length > 0) {
-            setError(`Import Preview Issues: ${errorMessages.join(' ')} Review the tables below.`);
+            setError(`${errorMappedData.length} row(s) had processing errors. Review the tables below.`);
         } else {
             setError(null); 
         }
@@ -678,55 +434,43 @@ export default function ImportDataPage() {
    }
 
 
-    // Preview account changes based on CSV and mappings
     const previewAccountChanges = async (
         csvData: CsvRecord[],
         mappings: ColumnMapping, 
         existingAccountsParam: Account[] 
     ): Promise<{ preview: AccountPreview[] }> => {
+        const accountDetailsMap = await buildAccountUpdateMap(csvData, mappings, existingAccountsParam);
         const preview: AccountPreview[] = [];
-        const processedAccountNames = new Set<string>(); 
+        const processedAccountNames = new Set<string>();
 
-        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccountsParam); 
-
-        accountUpdates.forEach((accDetails, normalizedName) => {
+        accountDetailsMap.forEach((details, normalizedName) => {
             const existingAccount = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
             let action: AccountPreview['action'] = 'no change';
-            let initialBalance: number | undefined = undefined;
-
+            
             if (existingAccount) {
-                let needsUpdate = false;
-                if (accDetails.currency !== existingAccount.currency) needsUpdate = true;
-                if (accDetails.type && accDetails.type !== existingAccount.type) needsUpdate = true;
-                if (accDetails.initialBalance !== undefined && accDetails.initialBalance !== existingAccount.balance) {
-                    needsUpdate = true;
-                    initialBalance = accDetails.initialBalance; 
-                } else {
-                    initialBalance = existingAccount.balance; 
-                }
-
-                if (needsUpdate) {
+                if (details.currency !== existingAccount.currency || (details.initialBalance !== undefined && details.initialBalance !== existingAccount.balance)) {
                     action = 'update';
                 }
-                 preview.push({
-                    name: accDetails.name, 
-                    currency: accDetails.currency,
-                    initialBalance: initialBalance,
+                preview.push({
+                    name: details.name,
+                    currency: details.currency,
+                    initialBalance: details.initialBalance !== undefined ? details.initialBalance : existingAccount.balance,
                     action: action,
-                    existingId: existingAccount.id
+                    existingId: existingAccount.id,
+                    category: existingAccount.category,
                 });
             } else {
-                initialBalance = accDetails.initialBalance ?? 0; 
                 preview.push({
-                    name: accDetails.name,
-                    currency: accDetails.currency,
-                    initialBalance: initialBalance,
+                    name: details.name,
+                    currency: details.currency,
+                    initialBalance: details.initialBalance !== undefined ? details.initialBalance : 0,
                     action: 'create',
+                    category: details.category || 'asset', // Default to asset if not determined
                 });
             }
-             processedAccountNames.add(normalizedName);
+            processedAccountNames.add(normalizedName);
         });
-
+        
         existingAccountsParam.forEach(acc => {
             if (!processedAccountNames.has(acc.name.toLowerCase())) {
                 preview.push({
@@ -735,206 +479,126 @@ export default function ImportDataPage() {
                     initialBalance: acc.balance,
                     action: 'no change',
                     existingId: acc.id,
+                    category: acc.category,
                 });
             }
         });
-
         return { preview };
     };
 
 
-    // Builds a map of account details from CSV, considering opening balances
     const buildAccountUpdateMap = async (
         csvData: CsvRecord[],
         mappings: ColumnMapping, 
         existingAccountsParam: Account[] 
-    ): Promise<Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>> => {
-        const accountUpdates = new Map<string, { name: string; currency: string; type?: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
+    ): Promise<Map<string, { name: string; currency: string; initialBalance?: number; category: 'asset' | 'crypto' }>> => {
+        const accountMap = new Map<string, { name: string; currency: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
 
-        const accountNameCol = mappings.account;
-        const sourceAccountCol = mappings.source_account;
-        const destAccountCol = mappings.destination_account;
-        const accountCurrencyCol = mappings.accountCurrency;
-        const initialBalanceCol = mappings.initialBalance; 
-        const typeCol = mappings.transaction_type; 
-        const amountCol = mappings.amount; 
-        const descCol = mappings.description; 
+        const typeCol = mappings.transaction_type!;
+        const sourceNameCol = mappings.source_name!;
+        const destNameCol = mappings.destination_name!;
+        const amountCol = mappings.amount!;
+        const currencyCol = mappings.currency_code!;
+        const descCol = mappings.description; // For parsing opening balance desc
 
-        csvData.forEach((record, index) => {
-            const typeValueRaw = typeCol ? record[typeCol] : undefined;
-            const typeValue = typeof typeValueRaw === 'string' ? typeValueRaw.trim().toLowerCase() : undefined;
-            
-            const descValueRaw = descCol ? record[descCol] : undefined;
-            const descValue = typeof descValueRaw === 'string' ? descValueRaw.trim() : undefined;
-            const descLower = descValue?.toLowerCase();
-            const initialBalanceDescMatch = descLower?.match(/^saldo inicial para:\s*(.+)$/);
+        for (const record of csvData) {
+            const csvType = record[typeCol]?.trim().toLowerCase();
+            const recordAmount = parseAmount(record[amountCol]);
+            const recordCurrency = record[currencyCol]?.trim().toUpperCase();
 
-            let isOpening = false;
-            let accountNameForBalanceRaw: string | undefined = undefined;
+            if (csvType === 'opening balance') {
+                let accountNameForOpening = record[sourceNameCol]?.trim();
+                // Sometimes Firefly puts the account name in description for opening balance
+                // e.g., "Initial balance for \"My Account\"" or "Saldo inicial para: My Account"
+                const descForOpening = record[descCol]?.trim();
+                if (descForOpening) {
+                    const match = descForOpening.match(/(?:Initial balance for |Saldo inicial para:)\s*["']?([^"']+?)["']?$/i);
+                    if (match && match[1]) {
+                        accountNameForOpening = match[1].trim();
+                    }
+                }
 
-            if (initialBalanceDescMatch) {
-                accountNameForBalanceRaw = initialBalanceDescMatch[1]; // No trim here, already trimmed in descValue
-                isOpening = true;
-                console.log(`Row ${index + 2}: Found 'Saldo inicial para:' description for account "${accountNameForBalanceRaw}".`);
-            } else if (typeValue === 'opening balance') {
-                accountNameForBalanceRaw = accountNameCol ? record[accountNameCol] : undefined;
-                 if (accountNameForBalanceRaw && typeof accountNameForBalanceRaw === 'string') {
-                    isOpening = true;
-                    console.log(`Row ${index + 2}: Found 'opening balance' type for account "${accountNameForBalanceRaw.trim()}".`);
-                 } else {
-                     console.warn(`Row ${index + 2}: 'opening balance' type found, but could not determine account name from the mapped 'Account Name' column ('${accountNameCol}') or value is not a string.`);
-                 }
+                if (accountNameForOpening && recordCurrency && !isNaN(recordAmount)) {
+                    const normalizedName = accountNameForOpening.toLowerCase();
+                    const existing = accountMap.get(normalizedName);
+                    const category = (accountNameForOpening.toLowerCase().includes('crypto') || accountNameForOpening.toLowerCase().includes('wallet')) ? 'crypto' : 'asset';
+                    accountMap.set(normalizedName, {
+                        name: accountNameForOpening,
+                        currency: recordCurrency,
+                        initialBalance: recordAmount, // This is the explicit initial balance
+                        category: existing ? existing.category : category,
+                    });
+                }
+            } else if (csvType === 'withdrawal' || csvType === 'deposit' || csvType === 'transfer') {
+                const sourceName = record[sourceNameCol]?.trim();
+                const destName = record[destNameCol]?.trim();
+                const sourceType = record[mappings.source_type!]?.trim().toLowerCase();
+                const destType = record[mappings.destination_type!]?.trim().toLowerCase();
+
+                let assetAccountName: string | undefined;
+                if (csvType === 'withdrawal') assetAccountName = sourceName;
+                else if (csvType === 'deposit' && sourceType !== 'asset account' && destType === 'asset account') assetAccountName = destName; // Money coming into our asset account
+                else if (csvType === 'deposit' && sourceType === 'asset account') assetAccountName = destName; // Could be a transfer from another of our asset accounts
+                // For transfers, both source_name and destination_name are typically asset accounts
+                // We handle them separately to ensure both are created if new.
+                
+                const accountsToConsider: string[] = [];
+                if (sourceName && (csvType === 'transfer' || csvType === 'withdrawal' || (csvType === 'deposit' && sourceType === 'asset account'))) {
+                    accountsToConsider.push(sourceName);
+                }
+                if (destName && (csvType === 'transfer' || (csvType === 'deposit' && destType === 'asset account'))) {
+                     accountsToConsider.push(destName);
+                }
+
+
+                for (const accNameToConsider of accountsToConsider) {
+                     if (accNameToConsider && recordCurrency) {
+                        const normalizedName = accNameToConsider.toLowerCase();
+                        if (!accountMap.has(normalizedName)) { // Only add if not already set by an opening balance
+                             const existingAppAccount = existingAccountsParam.find(a => a.name.toLowerCase() === normalizedName);
+                             const category = (accNameToConsider.toLowerCase().includes('crypto') || accNameToConsider.toLowerCase().includes('wallet')) ? 'crypto' : 'asset';
+                             accountMap.set(normalizedName, {
+                                name: accNameToConsider,
+                                currency: existingAppAccount?.currency || recordCurrency, // Prefer existing if updating, else from CSV
+                                initialBalance: existingAppAccount?.balance, // Will be undefined if new, filled by opening balance later if exists
+                                category: existingAppAccount?.category || category,
+                            });
+                        } else { // Account already in map (e.g. from another row or opening balance)
+                            // Ensure currency is consistent if possible, prioritize opening balance currency
+                            const currentDetails = accountMap.get(normalizedName)!;
+                            if (!currentDetails.currency && recordCurrency) currentDetails.currency = recordCurrency;
+                            // Don't overwrite initialBalance here if it was set by an opening_balance row
+                        }
+                    }
+                }
             }
-            
-            const accountNameForBalance = typeof accountNameForBalanceRaw === 'string' ? accountNameForBalanceRaw.trim() : undefined;
-
-            if (isOpening && accountNameForBalance) {
-                 const normalizedName = accountNameForBalance.toLowerCase();
-                 let details = accountUpdates.get(normalizedName);
-
-                 if (!details) {
-                     const existingAcc = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
-                     const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
-                     details = {
-                         name: accountNameForBalance, 
-                         currency: existingAcc?.currency || 'BRL', 
-                         type: existingAcc?.type,
-                         initialBalance: existingAcc?.balance, 
-                         category: initialCategory
-                     };
-                     if (!details.type) { 
-                         if (details.category === 'crypto') details.type = 'wallet';
-                         else details.type = 'checking';
-                     }
-                 }
-
-                 let rowCurrency = details.currency; 
-                 if (accountCurrencyCol && record[accountCurrencyCol]) {
-                     const potentialCurrency = record[accountCurrencyCol]!.trim().toUpperCase();
-                     if (supportedCurrencies.includes(potentialCurrency)) {
-                         rowCurrency = potentialCurrency;
-                     }
-                 }
-                 details.currency = rowCurrency;
-
-                 const amountValue = amountCol ? record[amountCol] : undefined;
-                 if (amountValue !== undefined && amountValue !== '') {
-                     const balance = parseAmount(amountValue);
-                     if (!isNaN(balance)) {
-                         details.initialBalance = balance; 
-                         console.log(`Row ${index + 2}: Prioritized opening balance entry for account "${accountNameForBalance}". Set initial balance to: ${balance}`);
-                     } else {
-                         console.warn(`Row ${index + 2}: Could not parse amount "${amountValue}" for opening balance entry for account "${accountNameForBalance}".`);
-                     }
-                 } else {
-                     console.warn(`Row ${index + 2}: Opening balance entry found for account "${accountNameForBalance}", but 'Amount' column ('${amountCol}') is missing or empty.`);
-                 }
-
-                 accountUpdates.set(normalizedName, details);
-            }
-        });
-
-        csvData.forEach((record, index) => {
-             const typeValueRaw = typeCol ? record[typeCol] : undefined;
-             const typeValue = typeof typeValueRaw === 'string' ? typeValueRaw.trim().toLowerCase() : undefined;
-             
-             const descValueRaw = descCol ? record[descCol] : undefined;
-             const descValue = typeof descValueRaw === 'string' ? descValueRaw.trim() : undefined;
-             const descLower = descValue?.toLowerCase();
-             const isOpeningEntry = typeValue === 'opening balance' || descLower?.startsWith('saldo inicial para:');
-
-             if (isOpeningEntry) return; 
-
-             let potentialAccountNamesRaw: (string | undefined)[] = [];
-             // For non-opening balance rows, consider accounts from 'account', 'source_account', 'destination_account'
-             // to ensure all involved accounts are captured for creation/update if they don't exist.
-             potentialAccountNamesRaw = [
-                 accountNameCol ? record[accountNameCol] : undefined,
-                 sourceAccountCol ? record[sourceAccountCol] : undefined,
-                 destAccountCol ? record[destAccountCol] : undefined
-             ];
-             
-             const potentialAccountNames = potentialAccountNamesRaw
-                .filter(name => typeof name === 'string' && name.trim() !== '')
-                .map(name => (name as string).trim());
-
-
-             potentialAccountNames.forEach(name => {
-                 if (name) {
-                     const normalizedName = name.toLowerCase();
-                     let details = accountUpdates.get(normalizedName);
-
-                     if (!details) { // If not already processed (e.g. by an opening balance row)
-                         const existingAcc = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
-                         const initialCategory = existingAcc?.category || ((normalizedName.includes('crypto') || normalizedName.includes('wallet') || normalizedName.includes('binance') || normalizedName.includes('coinbase') || normalizedName.includes('kraken') || normalizedName.includes('ledger') || normalizedName.includes('metamask')) ? 'crypto' : 'asset');
-                          details = {
-                              name: name, 
-                              currency: existingAcc?.currency || 'BRL',
-                              type: existingAcc?.type,
-                              category: initialCategory,
-                              // Do not set initialBalance here from initialBalanceCol unless it's an opening balance row
-                              // or unless this specific account name *only* appears in rows that also have an initialBalanceCol value
-                          };
-                          if (!details.type) {
-                             if (details.category === 'crypto') details.type = 'wallet'; 
-                             else details.type = 'checking'; 
-                          }
-                         accountUpdates.set(normalizedName, details); 
-                     }
-
-                     let finalCurrency = details.currency;
-                      if (accountCurrencyCol && record[accountCurrencyCol]) {
-                          const potentialCurrency = record[accountCurrencyCol]!.trim().toUpperCase();
-                          if (supportedCurrencies.includes(potentialCurrency)) {
-                              finalCurrency = potentialCurrency;
-                          }
-                      }
-                      details.currency = finalCurrency;
-
-                     // Only consider initialBalanceCol for non-opening rows if the account doesn't have one set yet.
-                     // Opening balance rows have higher priority for setting this.
-                     if (details.initialBalance === undefined && initialBalanceCol && record[initialBalanceCol] !== undefined && record[initialBalanceCol] !== '') {
-                         const balance = parseAmount(record[initialBalanceCol]);
-                         if (!isNaN(balance)) {
-                             details.initialBalance = balance;
-                             console.log(`Row ${index + 2}: Set initial balance for account "${name}" from general '${initialBalanceCol}' column: ${balance}.`);
-                         } else {
-                             console.warn(`Row ${index + 2}: Could not parse initial balance "${record[initialBalanceCol]}" for account "${name}" from balance column.`);
-                         }
-                     }
-                      accountUpdates.set(normalizedName, details); 
-                 }
-             });
-        });
-
-         return accountUpdates;
+        }
+        return accountMap;
     }
 
-    // Create or update accounts in localStorage based on the map, get final ID map
     const createOrUpdateAccountsAndGetMap = async (
         csvData: CsvRecord[],
         mappings: ColumnMapping, 
         existingAccountsParam: Account[], 
         isPreviewOnly: boolean = false 
-    ): Promise<{ success: boolean; map: { [key: string]: string } }> => {
+    ): Promise<{ success: boolean; map: { [key: string]: string }, updatedAccountsList: Account[] }> => {
         let success = true;
         const workingMap = existingAccountsParam.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
              return map;
         }, {} as { [key: string]: string });
 
-        const accountUpdates = await buildAccountUpdateMap(csvData, mappings, existingAccountsParam);
+        let currentAppAccounts = [...existingAccountsParam];
+        const accountDetailsMap = await buildAccountUpdateMap(csvData, mappings, currentAppAccounts);
 
-        if (accountUpdates.size === 0 && !isPreviewOnly) {
-            console.log("No account updates needed.");
-            return { success: true, map: workingMap }; 
+        if (accountDetailsMap.size === 0 && !isPreviewOnly) {
+            return { success: true, map: workingMap, updatedAccountsList: currentAppAccounts }; 
         }
 
-        console.log(`Found ${accountUpdates.size} unique accounts in CSV to potentially create or update...`);
         let accountsProcessedCount = 0;
 
-        for (const [normalizedName, accDetails] of accountUpdates.entries()) {
-            const existingAccount = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
+        for (const [normalizedName, accDetails] of accountDetailsMap.entries()) {
+            const existingAccount = currentAppAccounts.find(acc => acc.name.toLowerCase() === normalizedName);
             try {
                 if (isPreviewOnly) {
                     if (existingAccount) {
@@ -950,52 +614,40 @@ export default function ImportDataPage() {
                     const updatedAccountData: Account = { ...existingAccount };
 
                     if (accDetails.currency !== existingAccount.currency) {
-                        console.log(`Updating currency for existing account "${accDetails.name}" from ${existingAccount.currency} to ${accDetails.currency}...`);
                         updatedAccountData.currency = accDetails.currency;
                         needsUpdate = true;
                     }
-                     if (accDetails.type && accDetails.type !== existingAccount.type) {
-                        console.log(`Updating type for existing account "${accDetails.name}" from ${existingAccount.type} to ${accDetails.type}...`);
-                        updatedAccountData.type = accDetails.type;
-                        needsUpdate = true;
-                    }
-
+                    // Crucially, initialBalance from Firefly 'opening balance' rows dictates the starting point.
                     if (accDetails.initialBalance !== undefined && accDetails.initialBalance !== existingAccount.balance) {
-                        console.log(`Updating balance for existing account "${accDetails.name}" from ${existingAccount.balance} to ${accDetails.initialBalance} based on CSV (Opening Entry / Initial Column).`);
                         updatedAccountData.balance = accDetails.initialBalance; 
+                        updatedAccountData.lastActivity = new Date().toISOString(); // Reset activity on balance overwrite
                         needsUpdate = true;
                     }
 
                     if (needsUpdate) {
-                        if(updatedAccountData.balance !== existingAccount.balance) { 
-                           updatedAccountData.lastActivity = new Date().toISOString();
-                        }
                         await updateAccount(updatedAccountData); 
                         accountsProcessedCount++;
-                        console.log(`Successfully updated account: ${updatedAccountData.name} (ID: ${updatedAccountData.id})`);
-                    } else {
-                        console.log(`Account "${accDetails.name}" already exists and is up-to-date.`);
+                        // Update in our local list for subsequent operations in this import run
+                        const idx = currentAppAccounts.findIndex(a => a.id === updatedAccountData.id);
+                        if (idx !== -1) currentAppAccounts[idx] = updatedAccountData;
                     }
                     workingMap[normalizedName] = existingAccount.id; 
-
                 } else {
-                    const balanceToSet = accDetails.initialBalance ?? 0;
-                    console.log(`Attempting to create account "${accDetails.name}" with currency ${accDetails.currency}, type ${accDetails.type}, category ${accDetails.category}, initial balance ${balanceToSet}...`);
                     const newAccountData: NewAccountData = {
                         name: accDetails.name, 
-                        type: accDetails.type!, 
-                        balance: balanceToSet, 
+                        type: (accDetails.category === 'crypto' ? 'wallet' : 'checking'), // Default type
+                        balance: accDetails.initialBalance !== undefined ? accDetails.initialBalance : 0, // Use explicit opening balance or 0
                         currency: accDetails.currency,
-                        providerName: 'Imported', 
-                        category: accDetails.category, 
+                        providerName: 'Imported - ' + accDetails.name, 
+                        category: accDetails.category || 'asset', 
                         isActive: true,
                         lastActivity: new Date().toISOString(), 
                         balanceDifference: 0, 
                     };
                     const createdAccount = await addAccount(newAccountData); 
                     workingMap[normalizedName] = createdAccount.id; 
+                    currentAppAccounts.push(createdAccount);
                     accountsProcessedCount++;
-                    console.log(`Successfully created account: ${createdAccount.name} (ID: ${createdAccount.id}) with initial balance ${balanceToSet}`);
                 }
             } catch (err: any) {
                 console.error(`Failed to process account "${accDetails.name}":`, err);
@@ -1004,31 +656,21 @@ export default function ImportDataPage() {
             }
         }
 
-
         if (accountsProcessedCount > 0 && !isPreviewOnly) {
-            toast({ title: "Accounts Processed", description: `Created or updated ${accountsProcessedCount} accounts based on CSV data.` });
-            try {
-                 const latestAccounts = await getAccounts();
-                 setAccounts(latestAccounts); 
-                 const finalMap = latestAccounts.reduce((map, acc) => {
-                     map[acc.name.toLowerCase().trim()] = acc.id;
-                     return map;
-                 }, {} as { [key: string]: string });
-                 console.log("Final account map after creation/updates:", finalMap);
-                 return { success, map: finalMap };
-            } catch (fetchError) {
-                 console.error("Failed to refetch accounts after updates:", fetchError);
-                 success = false; 
-                 return { success, map: workingMap }; 
-            }
-
+            toast({ title: "Accounts Processed", description: `Created or updated ${accountsProcessedCount} accounts.` });
+             // No need to refetch from localStorage, currentAppAccounts is the latest state
+             setAccounts(currentAppAccounts); 
+             // Rebuild the map from the *actually* created/updated accounts
+             const finalMap = currentAppAccounts.reduce((map, acc) => {
+                 map[acc.name.toLowerCase().trim()] = acc.id;
+                 return map;
+             }, {} as { [key: string]: string });
+             return { success, map: finalMap, updatedAccountsList: currentAppAccounts };
         }
-
-        return { success, map: workingMap }; 
+        return { success, map: workingMap, updatedAccountsList: currentAppAccounts }; 
     };
 
 
-   // Adds categories from CSV that don't exist yet
    const addMissingCategories = async (transactions: MappedTransaction[]): Promise<boolean> => {
       const currentCategories = await getCategories(); 
       const existingCategoryNames = new Set(currentCategories.map(cat => cat.name.toLowerCase()));
@@ -1045,7 +687,6 @@ export default function ImportDataPage() {
       });
 
       if (categoriesToAdd.size > 0) {
-          console.log(`Found ${categoriesToAdd.size} new categories to add:`, Array.from(categoriesToAdd));
           let categoriesAddedCount = 0;
           const addPromises = Array.from(categoriesToAdd).map(async (catName) => {
               try {
@@ -1056,30 +697,18 @@ export default function ImportDataPage() {
                       console.error(`Failed to add category "${catName}":`, err);
                       toast({ title: "Category Add Error", description: `Could not add category "${catName}". Error: ${err.message}`, variant: "destructive" });
                       success = false; 
-                  } else {
-                      console.log(`Category "${catName}" likely created concurrently or already existed.`);
                   }
               }
           });
-
           await Promise.all(addPromises);
-
           if (categoriesAddedCount > 0) {
-            toast({ title: "Categories Added", description: `Added ${categoriesAddedCount} new categories found in CSV.` });
-             try {
-                const updatedCategoriesList = await getCategories();
-                setCategories(updatedCategoriesList); 
-             } catch { console.error("Failed to refetch categories after add."); }
-          } else if (categoriesToAdd.size > 0) { 
-              toast({ title: "Categories Processed", description: `Checked ${categoriesToAdd.size} categories found in CSV.` });
+            toast({ title: "Categories Added", description: `Added ${categoriesAddedCount} new categories.` });
+             try { setCategories(await getCategories()); } catch { console.error("Failed to refetch categories."); }
           }
-      } else {
-          console.log("No new categories found in pending transactions.");
       }
       return success;
    };
 
-    // Adds tags from CSV that don't exist yet
     const addMissingTags = async (transactions: MappedTransaction[]): Promise<boolean> => {
         const currentTags = await getTags(); 
         const existingTagNames = new Set(currentTags.map(tag => tag.name.toLowerCase()));
@@ -1098,7 +727,6 @@ export default function ImportDataPage() {
         });
 
         if (tagsToAdd.size > 0) {
-            console.log(`Found ${tagsToAdd.size} new tags to add:`, Array.from(tagsToAdd));
             let tagsAddedCount = 0;
             const addPromises = Array.from(tagsToAdd).map(async (tagName) => {
                 try {
@@ -1109,25 +737,14 @@ export default function ImportDataPage() {
                         console.error(`Failed to add tag "${tagName}":`, err);
                         toast({ title: "Tag Add Error", description: `Could not add tag "${tagName}". Error: ${err.message}`, variant: "destructive" });
                         success = false;
-                    } else {
-                        console.log(`Tag "${tagName}" likely created concurrently or already existed.`);
                     }
                 }
             });
-
             await Promise.all(addPromises);
-
              if (tagsAddedCount > 0) {
-                toast({ title: "Tags Added", description: `Added ${tagsAddedCount} new tags found in CSV.` });
-                 try {
-                    const updatedTagsList = await getTags();
-                    setTags(updatedTagsList); 
-                 } catch { console.error("Failed to refetch tags after add."); }
-            } else if (tagsToAdd.size > 0) {
-                 toast({ title: "Tags Processed", description: `Checked ${tagsToAdd.size} tags found in CSV.` });
+                toast({ title: "Tags Added", description: `Added ${tagsAddedCount} new tags.` });
+                 try { setTags(await getTags()); } catch { console.error("Failed to refetch tags."); }
             }
-        } else {
-            console.log("No new tags found in pending transactions.");
         }
         return success;
     };
@@ -1145,177 +762,160 @@ export default function ImportDataPage() {
       setImportProgress(0);
       setError(null); 
       let overallError = false;
-      let latestAccountsState: Account[] = [...accounts]; 
-      let localFinalAccountMap: { [key: string]: string } = {}; 
-
-
-        console.log("Finalizing account creation/updates before import...");
-        try {
-            const { success: finalAccountMapSuccess, map: finalMapFromAccountCreation } = await createOrUpdateAccountsAndGetMap(
-                rawData, 
-                columnMappings, 
-                latestAccountsState, 
-                false 
-            );
-
-            if (!finalAccountMapSuccess) {
-                setError("Error finalizing account mapping before import. Check console.");
-                setIsLoading(false);
-                return;
-            }
-            localFinalAccountMap = finalMapFromAccountCreation; 
-            setFinalAccountMapForImport(finalMapFromAccountCreation); 
-            console.log("Using local FINAL account map for import execution:", localFinalAccountMap);
-
-            latestAccountsState = await getAccounts(); 
-            setAccounts(latestAccountsState); 
-
-      } catch (finalAccountMapError: any) {
-          console.error("Error during account preparation phase:", finalAccountMapError);
-            setError(`Critical error during account preparation: ${finalAccountMapError.message}. Import aborted.`);
-          toast({
-              title: "Import Failed",
-              description: "Could not prepare accounts for import.",
-              variant: "destructive",
-          });
+      
+      // 1. Finalize Account Creation/Updates and get the definitive map
+      const { success: finalAccountMapSuccess, map: finalMap, updatedAccountsList } = await createOrUpdateAccountsAndGetMap(
+          rawData, columnMappings, accounts, false 
+      );
+      if (!finalAccountMapSuccess) {
+          setError("Error finalizing accounts before import. Some accounts might not have been created/updated correctly. Import aborted.");
           setIsLoading(false);
-          return; 
+          return;
       }
+      setAccounts(updatedAccountsList); // Update global accounts state with latest
+      setFinalAccountMapForImport(finalMap); // This is the critical map for transaction linking
 
-      console.log("Adding missing categories...");
+      // 2. Add Missing Categories and Tags
       const categoriesSuccess = await addMissingCategories(recordsToImport);
-      console.log("Adding missing tags...");
       const tagsSuccess = await addMissingTags(recordsToImport);
-
       if (!categoriesSuccess || !tagsSuccess) {
-         setError("Error adding categories or tags. Import halted. Check console.");
+         setError("Error adding categories or tags. Import halted.");
          setIsLoading(false);
          return; 
       }
-
-      console.log("Fetching latest categories and tags before import...");
       let currentCategoriesList = await getCategories(); 
       let currentTagsList = await getTags(); 
 
       const totalToImport = recordsToImport.length;
       let importedCount = 0;
       let errorCount = 0;
-      const updatedData = [...parsedData]; 
+      const updatedDataForDisplay = [...parsedData]; 
 
-      console.log(`Starting import of ${totalToImport} pending transactions...`);
+      // 3. Process Transactions
+      // Create a new array for actual transaction payloads to avoid modifying balances multiple times
+      const transactionPayloads: (Omit<Transaction, 'id'> & { originalMappedTx: MappedTransaction })[] = [];
 
-      for (let i = 0; i < updatedData.length; i++) {
-          const item = updatedData[i];
-          const rowNumber = i + 2; 
-
-          if (item.importStatus !== 'pending') {
-              if(item.importStatus === 'error') errorCount++;
-              continue; 
+      for (const item of recordsToImport) {
+          const rowNumber = rawData.indexOf(item.originalRecord) + 2;
+          if (item.csvTransactionType === 'opening balance') {
+              const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+              if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'skipped', errorMessage: 'Opening Balance (handled via account balance)' };
+              continue; // Skip creating a transaction for opening balances
           }
 
-           if (item.category === 'Opening Balance') {
-               console.log(`Row ${rowNumber}: Skipping transaction import for opening balance (already handled).`);
-               updatedData[i] = { ...item, importStatus: 'skipped', errorMessage: 'Opening Balance (handled via account balance)' };
-               setParsedData([...updatedData]); 
-               continue;
-           }
+          const transactionCategory = currentCategoriesList.find(c => c.name.toLowerCase() === item.category.toLowerCase())?.name || 'Uncategorized';
+          const transactionTags = item.tags?.map(tName => currentTagsList.find(t => t.name.toLowerCase() === tName.toLowerCase())?.name || tName).filter(Boolean) || [];
+
+          if (item.csvTransactionType === 'transfer') {
+              if (!item.csvRawSourceName || !item.csvRawDestinationName) {
+                  const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                  if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Transfer missing source or destination name.` };
+                  errorCount++; overallError = true; continue;
+              }
+              const sourceAccountId = finalMap[item.csvRawSourceName.toLowerCase()];
+              const destAccountId = finalMap[item.csvRawDestinationName.toLowerCase()];
+
+              if (!sourceAccountId || !destAccountId) {
+                   const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                   if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Could not find accounts for transfer: ${item.csvRawSourceName} -> ${item.csvRawDestinationName}. Map: ${JSON.stringify(finalMap)}` };
+                  errorCount++; overallError = true; continue;
+              }
+              if (sourceAccountId === destAccountId) {
+                  const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                   if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Transfer source and destination accounts are the same.` };
+                  errorCount++; overallError = true; continue;
+              }
+              
+              const transferAmount = Math.abs(item.amount); // Amount is positive for Firefly 'transfer' type
+              if (isNaN(transferAmount) || transferAmount <= 0) {
+                   const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                   if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Invalid or zero transfer amount (${item.amount}).` };
+                   errorCount++; overallError = true; continue;
+              }
+
+              transactionPayloads.push({
+                  accountId: sourceAccountId, date: item.date, amount: -transferAmount,
+                  description: item.description, category: 'Transfer', tags: transactionTags,
+                  originalMappedTx: item,
+              });
+              transactionPayloads.push({
+                  accountId: destAccountId, date: item.date, amount: transferAmount,
+                  description: item.description, category: 'Transfer', tags: transactionTags,
+                  originalMappedTx: item, // Both legs point to the same original CSV row
+              });
+
+          } else if (item.csvTransactionType === 'withdrawal' || item.csvTransactionType === 'deposit') {
+              let accountNameForTx: string | undefined;
+              if (item.csvTransactionType === 'withdrawal') {
+                  accountNameForTx = item.csvRawSourceName;
+              } else { // deposit
+                  // Firefly: if source_type is 'Revenue Account', then destination_name is our asset account.
+                  // Otherwise, if source_type is 'Asset Account', destination_name is also our asset account (internal transfer treated as deposit by some CSVs)
+                  const sourceType = item.originalRecord[columnMappings.source_type!]?.trim().toLowerCase();
+                  if (sourceType === 'revenue account' || sourceType === 'loan' || sourceType === 'debt' || !sourceType) { // Treat no type or non-asset as external income
+                       accountNameForTx = item.csvRawDestinationName;
+                  } else if (sourceType === 'asset account') { // Could be a transfer mislabeled as deposit
+                       console.warn(`Row ${rowNumber}: 'deposit' type with 'source_type: asset account'. This might be part of a transfer. Importing to: ${item.csvRawDestinationName}. Source: ${item.csvRawSourceName}`);
+                       accountNameForTx = item.csvRawDestinationName; // Target for deposit
+                  } else {
+                       accountNameForTx = item.csvRawDestinationName; // Default to destination for deposit
+                  }
+              }
+
+              if (!accountNameForTx) {
+                   const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                   if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Could not determine asset account for ${item.csvTransactionType}.` };
+                   errorCount++; overallError = true; continue;
+              }
+
+              const accountIdForTx = finalMap[accountNameForTx.toLowerCase()];
+              if (!accountIdForTx) {
+                   const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                   if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Could not find account ID for "${accountNameForTx}". Map: ${JSON.stringify(finalMap)}` };
+                   errorCount++; overallError = true; continue;
+              }
+              
+              // Amount sign should be correct from Firefly CSV for withdrawal/deposit
+              if (isNaN(item.amount)) {
+                    const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+                    if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Invalid amount for import.` };
+                    errorCount++; overallError = true; continue;
+              }
+              // Ensure withdrawal is negative, deposit is positive
+              let finalAmount = item.amount;
+              if(item.csvTransactionType === 'withdrawal' && item.amount > 0) finalAmount = -item.amount;
+              if(item.csvTransactionType === 'deposit' && item.amount < 0) finalAmount = -item.amount;
 
 
+              transactionPayloads.push({
+                  accountId: accountIdForTx, date: item.date, amount: finalAmount,
+                  description: item.description, category: transactionCategory, tags: transactionTags,
+                  originalMappedTx: item,
+              });
+          } else {
+               const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord);
+               if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...item, importStatus: 'error', errorMessage: `Row ${rowNumber}: Unknown Firefly transaction type "${item.csvTransactionType}".` };
+               errorCount++; overallError = true;
+          }
+      }
+
+      // 4. Add all transaction payloads (this updates balances in addTransaction)
+      for (const payload of transactionPayloads) {
+          const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === payload.originalMappedTx.originalRecord);
           try {
-               const categoryName = item.category?.trim() || 'Uncategorized';
-               const foundCategory = currentCategoriesList.find(c => c.name.toLowerCase() === categoryName.toLowerCase());
-               const finalCategoryName = foundCategory ? foundCategory.name : 'Uncategorized';
-               if (categoryName !== 'Uncategorized' && !foundCategory && categoryName !== 'Transfer' && categoryName !== 'Initial Balance') {
-                   console.warn(`Row ${rowNumber}: Category "${categoryName}" specified but not found after add attempt. Defaulting to 'Uncategorized'.`);
-               }
-
-               const finalTags = item.tags?.map(importedTagName => {
-                   const trimmedTagName = importedTagName.trim();
-                   const foundTag = currentTagsList.find(t => t.name.toLowerCase() === trimmedTagName.toLowerCase());
-                    if (!foundTag && trimmedTagName) console.warn(`Row ${rowNumber}: Tag "${trimmedTagName}" not found after add attempt.`);
-                   return foundTag ? foundTag.name : trimmedTagName; 
-               }).filter(Boolean) || [];
-
-
-                if (item.category === 'Transfer' && item.csvSourceAccountNameKey && item.csvDestAccountNameKey) {
-                     const sourceId = localFinalAccountMap[item.csvSourceAccountNameKey]; 
-                     const destId = localFinalAccountMap[item.csvDestAccountNameKey]; 
-
-                     if (!sourceId) throw new Error(`Transfer Import Error - Row ${rowNumber}: Could not find final source account ID for "${item.csvSourceAccountNameKey}". Map: ${JSON.stringify(localFinalAccountMap)}`);
-                     if (!destId) throw new Error(`Transfer Import Error - Row ${rowNumber}: Could not find final destination account ID for "${item.csvDestAccountNameKey}". Map: ${JSON.stringify(localFinalAccountMap)}`);
-                     if (sourceId === destId) throw new Error(`Transfer Import Error - Row ${rowNumber}: Source and destination accounts are the same ("${item.csvSourceAccountNameKey}"). This was unexpected after processing. `);
-
-
-                     const transferAmount = Math.abs(item.amount); 
-                     if (isNaN(transferAmount) || transferAmount <= 0) {
-                         throw new Error(`Transfer Import Error - Row ${rowNumber}: Invalid or zero transfer amount (${item.amount}).`);
-                     }
-
-                     const transferDate = item.date; 
-                     const transferDesc = item.description || `Transfer from ${item.csvSourceAccountNameKey} to ${item.csvDestAccountNameKey}`;
-                     const transferTags = finalTags;
-
-                     await addTransaction({
-                         accountId: sourceId,
-                         date: transferDate,
-                         amount: -transferAmount, 
-                         description: transferDesc,
-                         category: 'Transfer', 
-                         tags: transferTags,
-                     });
-                     await addTransaction({
-                         accountId: destId,
-                         date: transferDate,
-                         amount: transferAmount, 
-                         description: transferDesc,
-                         category: 'Transfer',
-                         tags: transferTags,
-                     });
-                     console.log(`Row ${rowNumber}: Successfully imported transfer: ${transferDesc}, Amount: ${transferAmount}`);
-
-                 } else if (item.csvAccountNameKey) { // Standard income/expense
-                     const accountNameForTx = item.csvAccountNameKey;
-                     const accountIdForImport = localFinalAccountMap[accountNameForTx]; 
-
-                     if (!accountIdForImport) {
-                          throw new Error(`Row ${rowNumber}: Could not find final account ID for account name "${accountNameForTx}". Map: ${JSON.stringify(localFinalAccountMap)}`);
-                     }
-                     if (accountIdForImport.startsWith('skipped_') || accountIdForImport.startsWith('error_') || accountIdForImport.startsWith('preview_')) {
-                         throw new Error(`Invalid account ID reference ('${accountIdForImport}') for import.`);
-                     }
-                     if (isNaN(item.amount)) { 
-                          throw new Error(`Invalid amount for import.`);
-                     }
-
-                     const transactionPayload: Omit<Transaction, 'id'> = {
-                        accountId: accountIdForImport,
-                        date: item.date, 
-                        amount: item.amount, 
-                        description: item.description,
-                        category: finalCategoryName,
-                        tags: finalTags,
-                     };
-                    await addTransaction(transactionPayload);
-                    console.log(`Row ${rowNumber}: Successfully imported ${item.amount >= 0 ? 'income' : 'expense'}: ${item.description}, Amount: ${item.amount} into Account ID: ${accountIdForImport}`);
-                 } else {
-                    throw new Error(`Row ${rowNumber}: Transaction is not a transfer and has no primary account key (csvAccountNameKey).`);
-                 }
-
-
-              updatedData[i] = { ...item, importStatus: 'success', errorMessage: undefined };
+              await addTransaction(payload);
+              if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'success', errorMessage: undefined };
               importedCount++;
           } catch (err: any) {
-              console.error(`Failed to import record (Row ${rowNumber}): "${item.description || 'N/A'}"`, err);
-              updatedData[i] = { ...item, importStatus: 'error', errorMessage: err.message || 'Unknown import error' };
+              console.error(`Failed to import transaction for original row:`, payload.originalMappedTx.originalRecord, err);
+               if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'error', errorMessage: err.message || 'Unknown import error' };
               errorCount++;
               overallError = true;
-               setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
           }
-
-          setImportProgress(calculateProgress(importedCount + errorCount, totalToImport));
-           setParsedData([...updatedData]);
-
+          setImportProgress(calculateProgress(importedCount + errorCount, recordsToImport.length)); // Use recordsToImport.length for total
+          setParsedData([...updatedDataForDisplay]); // Update UI incrementally
       }
+
 
       setIsLoading(false);
       const finalMessage = `Import finished. Success: ${importedCount}. Failed/Skipped: ${errorCount + parsedData.filter(d => d.importStatus === 'skipped' && d.category !== 'Opening Balance').length}.`;
@@ -1325,14 +925,16 @@ export default function ImportDataPage() {
         variant: overallError ? "destructive" : "default",
         duration: 7000,
       });
+
       if (overallError) {
-         setError(`Import finished with ${errorCount} errors/skipped rows. Please review the table.`);
+         setError(`Import finished with ${errorCount} errors. Please review the table.`);
       } else {
          setError(null); 
-          console.log("Dispatching storage event to notify other components of potential updates.");
-         window.dispatchEvent(new Event('storage'));
+         // Trigger a full data refresh for other components if needed
+         window.dispatchEvent(new Event('storage')); 
       }
-
+      // Final refetch of accounts to update UI if balances changed
+      setAccounts(await getAccounts());
    };
 
 
@@ -1341,14 +943,13 @@ export default function ImportDataPage() {
       return Math.round((processed / total) * 100);
   }
 
-    // Clear all app data (for testing/reset)
     const handleClearAccounts = async () => {
         setIsClearing(true);
         try {
             localStorage.removeItem('userAccounts');
             localStorage.removeItem('userCategories');
             localStorage.removeItem('userTags');
-            clearAllSessionTransactions();
+            clearAllSessionTransactions(); // This clears the in-memory store
 
             setAccounts([]);
             setCategories([]);
@@ -1365,8 +966,7 @@ export default function ImportDataPage() {
             const fileInput = document.getElementById('csv-file') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
 
-
-            toast({ title: "Data Cleared", description: "All accounts, categories, tags, and imported transactions have been removed." });
+            toast({ title: "Data Cleared", description: "All accounts, categories, tags, and imported transactions have been removed from this session and local storage." });
             window.dispatchEvent(new Event('storage')); 
         } catch (err) {
             console.error("Failed to clear data:", err);
@@ -1376,10 +976,9 @@ export default function ImportDataPage() {
         }
     };
 
-    // Handle inline editing of transactions in the preview table
     const handleTransactionFieldChange = (
-        originalIndexInData: number, // Use the original index in parsedData
-        field: 'description' | 'category' | 'tags' | 'amount' | 'date', 
+        originalIndexInData: number, 
+        field: 'description' | 'category' | 'tags' | 'amount' | 'date' | 'currency', 
         value: string
     ) => {
         setParsedData(prevData => {
@@ -1418,16 +1017,21 @@ export default function ImportDataPage() {
                             const d = new Date(value); 
                             if (!isNaN(d.getTime())) {
                                 transactionToUpdate.date = format(d, 'yyyy-MM-dd'); 
-                            } else {
-                                throw new Error("Invalid date object");
-                            }
+                            } else { throw new Error("Invalid date object"); }
                         } catch {
                             toast({ title: "Invalid Date", description: "Date not updated. Please use YYYY-MM-DD format or select a valid date.", variant: "destructive" });
                             return prevData; 
                         }
-                    }
-                    else { 
+                    } else { 
                         toast({ title: "Invalid Date", description: "Date not updated. Please select a valid date.", variant: "destructive" });
+                        return prevData;
+                    }
+                    break;
+                case 'currency':
+                    if (supportedCurrencies.includes(value.toUpperCase())) {
+                        transactionToUpdate.currency = value.toUpperCase();
+                    } else {
+                        toast({ title: "Invalid Currency", description: `Currency ${value} not supported.`, variant: "destructive"});
                         return prevData;
                     }
                     break;
@@ -1444,38 +1048,39 @@ export default function ImportDataPage() {
     const grouped: { [accountDisplayName: string]: MappedTransaction[] } = {};
 
     parsedData.forEach(item => {
+        let accountKeyForGrouping = "Unknown / Skipped / Error";
         let accountDisplayName = "Unknown / Skipped / Error";
-        let accountKeyForGrouping = item.csvAccountNameKey || item.csvSourceAccountNameKey || `error-${item.errorMessage?.substring(0,10)}`;
-
 
         if (item.importStatus === 'error' || item.importStatus === 'skipped') {
              accountDisplayName = item.errorMessage?.includes("Opening Balance") 
-                ? `Account Creation: ${item.description.split(':').pop()?.trim() || item.csvAccountNameKey || 'N/A'}` 
+                ? `Account Balance Update: ${item.description.split(':').pop()?.trim() || item.csvRawSourceName || item.csvRawDestinationName || 'N/A'}` 
                 : `Errors / Skipped Transactions`;
-             accountKeyForGrouping = `system-${item.importStatus}`;
-        } else if (item.category === 'Transfer' && item.csvSourceAccountNameKey && item.csvDestAccountNameKey) {
-            const sourceAcc = accounts.find(a => a.name.toLowerCase() === item.csvSourceAccountNameKey) || accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvSourceAccountNameKey);
-            const destAcc = accounts.find(a => a.name.toLowerCase() === item.csvDestAccountNameKey) || accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvDestAccountNameKey);
-            accountDisplayName = `Transfer from: ${sourceAcc?.name || item.csvSourceAccountNameKey} to: ${destAcc?.name || item.csvDestAccountNameKey}`;
-            accountKeyForGrouping = `transfer-${item.csvSourceAccountNameKey}-to-${item.csvDestAccountNameKey}`;
-
-        } else if (item.csvAccountNameKey) {
-            const accPreview = accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvAccountNameKey);
-            const existingAcc = accounts.find(a => a.name.toLowerCase() === item.csvAccountNameKey);
-            accountDisplayName = accPreview?.name || existingAcc?.name || item.csvAccountNameKey;
-            accountKeyForGrouping = item.csvAccountNameKey;
+             accountKeyForGrouping = `system-${item.importStatus}-${item.errorMessage?.substring(0,20) || 'general'}`;
+        } else if (item.csvTransactionType === 'transfer') {
+            const sourceAccPreview = accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvRawSourceName?.toLowerCase());
+            const destAccPreview = accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvRawDestinationName?.toLowerCase());
+            const sourceName = sourceAccPreview?.name || item.csvRawSourceName || 'Unknown Source';
+            const destName = destAccPreview?.name || item.csvRawDestinationName || 'Unknown Destination';
+            accountDisplayName = `Transfer: ${sourceName} -> ${destName}`;
+            accountKeyForGrouping = `transfer-${sourceName}->${destName}`;
+        } else if (item.csvTransactionType === 'withdrawal') {
+            const accPreview = accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvRawSourceName?.toLowerCase());
+            accountDisplayName = accPreview?.name || item.csvRawSourceName || 'Unknown Account';
+            accountKeyForGrouping = `account-${accountDisplayName}`;
+        } else if (item.csvTransactionType === 'deposit') {
+             const accPreview = accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvRawDestinationName?.toLowerCase());
+            accountDisplayName = accPreview?.name || item.csvRawDestinationName || 'Unknown Account';
+            accountKeyForGrouping = `account-${accountDisplayName}`;
         }
         
-        const key = accountKeyForGrouping || 'unknown_account_group';
-        if (!grouped[key]) {
-            grouped[key] = [];
+        if (!grouped[accountKeyForGrouping]) {
+            grouped[accountKeyForGrouping] = [];
         }
-        // Add a temporary display name to the item for the header
-        (item as any)._accountDisplayNameForGroup = accountDisplayName;
-        grouped[key].push(item);
+        (item as any)._accountDisplayNameForGroup = accountDisplayName; // Temporary for header
+        grouped[accountKeyForGrouping].push(item);
     });
     return grouped;
-  }, [parsedData, finalAccountMapForImport, accountPreviewData, accounts]);
+  }, [parsedData, accountPreviewData]);
 
 
   return (
@@ -1486,7 +1091,7 @@ export default function ImportDataPage() {
         <CardHeader>
           <CardTitle>Step 1: Upload CSV File</CardTitle>
           <CardDescription>
-            Select the CSV file containing your transactions. Ensure it has a header row. Formats like Firefly III export are best supported.
+            Select your CSV file. Firefly III export format is best supported. Map columns carefully in the next step.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1506,7 +1111,7 @@ export default function ImportDataPage() {
 
           <div className="flex flex-wrap gap-4">
              <Button onClick={handleParseAndMap} disabled={!file || isLoading}>
-                {isLoading && !isMappingDialogOpen ? "Parsing..." : "Parse & Map Columns"}
+                {isLoading && !isMappingDialogOpen ? "Parsing..." : "Parse &amp; Map Columns"}
              </Button>
              <Button onClick={handleImport} disabled={isLoading || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
                {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Transactions"}
@@ -1547,18 +1152,14 @@ export default function ImportDataPage() {
                 <DialogHeader>
                     <DialogTitle>Step 2: Map CSV Columns</DialogTitle>
                     <DialogDescription>
-                        Match columns from your CSV (right) to application fields (left).
-                        Essential fields: Date, Account Name (or Source/Destination), and Amount (either signed or income/expense pair).
-                        We've tried to guess based on common headers. Map 'Initial Balance' if available. Map 'Transaction Type' or 'Description' if your CSV uses them to indicate initial balances (e.g., "opening balance", "Saldo inicial para:").
+                        Match CSV columns (right) to application fields (left). For Firefly III CSVs, ensure 'type', 'amount', 'currency_code', 'date', 'source_name', and 'destination_name' are correctly mapped.
                     </DialogDescription>
                 </DialogHeader>
                 <CsvMappingForm
                     csvHeaders={csvHeaders}
                     initialMappings={columnMappings}
                     onSubmit={processAndMapData} 
-                    onCancel={() => {
-                        setIsMappingDialogOpen(false);
-                    }}
+                    onCancel={() => setIsMappingDialogOpen(false)}
                 />
             </DialogContent>
         </Dialog>
@@ -1567,8 +1168,8 @@ export default function ImportDataPage() {
        {accountPreviewData.length > 0 && !isLoading && (
             <Card className="mb-8">
                 <CardHeader>
-                    <CardTitle>Step 2.5: Account Changes Preview</CardTitle>
-                    <CardDescription>Review the accounts that will be created or updated based on the CSV data and mappings. Initial balances are derived from 'Opening Balance' type rows, 'Saldo inicial para:' descriptions, 'Initial Balance' columns, or existing data.</CardDescription>
+                    <CardTitle>Account Changes Preview</CardTitle>
+                    <CardDescription>Review accounts to be created or updated. Initial balances are primarily from 'Opening Balance' rows in Firefly III CSVs.</CardDescription>
                 </CardHeader>
                 <CardContent>
                     <div className="max-h-[300px] overflow-y-auto border rounded-md">
@@ -1591,7 +1192,7 @@ export default function ImportDataPage() {
                                         <TableCell className="capitalize">{acc.action}</TableCell>
                                         <TableCell>{acc.currency}</TableCell>
                                         <TableCell className="text-right">
-                                            {acc.initialBalance !== undefined ? formatCurrency(acc.initialBalance, acc.currency, undefined, false) : 'N/A'}
+                                            {formatCurrency(acc.initialBalance, acc.currency, undefined, false)}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -1606,66 +1207,38 @@ export default function ImportDataPage() {
       {parsedData.length > 0 && (
         <Card>
           <CardHeader>
-            <CardTitle>Step 3: Review &amp; Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
-            <CardDescription>Review the mapped transactions. Rows marked 'Error' or 'Skipped' (like Opening Balances) will not be imported. Adjust mappings if needed by clicking "Parse &amp; Map Columns" again with the same file. Click "Import Transactions" above when ready.</CardDescription>
+            <CardTitle>Review &amp; Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
+            <CardDescription>Review transactions. Rows marked 'Error' or 'Skipped' (like Opening Balances) won't be imported as transactions. Edit fields if needed. Click "Import Transactions" above when ready.</CardDescription>
           </CardHeader>
           <CardContent>
            {Object.entries(groupedTransactionsForPreview).map(([accountGroupKey, transactionsInGroup]) => {
                 const firstTransactionInGroup = transactionsInGroup[0];
-                // Use the temporary display name stored on the item, or derive from key
                 const accountDisplayName = (firstTransactionInGroup as any)._accountDisplayNameForGroup || accountGroupKey;
                 const isErrorSkippedGroup = accountGroupKey.startsWith('system-');
-                const isTransferGroup = accountGroupKey.startsWith('transfer-');
-
-
+                
                 return (
                     <div key={accountGroupKey} className="mb-6">
                          <h3 className="text-lg font-semibold mb-2 sticky top-0 bg-background py-1 z-10">
-                            {isErrorSkippedGroup ? accountDisplayName : 
-                             isTransferGroup ? `Transfer: ${accountDisplayName.replace('transfer-','').replace('-to-', ' to ')}` : 
-                             `Account: ${accountDisplayName}`
-                            }
+                            {accountDisplayName}
                          </h3>
                         <div className="max-h-[400px] overflow-y-auto border rounded-md">
                             <Table>
                                 <TableHeader>
                                 <TableRow>
                                     <TableHead>Date</TableHead>
-                                    {!isErrorSkippedGroup && columnMappings.destination_account && <TableHead>Dest Acc (CSV)</TableHead>}
-                                    {!isErrorSkippedGroup && columnMappings.transaction_type && <TableHead>Type (CSV)</TableHead>}
+                                    <TableHead>CSV Type</TableHead>
                                     <TableHead>Description</TableHead>
                                     <TableHead>Category</TableHead>
                                     <TableHead>Tags</TableHead>
                                     <TableHead className="text-right">Amount</TableHead>
+                                    <TableHead>Currency</TableHead>
                                     <TableHead>Status</TableHead>
                                     <TableHead className="min-w-[150px]">Message / Info</TableHead>
                                 </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                 {transactionsInGroup.map((item, index) => {
-                                    let displayCurrency = '???';
-                                    let accountForDisplay;
-
-                                    if (item.csvAccountNameKey) {
-                                        accountForDisplay = accounts.find(acc => acc.name.toLowerCase() === item.csvAccountNameKey) || accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvAccountNameKey);
-                                    } else if (item.csvSourceAccountNameKey) { // For transfers, use source account currency
-                                        accountForDisplay = accounts.find(acc => acc.name.toLowerCase() === item.csvSourceAccountNameKey) || accountPreviewData.find(ap => ap.name.toLowerCase() === item.csvSourceAccountNameKey);
-                                    }
-                                    
-                                    if (accountForDisplay) {
-                                        displayCurrency = accountForDisplay.currency;
-                                    } else if (columnMappings.accountCurrency && item.originalRecord[columnMappings.accountCurrency!]) {
-                                        const potentialCurrency = item.originalRecord[columnMappings.accountCurrency!]!.trim().toUpperCase();
-                                        if (supportedCurrencies.includes(potentialCurrency)) {
-                                            displayCurrency = potentialCurrency;
-                                        }
-                                    }
-                                     // Find the original index of this item in the `parsedData` array
-                                    const originalIndex = parsedData.findIndex(pItem => 
-                                        pItem.originalRecord === item.originalRecord && // Simplistic match, might need more robust key
-                                        pItem.date === item.date && 
-                                        pItem.description === item.description
-                                    );
+                                    const originalIndex = parsedData.findIndex(pItem => pItem.originalRecord === item.originalRecord && pItem.date === item.date && pItem.description === item.description);
 
                                     return (
                                         <TableRow key={`${accountGroupKey}-${index}-${item.originalRecord?.Date || index}`} className={cn(
@@ -1677,8 +1250,7 @@ export default function ImportDataPage() {
                                             <TableCell className="whitespace-nowrap max-w-[120px]">
                                                 <Input type="date" value={item.date} onChange={(e) => handleTransactionFieldChange(originalIndex, 'date', e.target.value)} className="h-8 text-xs p-1" />
                                             </TableCell>
-                                            {!isErrorSkippedGroup && columnMappings.destination_account && <TableCell className="max-w-[150px] truncate" title={item.originalRecord[columnMappings.destination_account!]}>{item.originalRecord[columnMappings.destination_account!]}</TableCell>}
-                                            {!isErrorSkippedGroup && columnMappings.transaction_type && <TableCell className="capitalize max-w-[100px] truncate" title={item.originalRecord[columnMappings.transaction_type!]}>{item.originalRecord[columnMappings.transaction_type!]}</TableCell>}
+                                            <TableCell className="max-w-[100px] truncate" title={item.csvTransactionType}>{item.csvTransactionType}</TableCell>
                                             <TableCell className="max-w-[200px]">
                                                 <Input value={item.description || ''} onChange={(e) => handleTransactionFieldChange(originalIndex, 'description', e.target.value)} className="h-8 text-xs p-1" />
                                             </TableCell>
@@ -1690,7 +1262,9 @@ export default function ImportDataPage() {
                                             </TableCell>
                                             <TableCell className="text-right whitespace-nowrap">
                                                 <Input type="number" step="0.01" value={item.amount?.toString() || ''} onChange={(e) => handleTransactionFieldChange(originalIndex, 'amount', e.target.value)} className="h-8 text-xs p-1 text-right" />
-                                                <span className="ml-1 text-muted-foreground text-[10px]">{displayCurrency}</span>
+                                            </TableCell>
+                                            <TableCell className="max-w-[80px]">
+                                                 <Input value={item.currency || ''} onChange={(e) => handleTransactionFieldChange(originalIndex, 'currency', e.target.value)} className="h-8 text-xs p-1" />
                                             </TableCell>
                                             <TableCell className="font-medium capitalize">{item.importStatus}</TableCell>
                                             <TableCell className="text-muted-foreground max-w-[200px] truncate" title={item.errorMessage}>{item.errorMessage}</TableCell>

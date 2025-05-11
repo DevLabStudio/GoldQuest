@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState } from 'react';
@@ -10,32 +9,36 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
 // Define the essential application fields the user needs to map to
 const APP_FIELDS = [
-    { value: 'date', label: 'Date *', required: true, description: "Transaction date." },
-    { value: 'amount', label: 'Amount (Signed +/-) *', required: true, description: "Primary column for transaction value (e.g., Firefly: 'Amount'). Used if Income/Expense Amount not mapped." },
-    { value: 'amount_income', label: 'Income Amount', required: false, description: "Use if income has a separate positive column (e.g., Firefly: 'Amount income')." },
-    { value: 'amount_expense', label: 'Expense Amount', required: false, description: "Use if expense has a separate positive column (e.g., Firefly: 'Amount expense')." },
-    { value: 'description', label: 'Description', required: false, description: "Transaction details (e.g., Firefly: 'Description'). If blank, 'Payee / Counterparty Name' may be used." },
-    { value: 'account', label: 'Account Name *', required: true, description: "Primary account for the transaction (e.g., Firefly: 'Asset account (name)')." },
-    { value: 'source_account', label: 'Source Account (Transfer)', required: false, description: "For transfers, the account money came FROM (e.g., Firefly: 'Source account (name)'). Crucial if 'Transaction Type' indicates a transfer." },
-    { value: 'destination_account', label: 'Destination Account (Transfer)', required: false, description: "For transfers, the account money went TO (e.g., Firefly: 'Destination account (name)'). Crucial if 'Transaction Type' indicates a transfer." },
-    { value: 'destination_name', label: 'Payee / Counterparty Name', required: false, description: "Name of the payee or other party (e.g., Firefly: 'Destination name'). Can be used as description." },
-    { value: 'category', label: 'Category', required: false, description: "Transaction category (e.g., Firefly: 'Category')." },
-    { value: 'accountCurrency', label: 'Account Currency Code', required: false, description: "e.g., BRL, USD, EUR. Helps set account currency (e.g., Firefly: 'Currency code', 'Source currency', 'Destination currency')." },
-    { value: 'tags', label: 'Tags (comma-separated)', required: false, description: "Transaction tags (e.g., Firefly: 'Tags')." },
-    { value: 'initialBalance', label: 'Initial Account Balance', required: false, description: "Sets starting balance for new accounts (e.g., Firefly: 'Initial balance', usually not on transaction rows unless it's an opening balance type)." },
-    { value: 'notes', label: 'Notes/Memo', required: false, description: "Additional notes (e.g., Firefly: 'Notes')." },
-    { value: 'transaction_type', label: 'Transaction Type', required: false, description: "e.g., Deposit, Withdrawal, Transfer, Opening Balance (e.g., Firefly: 'Type'). Helps interpret amounts and identify transfers/opening balances." }
+    { value: 'date', label: 'Date *', required: true, description: "Transaction date (e.g., Firefly: 'date')." },
+    { value: 'amount', label: 'Amount *', required: true, description: "Primary transaction value (e.g., Firefly: 'amount'). Sign (+/-) is important. For transfers, this is the value moved." },
+    // amount_income and amount_expense are less common in standard Firefly CSVs where 'amount' is signed.
+    // { value: 'amount_income', label: 'Income Amount', required: false, description: "Separate positive column for income." },
+    // { value: 'amount_expense', label: 'Expense Amount', required: false, description: "Separate positive column for expense." },
+    { value: 'description', label: 'Description', required: false, description: "Transaction details (e.g., Firefly: 'description')." },
+
+    // Firefly III specific account fields:
+    { value: 'source_name', label: 'Source Account/Name *', required: true, description: "For Withdrawals/Transfers: your asset account. For Deposits: the payer/source (e.g., Firefly: 'source_name')." },
+    { value: 'destination_name', label: 'Destination Account/Name *', required: true, description: "For Deposits/Transfers: your asset account. For Withdrawals: the payee/recipient (e.g., Firefly: 'destination_name')." },
+    { value: 'source_type', label: 'Source Account Type', required: false, description: "Type of source (e.g., Asset account, Revenue account from Firefly: 'source_type'). Helps identify asset accounts." },
+    { value: 'destination_type', label: 'Destination Account Type', required: false, description: "Type of destination (e.g., Asset account, Expense account from Firefly: 'destination_type'). Helps identify asset accounts." },
+    
+    { value: 'category', label: 'Category', required: false, description: "Transaction category (e.g., Firefly: 'category')." },
+    { value: 'currency_code', label: 'Currency Code *', required: true, description: "e.g., BRL, USD, EUR (e.g., Firefly: 'currency_code'). Essential for correct amounts." },
+    // { value: 'foreign_currency_code', label: 'Foreign Currency Code', required: false, description: "Firefly: 'foreign_currency_code'." },
+    // { value: 'foreign_amount', label: 'Foreign Amount', required: false, description: "Firefly: 'foreign_amount'." },
+    { value: 'tags', label: 'Tags (comma-separated)', required: false, description: "Transaction tags (e.g., Firefly: 'tags')." },
+    { value: 'notes', label: 'Notes/Memo', required: false, description: "Additional notes (e.g., Firefly: 'notes')." },
+    { value: 'transaction_type', label: 'Transaction Type *', required: true, description: "Crucial for import logic. e.g., Withdrawal, Deposit, Transfer, Opening balance (e.g., Firefly: 'type')." }
 ] as const;
 
 
 type AppFieldType = typeof APP_FIELDS[number]['value'];
 
-// Allow mapping app field -> CSV header name, or potentially multiple headers for tags
 export type ColumnMapping = Partial<Record<AppFieldType, string>>;
 
 interface CsvMappingFormProps {
   csvHeaders: string[];
-  initialMappings?: ColumnMapping; // Optional pre-filled mappings
+  initialMappings?: ColumnMapping;
   onSubmit: (mappings: ColumnMapping) => void;
   onCancel: () => void;
 }
@@ -52,48 +55,43 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
   const handleMappingChange = (appField: AppFieldType, csvHeader: string) => {
     setMappings(prev => ({
       ...prev,
-      [appField]: csvHeader === "__IGNORE__" ? undefined : csvHeader // Store undefined if ignored
+      [appField]: csvHeader === "__IGNORE__" ? undefined : csvHeader
     }));
-     setError(null); // Clear error on change
+     setError(null);
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
-    // Validate required fields are mapped
-    const hasSignedAmount = !!mappings['amount'];
-    const hasIncomeExpense = !!mappings['amount_income'] && !!mappings['amount_expense'];
-    let amountRequirementMet = hasSignedAmount || hasIncomeExpense;
-    if (!amountRequirementMet && mappings['amount_income'] && !mappings['amount_expense']) {
-        amountRequirementMet = false; 
-    }
-    if (!amountRequirementMet && !mappings['amount_income'] && mappings['amount_expense']) {
-        amountRequirementMet = false; 
-    }
-
-
     const requiredAppFields = APP_FIELDS.filter(f => f.required);
     const missingMappings = requiredAppFields.filter(field => !mappings[field.value]);
-    let missingFieldLabels = missingMappings.map(f => f.label.replace(' *',''));
-
-    if (!amountRequirementMet) {
-         missingFieldLabels.push("Amount (Signed +/-) OR both Income Amount + Expense Amount");
-    }
-
-     const hasPrimaryAccount = !!mappings['account'];
-     // For transfers, if type is transfer, then source AND destination are effectively required by the processing logic.
-     // The form here just checks for 'Account Name' as a general requirement.
-     // More specific validation (e.g. if type='transfer', then source/dest must be mapped) happens in processAndMapData
-     if (!hasPrimaryAccount) {
-         missingFieldLabels.push("Account Name");
-     }
-
-
-    if (missingFieldLabels.length > 0) {
+    
+    if (missingMappings.length > 0) {
+        const missingFieldLabels = missingMappings.map(f => f.label.replace(' *',''));
         setError(`Please map the following required fields: ${missingFieldLabels.join(', ')}`);
         return;
     }
+
+    // Specific Firefly III logic check
+    if (!mappings.transaction_type) {
+        setError("Mapping for 'Transaction Type' (e.g., Firefly 'type' column) is crucial for correct import logic. Please map this field.");
+        return;
+    }
+     if (!mappings.source_name) {
+        setError("Mapping for 'Source Account/Name' (e.g., Firefly 'source_name' column) is crucial. Please map this field.");
+        return;
+    }
+    if (!mappings.destination_name) {
+        setError("Mapping for 'Destination Account/Name' (e.g., Firefly 'destination_name' column) is crucial. Please map this field.");
+        return;
+    }
+     if (!mappings.currency_code) {
+        setError("Mapping for 'Currency Code' (e.g., Firefly 'currency_code' column) is crucial. Please map this field.");
+        return;
+    }
+
+
     onSubmit(mappings);
   };
 
@@ -118,7 +116,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
               )}
           </div>
           <Select
-            value={mappings[appField.value] || "__IGNORE__"} // Default to "Ignore" if not mapped
+            value={mappings[appField.value] || "__IGNORE__"}
             onValueChange={(value) => handleMappingChange(appField.value, value)}
           >
             <SelectTrigger id={`map-${appField.value}`} className="text-xs">
@@ -138,7 +136,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
         </div>
       ))}
        <p className="text-xs text-muted-foreground pt-2">
-          Fields marked with * are essential. Map 'Account Name'. Map 'Amount (Signed +/-)' or both 'Income Amount' and 'Expense Amount'. For transfers identified by 'Transaction Type', ensure 'Source Account' and 'Destination Account' are also mapped.
+          Fields marked with * are essential. For Firefly III CSVs, ensure 'type', 'amount', 'currency_code', 'date', 'source_name', and 'destination_name' are correctly mapped.
        </p>
 
 
@@ -147,7 +145,7 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
           Cancel
         </Button>
         <Button type="submit">
-          Apply Mapping & Preview
+          Apply Mapping &amp; Preview
         </Button>
       </div>
     </form>
@@ -155,4 +153,3 @@ const CsvMappingForm: React.FC<CsvMappingFormProps> = ({
 };
 
 export default CsvMappingForm;
-
