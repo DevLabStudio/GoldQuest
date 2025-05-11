@@ -42,6 +42,11 @@ function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Account>
 
 export async function getAccounts(): Promise<Account[]> {
   const currentUser = auth.currentUser;
+  // Ensure currentUser is available before proceeding
+  if (!currentUser) {
+    console.warn("getAccounts called before user authentication is resolved. Returning empty array.");
+    return [];
+  }
   const accountsRefPath = getAccountsRefPath(currentUser);
   const accountsRef = ref(database, accountsRefPath);
 
@@ -58,14 +63,21 @@ export async function getAccounts(): Promise<Account[]> {
       }));
     }
     return []; // No accounts found
-  } catch (error) {
+  } catch (error: any) {
+    if (error.message && error.message.toLowerCase().includes("permission denied")) {
+        console.error(`Firebase Permission Denied: Could not fetch accounts from ${accountsRefPath}. Please check your Firebase Realtime Database security rules to ensure authenticated users have read access to their data under 'users/\${uid}/accounts'.`);
+        throw new Error(`Permission Denied: Cannot read accounts. Please verify Firebase security rules.`);
+    }
     console.error("Error fetching accounts from Firebase:", error);
-    throw error;
+    throw error; // Re-throw other errors
   }
 }
 
 export async function addAccount(accountData: NewAccountData): Promise<Account> {
   const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot add account.");
+  }
   const accountsRefPath = getAccountsRefPath(currentUser);
   const accountsRef = ref(database, accountsRefPath);
   const newAccountRef = push(accountsRef); // Generates a unique ID
@@ -96,6 +108,9 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
 
 export async function updateAccount(updatedAccountData: Account): Promise<Account> {
   const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot update account.");
+  }
   if (!updatedAccountData.id) throw new Error("Account ID is required for update.");
   const accountRefPath = getSingleAccountRefPath(currentUser, updatedAccountData.id);
   const accountRef = ref(database, accountRefPath);
@@ -134,6 +149,9 @@ export async function updateAccount(updatedAccountData: Account): Promise<Accoun
 
 export async function deleteAccount(accountId: string): Promise<void> {
   const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot delete account.");
+  }
   const accountRefPath = getSingleAccountRefPath(currentUser, accountId);
   const accountRef = ref(database, accountRefPath);
 
