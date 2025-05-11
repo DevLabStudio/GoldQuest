@@ -23,7 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en"> {/* Removed className="dark" */}
+    <html lang="en">
       <head>
           {/* Metadata will be injected by Next.js from the export above */}
       </head>
