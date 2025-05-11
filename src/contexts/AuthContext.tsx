@@ -44,7 +44,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const router = useRouter();
 
   const fetchUserPreferences = useCallback(async () => {
-    if (firebaseInitialized && auth.currentUser) {
+    if (firebaseInitialized && firebaseAuthInstance?.currentUser) {
       try {
         const prefs = await getUserPreferences();
         setUserPreferences(prefs);
@@ -109,9 +109,16 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         await saveUserPreferences(updatedPrefs);
         setUserPreferences(updatedPrefs); // Update local state of preferences
         setThemeState(newTheme); // Update local theme state
+         // Dispatch a storage event to notify other components (like AuthWrapper for theme)
+        window.dispatchEvent(new Event('storage'));
       } catch (error) {
         console.error("AuthProvider: Failed to save theme preference:", error);
       }
+    } else { // If userPreferences is null (e.g. user not logged in, or initial load)
+        // We can still attempt to save a non-user-specific preference or a default
+        // For now, let's assume we only save if userPreferences (and thus user) exists.
+        // Or, save to localStorage directly if this is a non-user specific theme setting
+        console.warn("AuthProvider: User preferences not loaded, cannot save theme.");
     }
   };
   
@@ -199,3 +206,4 @@ export const useAuthContext = (): AuthContextType => {
   }
   return context;
 };
+
