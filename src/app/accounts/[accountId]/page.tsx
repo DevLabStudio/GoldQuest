@@ -11,7 +11,7 @@ import { getCategories, getCategoryStyle, Category } from '@/services/categories
 import { getTags, type Tag, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
 import { Button } from '@/components/ui/button';
@@ -23,6 +23,7 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
+import SpendingChart from '@/components/dashboard/spending-chart'; // Import SpendingChart
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
 
@@ -133,6 +134,24 @@ export default function AccountDetailPage() {
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
   }, [transactions, isLoading, selectedDateRange]);
+
+  const spendingData = useMemo(() => {
+      if (isLoading || !account || !filteredTransactions.length) return [];
+
+      const categoryTotals: { [key: string]: number } = {};
+
+      filteredTransactions.forEach(tx => {
+          if (tx.amount < 0 && tx.category !== 'Transfer') {
+              const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
+              const category = tx.category || 'Uncategorized';
+              categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
+          }
+      });
+
+      return Object.entries(categoryTotals)
+          .map(([category, amount]) => ({ category: category.charAt(0).toUpperCase() + category.slice(1), amount }))
+          .sort((a, b) => b.amount - a.amount);
+  }, [filteredTransactions, account, preferredCurrency, isLoading]);
 
 
   const openEditDialog = (transaction: Transaction) => {
@@ -266,6 +285,7 @@ export default function AccountDetailPage() {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
+        <Skeleton className="h-64 w-full mb-8" /> {/* Skeleton for chart */}
         <div className="flex flex-col md:flex-row gap-8">
             <div className="flex-grow">
                 <Skeleton className="h-96 w-full" />
@@ -335,6 +355,24 @@ export default function AccountDetailPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      <Card className="mb-8">
+          <CardHeader>
+              <CardTitle>Spending Breakdown for {account.name}</CardTitle>
+              <CardDescription>Spending by category for {dateRangeLabel} ({preferredCurrency}).</CardDescription>
+          </CardHeader>
+          <CardContent className="h-80">
+              {isLoading ? (
+                  <Skeleton className="h-full w-full" />
+              ) : spendingData.length > 0 ? (
+                  <SpendingChart data={spendingData} currency={preferredCurrency} />
+              ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                      No spending data for this account in the selected period.
+                  </div>
+              )}
+          </CardContent>
+      </Card>
 
       <div className="flex flex-col md:flex-row gap-8">
         <div className="flex-grow">
