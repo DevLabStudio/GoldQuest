@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -159,6 +160,15 @@ const parseDate = (dateStr: string | undefined): string => {
     console.warn(`Could not parse date "${dateStr}", defaulting to today.`);
     return format(new Date(), 'yyyy-MM-dd');
 };
+
+// Updated regex to be more robust for "Saldo inicial para (d/da/do/de) conta 'Nome'"
+const parseNameFromDescriptiveString = (text: string | undefined): string | undefined => {
+    if (!text) return undefined;
+    // Handles "Initial balance for 'Account Name'" or "Saldo inicial para (a/da/de/do conta) 'Account Name'"
+    const match = text.match(/(?:Initial balance for |Saldo inicial para(?: (?:a|d[aeo] conta))?)\s*["']?([^"':]+)["']?/i);
+    return match ? match[1]?.trim() : undefined;
+};
+
 
 export default function ImportDataPage() {
   const { user, isLoadingAuth } = useAuthContext();
@@ -441,31 +451,45 @@ export default function ImportDataPage() {
               if (!finalDescription && csvType === 'deposit' && rawSourceName) finalDescription = rawSourceName;
               if (!finalDescription) finalDescription = 'Imported Transaction';
 
-              // Specific logic for "opening balance"
+
               if (csvType === 'opening balance') {
-                   let accountNameForOpening = rawDestName; // Prefer destination name for opening balance account
-                   if (!accountNameForOpening && rawSourceName && (rawSourceName.toLowerCase().startsWith('initial balance for') || rawSourceName.toLowerCase().startsWith('saldo inicial para'))) {
-                       accountNameForOpening = parseNameFromDescriptiveString(rawSourceName) || rawSourceName; // Fallback to raw source if parsing fails
-                   } else if (!accountNameForOpening && rawSourceName) {
-                       accountNameForOpening = rawSourceName;
+                   let actualAccountNameForOB: string | undefined;
+                   const parsedFromNameInDest = parseNameFromDescriptiveString(rawDestName);
+                   const parsedFromNameInSource = parseNameFromDescriptiveString(rawSourceName);
+
+                   if (parsedFromNameInDest) { // If destination_name is "Initial balance for X", X is the name
+                       actualAccountNameForOB = parsedFromNameInDest;
+                   } else if (parsedFromNameInSource) { // If source_name is "Initial balance for X", X is the name
+                       actualAccountNameForOB = parsedFromNameInSource;
+                   } else { // Neither is descriptive, one should be the clean name. Firefly: dest_name is clean.
+                       if (rawDestName && !(rawDestName.toLowerCase().startsWith("initial balance for") || rawDestName.toLowerCase().startsWith("saldo inicial para"))) {
+                           actualAccountNameForOB = rawDestName;
+                       } else if (rawSourceName && !(rawSourceName.toLowerCase().startsWith("initial balance for") || rawSourceName.toLowerCase().startsWith("saldo inicial para"))) {
+                           actualAccountNameForOB = rawSourceName;
+                       } else { // Fallback if both were descriptive but unparsed, or unexpected format.
+                           actualAccountNameForOB = rawDestName || rawSourceName; // Prefer dest
+                       }
                    }
-                   if (!accountNameForOpening) throw new Error(`Row ${rowNumber}: Could not determine account name for 'opening balance'. Source: ${rawSourceName}, Dest: ${rawDestName}`);
+
+                   if (!actualAccountNameForOB) {
+                       throw new Error(`Row ${rowNumber}: Could not determine account name for 'opening balance'. Source: ${rawSourceName}, Dest: ${rawDestName}`);
+                   }
 
                    return {
                        csvRawSourceName: rawSourceName ?? null,
-                       csvRawDestinationName: accountNameForOpening ?? null, // Ensure destination has the account name
+                       csvRawDestinationName: actualAccountNameForOB ?? null,
                        csvTransactionType: csvType,
                        date: parsedDate,
                        amount: parsedAmount,
                        currency: currencyValue.trim().toUpperCase(),
                        foreignAmount: finalParsedForeignAmount,
                        foreignCurrency: finalParsedForeignCurrency,
-                       description: `Opening Balance: ${accountNameForOpening}`,
+                       description: `Opening Balance: ${actualAccountNameForOB}`,
                        category: 'Opening Balance',
                        tags: [],
                        originalRecord: sanitizedRecord,
-                       importStatus: 'skipped', // Will be handled by account creation/update
-                       errorMessage: `Opening Balance for ${accountNameForOpening} (${formatCurrency(parsedAmount, currencyValue.trim().toUpperCase(), undefined, false)}) - Will be set as initial balance.`,
+                       importStatus: 'skipped',
+                       errorMessage: `Opening Balance for ${actualAccountNameForOB} (${formatCurrency(parsedAmount, currencyValue.trim().toUpperCase(), undefined, false)}) - Will be set as initial balance.`,
                        appSourceAccountId: null,
                        appDestinationAccountId: null,
                    };
@@ -500,18 +524,18 @@ export default function ImportDataPage() {
                     }
                 }
                  return {
-                    date: parseDate(record[dateCol!]),
+                    date: parseDate(record[dateCol!]), // Ensure dateCol has a fallback or is always mapped
                     amount: 0,
-                    currency: record[currencyCol!]?.trim().toUpperCase() || 'N/A',
+                    currency: record[currencyCol!]?.trim().toUpperCase() || 'N/A', // Ensure currencyCol has fallback
                     description: `Error Processing Row ${index + 2}`,
                     category: 'Uncategorized',
                     tags: [],
                     originalRecord: errorSanitizedRecord,
                     importStatus: 'error',
                     errorMessage: rowError.message || 'Failed to process row.',
-                    csvRawSourceName: (sourceNameCol ? record[sourceNameCol!]?.trim() : undefined) ?? null,
-                    csvRawDestinationName: (destNameCol ? record[destNameCol!]?.trim() : undefined) ?? null,
-                    csvTransactionType: (typeCol ? record[typeCol!]?.trim().toLowerCase() : undefined) ?? null,
+                    csvRawSourceName: (sourceNameCol && record[sourceNameCol!] ? record[sourceNameCol!]?.trim() : undefined) ?? null,
+                    csvRawDestinationName: (destNameCol && record[destNameCol!] ? record[destNameCol!]?.trim() : undefined) ?? null,
+                    csvTransactionType: (typeCol && record[typeCol!] ? record[typeCol!]?.trim().toLowerCase() : undefined) ?? null,
                     foreignAmount: null,
                     foreignCurrency: null,
                     appSourceAccountId: null,
@@ -533,11 +557,6 @@ export default function ImportDataPage() {
         toast({ title: "Mapping Applied", description: `Previewing ${mapped.filter(m => m.importStatus === 'pending' || m.csvTransactionType === 'opening balance').length} data points and account changes. Review before importing.` });
    }
 
-   const parseNameFromDescriptiveString = (text: string | undefined): string | undefined => {
-        if (!text) return undefined;
-        const match = text.match(/(?:Initial balance for |Saldo inicial para(?: a)?)\s*["']?([^"':]+)["']?/i);
-        return match ? match[1]?.trim() : undefined;
-    };
 
     const previewAccountChanges = async (
         csvData: CsvRecord[],
@@ -560,7 +579,7 @@ export default function ImportDataPage() {
                     action = 'update';
                 }
                 preview.push({
-                    name: details.name,
+                    name: details.name, // This should be the clean name from accountDetailsMap
                     currency: details.currency,
                     initialBalance: details.initialBalance !== undefined ? details.initialBalance : existingAccount.balance,
                     action: action,
@@ -569,7 +588,7 @@ export default function ImportDataPage() {
                 });
             } else {
                 preview.push({
-                    name: details.name,
+                    name: details.name, // This should be the clean name
                     currency: details.currency,
                     initialBalance: details.initialBalance !== undefined ? details.initialBalance : 0,
                     action: 'create',
@@ -610,86 +629,103 @@ export default function ImportDataPage() {
         const destNameCol = mappingsArg.destination_name;
         const amountCol = mappingsArg.amount!;
         const currencyCol = mappingsArg.currency_code!;
-        const descCol = mappingsArg.description;
         const sourceTypeCol = mappingsArg.source_type;
         const destTypeCol = mappingsArg.destination_type;
 
 
         for (const record of csvData) {
             const csvType = record[typeCol]?.trim().toLowerCase();
-            let recordAmount = parseAmount(record[amountCol]);
+            const recordAmount = parseAmount(record[amountCol]);
             const recordCurrency = record[currencyCol!]?.trim().toUpperCase();
 
             if (csvType === 'opening balance') {
-                let accountNameForOpening: string | undefined;
+                let actualAccountName: string | undefined;
                 const rawSourceName = sourceNameCol ? record[sourceNameCol]?.trim() : undefined;
                 const rawDestName = destNameCol ? record[destNameCol]?.trim() : undefined;
 
-                // Firefly specific: 'destination_name' usually holds the account name for opening balance.
-                if (rawDestName) {
-                    accountNameForOpening = rawDestName;
-                } else if (rawSourceName) { // Fallback if destination_name is empty
-                    accountNameForOpening = parseNameFromDescriptiveString(rawSourceName) || rawSourceName;
+                const parsedDestName = parseNameFromDescriptiveString(rawDestName);
+                const parsedSourceName = parseNameFromDescriptiveString(rawSourceName);
+
+                if (parsedDestName) { // If destination_name is "Initial balance for X" or "Saldo inicial para X", X is the name
+                    actualAccountName = parsedDestName;
+                } else if (parsedSourceName) { // If source_name is "Initial balance for X", X is the name
+                    actualAccountName = parsedSourceName;
+                } else {
+                    // Neither is descriptive, one should be the clean name.
+                    // Firefly CSV for "opening balance":
+                    //   source_name: "Initial balance for 'Account Name'"
+                    //   destination_name: "Account Name"
+                    // So, if dest_name is not descriptive, it's likely the actual account name.
+                    if (rawDestName && !(rawDestName.toLowerCase().startsWith("initial balance for") || rawDestName.toLowerCase().startsWith("saldo inicial para"))) {
+                        actualAccountName = rawDestName;
+                    } else if (rawSourceName && !(rawSourceName.toLowerCase().startsWith("initial balance for") || rawSourceName.toLowerCase().startsWith("saldo inicial para"))) {
+                        // Less common for Firefly, but handle if source_name is the clean one
+                        actualAccountName = rawSourceName;
+                    } else {
+                        // Fallback if both are descriptive but unparsed (should not happen if regex is good), or some other format.
+                        actualAccountName = rawDestName || rawSourceName; // Prefer dest
+                    }
+                }
+                
+                if (!actualAccountName) {
+                     console.warn(`Could not determine account name for 'opening balance'. Row:`, record);
+                     continue; 
                 }
 
-
-                if (accountNameForOpening && recordCurrency && !isNaN(recordAmount)) {
-                    const normalizedName = accountNameForOpening.toLowerCase();
+                if (recordCurrency && !isNaN(recordAmount)) {
+                    const normalizedName = actualAccountName.toLowerCase();
                     const existingDetailsInMap = accountMap.get(normalizedName);
-
-                    const category = (accountNameForOpening.toLowerCase().includes('crypto') || accountNameForOpening.toLowerCase().includes('wallet')) ? 'crypto' : 'asset';
+                    const category = (actualAccountName.toLowerCase().includes('crypto') || actualAccountName.toLowerCase().includes('wallet')) ? 'crypto' : 'asset';
 
                     accountMap.set(normalizedName, {
-                        name: accountNameForOpening,
+                        name: actualAccountName, // Use the cleaned/determined account name
                         currency: recordCurrency,
-                        initialBalance: recordAmount,
-                        category: existingDetailsInMap ? existingDetailsInMap.category : category,
+                        initialBalance: recordAmount, // Set initial balance from the opening balance row
+                        category: existingDetailsInMap?.category || category,
                     });
-                } else if (csvType === 'opening balance') {
-                     console.warn(`Could not process 'opening balance' row due to missing/invalid name, currency, or amount. Row:`, record, `Parsed Amount: ${recordAmount}`, `Currency: ${recordCurrency}`, `Derived Name Attempts: ${rawSourceName}, ${rawDestName}`);
+                } else {
+                     console.warn(`Could not process 'opening balance' row for "${actualAccountName}" due to missing/invalid currency or amount. Row:`, record, `Parsed Amount: ${recordAmount}`, `Currency: ${recordCurrency}`);
                 }
-
             } else if (csvType === 'withdrawal' || csvType === 'deposit' || csvType === 'transfer') {
                 const sourceName = sourceNameCol ? record[sourceNameCol]?.trim() : undefined;
                 const destName = destNameCol ? record[destNameCol]?.trim() : undefined;
                 const sourceType = sourceTypeCol ? record[sourceTypeCol]?.trim().toLowerCase() : undefined;
                 const destType = destTypeCol ? record[destTypeCol]?.trim().toLowerCase() : undefined;
 
-                const accountsToConsider: string[] = [];
+                const accountsToConsiderRaw: (string | undefined)[] = [];
 
-                // For withdrawals and transfers, the source_name is an asset account.
                 if (sourceName && (sourceType === 'asset account' || sourceType === 'default asset account' || csvType === 'withdrawal' || csvType === 'transfer')) {
-                     accountsToConsider.push(sourceName);
+                     accountsToConsiderRaw.push(sourceName);
                 }
-                // For deposits and transfers, the destination_name is an asset account.
                 if (destName && (destType === 'asset account' || destType === 'default asset account' || csvType === 'deposit' || csvType === 'transfer')) {
-                     accountsToConsider.push(destName);
+                     accountsToConsiderRaw.push(destName);
                 }
+                
+                const accountsToConsider = [...new Set(accountsToConsiderRaw.filter(Boolean) as string[])];
 
 
-                for (const accNameToConsider of [...new Set(accountsToConsider)]) {
-                     if (accNameToConsider && recordCurrency) {
+                for (const accNameToConsider of accountsToConsider) {
+                     if (accNameToConsider && recordCurrency) { 
                         const normalizedName = accNameToConsider.toLowerCase();
                         if (!accountMap.has(normalizedName)) {
                              const existingAppAccount = existingAccountsParam.find(a => a.name.toLowerCase() === normalizedName);
                              const category = (accNameToConsider.toLowerCase().includes('crypto') || accNameToConsider.toLowerCase().includes('wallet')) ? 'crypto' : 'asset';
                              accountMap.set(normalizedName, {
                                 name: accNameToConsider,
-                                currency: existingAppAccount?.currency || recordCurrency,
-                                initialBalance: existingAppAccount?.balance, // Keep existing balance if not opening
+                                currency: existingAppAccount?.currency || recordCurrency, 
+                                initialBalance: existingAppAccount?.balance, 
                                 category: existingAppAccount?.category || category,
                             });
-                        } else {
+                        } else { 
                             const currentDetails = accountMap.get(normalizedName)!;
                             if (!currentDetails.currency && recordCurrency) currentDetails.currency = recordCurrency;
-                            // Do not overwrite initialBalance here for non-opening-balance rows
                         }
                     }
                 }
             }
         }
         return accountMap;
-    }
+    };
 
 
     const createOrUpdateAccountsAndGetMap = async (
@@ -727,8 +763,8 @@ export default function ImportDataPage() {
                 if (accPreview.action === 'create') {
                     const newAccountData: NewAccountData = {
                         name: accPreview.name,
-                        type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'), // Default type
-                        balance: accPreview.initialBalance, // Use the initial balance from preview
+                        type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'), 
+                        balance: accPreview.initialBalance, 
                         currency: accPreview.currency,
                         providerName: 'Imported - ' + accPreview.name,
                         category: accPreview.category,
@@ -745,7 +781,7 @@ export default function ImportDataPage() {
                     if (existingAccountForUpdate) {
                         const updatedAccountData: Account = {
                             ...existingAccountForUpdate,
-                            balance: accPreview.initialBalance, // Update balance if specified
+                            balance: accPreview.initialBalance, 
                             currency: accPreview.currency,
                             lastActivity: new Date().toISOString(),
                         };
@@ -881,7 +917,7 @@ export default function ImportDataPage() {
       let finalMapForTxImport: { [key: string]: string };
       let latestAccountsList: Account[];
       try {
-        const accountMapResult = await createOrUpdateAccountsAndGetMap(false); // Create/update accounts based on preview
+        const accountMapResult = await createOrUpdateAccountsAndGetMap(false); 
         if (!accountMapResult.success) {
             setError("Error finalizing accounts before import. Some accounts might not have been created/updated correctly. Import aborted.");
             setIsLoading(false);
@@ -926,7 +962,6 @@ export default function ImportDataPage() {
           const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord && d.description === item.description && d.amount === item.amount && d.date === item.date);
 
 
-          // Skip 'opening balance' type transactions as they are handled during account creation/update
           if (item.csvTransactionType === 'opening balance') {
               if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'skipped', errorMessage: 'Opening Balance (handled via account balance)' };
               continue;
@@ -965,11 +1000,9 @@ export default function ImportDataPage() {
               let sourceLegAmount = -Math.abs(item.amount);
               let sourceLegCurrency = item.currency;
 
-              let destLegAmount = Math.abs(item.amount); // Default to primary amount
-              let destLegCurrency = item.currency;    // Default to primary currency
+              let destLegAmount = Math.abs(item.amount); 
+              let destLegCurrency = item.currency;    
 
-              // If foreign amount/currency are present AND the foreign currency is different from the primary currency,
-              // use them for the destination leg. This implies a currency conversion happened.
               if (item.foreignAmount != null && item.foreignCurrency && item.foreignCurrency.toUpperCase() !== item.currency.toUpperCase()) {
                   destLegAmount = Math.abs(item.foreignAmount);
                   destLegCurrency = item.foreignCurrency;
@@ -1019,17 +1052,14 @@ export default function ImportDataPage() {
 
               const targetAccount = latestAccountsList.find(a => a.id === accountIdForTx);
 
-              // If foreign details are present AND target account's currency matches the foreign currency,
-              // this means the transaction was recorded in the foreign currency against this account.
               if (targetAccount && item.foreignCurrency && item.foreignAmount != null && !isNaN(item.foreignAmount) &&
                   targetAccount.currency.toUpperCase() === item.foreignCurrency.toUpperCase()) {
-                  payloadAmount = item.foreignAmount; // Use the foreign amount directly
+                  payloadAmount = item.foreignAmount; 
                   payloadCurrency = item.foreignCurrency;
-                  // Sign based on type for the foreign amount
                   if (item.csvTransactionType === 'withdrawal' && payloadAmount > 0) payloadAmount = -payloadAmount;
                   if (item.csvTransactionType === 'deposit' && payloadAmount < 0) payloadAmount = Math.abs(payloadAmount);
 
-              } else { // Otherwise, use the primary amount/currency and sign it
+              } else { 
                  if (item.csvTransactionType === 'withdrawal' && payloadAmount > 0) {
                     payloadAmount = -payloadAmount;
                  } else if (item.csvTransactionType === 'deposit' && payloadAmount < 0) {
@@ -1491,3 +1521,4 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
