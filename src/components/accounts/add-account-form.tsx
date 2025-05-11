@@ -9,14 +9,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { popularBanks, type BankInfo } from '@/lib/banks'; 
-import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency'; 
-import type { NewAccountData } from '@/services/account-sync'; 
+import { Checkbox } from "@/components/ui/checkbox";
+import { popularBanks, type BankInfo } from '@/lib/banks';
+import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
+import type { NewAccountData } from '@/services/account-sync';
 import Image from 'next/image';
 
 // Define Zod schema for form validation
 const formSchema = z.object({
-  providerName: z.string().min(1, "Provider name is required"), 
+  providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
   accountType: z.enum(['checking', 'savings', 'credit card', 'investment', 'other'], {
     required_error: "Account type is required",
@@ -26,23 +27,25 @@ const formSchema = z.object({
       { message: "Unsupported currency" }
   ),
   balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative for initial setup"),
+  includeInNetWorth: z.boolean().optional(),
 });
 
 type AddAccountFormData = z.infer<typeof formSchema>;
 
 interface AddAccountFormProps {
-  onAccountAdded: (account: NewAccountData) => void; 
+  onAccountAdded: (account: NewAccountData) => void;
 }
 
 const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
   const form = useForm<AddAccountFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      providerName: "", 
+      providerName: "",
       accountName: "",
-      accountType: undefined, 
-      currency: "BRL", 
+      accountType: undefined,
+      currency: "BRL",
       balance: 0,
+      includeInNetWorth: true,
     },
   });
 
@@ -51,15 +54,16 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
-        currency: values.currency.toUpperCase(), 
-        providerName: values.providerName, 
-        category: 'asset', 
+        currency: values.currency.toUpperCase(),
+        providerName: values.providerName,
+        category: 'asset',
+        includeInNetWorth: values.includeInNetWorth ?? true,
     };
     onAccountAdded(newAccountData);
-    form.reset(); 
+    form.reset();
   }
 
-  const selectedCurrency = form.watch('currency'); 
+  const selectedCurrency = form.watch('currency');
 
   return (
     <Form {...form}>
@@ -67,26 +71,26 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <FormField
             control={form.control}
-            name="providerName" 
+            name="providerName"
             render={({ field }) => (
               <FormItem>
-                <FormLabel>Bank/Institution Name</FormLabel> 
+                <FormLabel>Bank/Institution Name</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                   <FormControl>
                     <SelectTrigger>
-                      <SelectValue placeholder="Select a bank or institution" /> 
+                      <SelectValue placeholder="Select a bank or institution" />
                     </SelectTrigger>
                   </FormControl>
                   <SelectContent>
                     {popularBanks.map((bank: BankInfo) => (
                       <SelectItem key={bank.name} value={bank.name}>
                         <div className="flex items-center">
-                          <Image 
-                              src={bank.iconUrl} 
-                              alt={`${bank.name} logo placeholder`} 
-                              width={20} 
-                              height={20} 
-                              className="mr-2 rounded-sm" 
+                          <Image
+                              src={bank.iconUrl}
+                              alt={`${bank.name} logo`}
+                              width={20}
+                              height={20}
+                              className="mr-2 rounded-sm object-contain"
                               data-ai-hint={bank.dataAiHint}
                           />
                           {bank.name}
@@ -95,7 +99,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                     ))}
                     <SelectItem value="Other">
                       <div className="flex items-center">
-                          <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span> 
+                          <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span>
                           Other (Specify in Name)
                         </div>
                       </SelectItem>
@@ -173,7 +177,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                 )}
               />
         </div>
-        
+
         <FormField
             control={form.control}
             name="balance"
@@ -191,7 +195,30 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
             Enter the current balance in the selected currency.
          </FormDescription>
 
-        <Button type="submit" className="w-full">Add Asset Account</Button> 
+        <FormField
+          control={form.control}
+          name="includeInNetWorth"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>
+                  Include in Net Worth Calculations
+                </FormLabel>
+                <FormDescription>
+                  If checked, this account's balance will be part of your total net worth and dashboard summaries.
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
+
+        <Button type="submit" className="w-full">Add Asset Account</Button>
       </form>
     </Form>
   );

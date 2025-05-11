@@ -9,8 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { Checkbox } from "@/components/ui/checkbox";
 import { popularBanks, type BankInfo } from '@/lib/banks';
-import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers'; 
+import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { Account } from '@/services/account-sync';
 import Image from 'next/image';
@@ -18,18 +19,19 @@ import Image from 'next/image';
 const allowedFiatCurrenciesForCrypto = ['EUR', 'USD', 'BRL'] as const;
 
 const formSchema = z.object({
-  providerName: z.string().min(1, "Provider name is required"), 
+  providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
-  accountType: z.string().min(1, "Account type is required"), 
+  accountType: z.string().min(1, "Account type is required"),
   currency: z.string().min(3, "Currency is required"), // Validated dynamically below
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}), 
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
+  includeInNetWorth: z.boolean().optional(),
 });
 
 type EditAccountFormData = z.infer<typeof formSchema>;
 
 interface EditAccountFormProps {
-  account: Account; 
-  onAccountUpdated: (updatedAccount: Account) => void; 
+  account: Account;
+  onAccountUpdated: (updatedAccount: Account) => void;
 }
 
 const getProviderList = (category: 'asset' | 'crypto'): Array<BankInfo | CryptoProviderInfo> => {
@@ -49,7 +51,7 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
             { value: 'investment', label: 'Investment' },
             { value: 'other', label: 'Other' },
         ];
-    } else { 
+    } else {
         return [
             { value: 'exchange', label: 'Exchange Account' },
             { value: 'wallet', label: 'Self-Custody Wallet' },
@@ -71,29 +73,31 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
         path: ['currency'],
     })),
     defaultValues: {
-      providerName: account.providerName || "", 
+      providerName: account.providerName || "",
       accountName: account.name,
-      accountType: account.type, 
+      accountType: account.type,
       currency: account.currency.toUpperCase(),
       balance: account.balance,
+      includeInNetWorth: account.includeInNetWorth ?? true,
     },
   });
 
   function onSubmit(values: EditAccountFormData) {
     const updatedAccountData: Account = {
-        ...account, 
+        ...account,
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
         currency: values.currency.toUpperCase(),
-        providerName: values.providerName, 
+        providerName: values.providerName,
+        includeInNetWorth: values.includeInNetWorth ?? true,
     };
     onAccountUpdated(updatedAccountData);
   }
 
-  const selectedCurrency = form.watch('currency'); 
-  const providerList = getProviderList(account.category); 
-  const accountTypes = getAccountTypes(account.category); 
+  const selectedCurrency = form.watch('currency');
+  const providerList = getProviderList(account.category);
+  const accountTypes = getAccountTypes(account.category);
   const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : supportedCurrencies;
 
 
@@ -103,10 +107,10 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
-            name="providerName" 
+            name="providerName"
             render={({ field }) => (
                 <FormItem>
-                <FormLabel>{account.category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'} Name</FormLabel> 
+                <FormLabel>{account.category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'} Name</FormLabel>
                 <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                     <SelectTrigger>
@@ -117,12 +121,12 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     {providerList.map((provider) => (
                         <SelectItem key={provider.name} value={provider.name}>
                         <div className="flex items-center">
-                            <Image 
-                                src={provider.iconUrl} 
-                                alt={`${provider.name} logo placeholder`}
-                                width={20} 
-                                height={20} 
-                                className="mr-2 rounded-sm"
+                            <Image
+                                src={provider.iconUrl}
+                                alt={`${provider.name} logo`}
+                                width={20}
+                                height={20}
+                                className="mr-2 rounded-sm object-contain"
                                 data-ai-hint={provider.dataAiHint}
                             />
                             {provider.name}
@@ -214,7 +218,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                 )}
             />
         </div>
-        
+
         <FormField
             control={form.control}
             name="balance"
@@ -231,6 +235,29 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
          <FormDescription>
             Enter the current balance in the selected currency.
          </FormDescription>
+
+        <FormField
+          control={form.control}
+          name="includeInNetWorth"
+          render={({ field }) => (
+            <FormItem className="flex flex-row items-start space-x-3 space-y-0 rounded-md border p-4 shadow">
+              <FormControl>
+                <Checkbox
+                  checked={field.value}
+                  onCheckedChange={field.onChange}
+                />
+              </FormControl>
+              <div className="space-y-1 leading-none">
+                <FormLabel>
+                  Include in Net Worth Calculations
+                </FormLabel>
+                <FormDescription>
+                  If checked, this account's balance will be part of your total net worth and dashboard summaries.
+                </FormDescription>
+              </div>
+            </FormItem>
+          )}
+        />
 
         <Button type="submit" className="w-full">Save Changes</Button>
       </form>

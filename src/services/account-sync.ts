@@ -8,7 +8,7 @@ import type { User } from 'firebase/auth';
 export interface Account {
   id: string;
   name: string;
-  type: string;
+  type: string; // 'checking', 'savings', 'credit card', 'investment', 'other', 'exchange', 'wallet', 'staking'
   balance: number;
   currency: string;
   providerName?: string;
@@ -16,6 +16,7 @@ export interface Account {
   lastActivity?: string;
   balanceDifference?: number;
   category: 'asset' | 'crypto';
+  includeInNetWorth?: boolean; // New field
 }
 
 export type NewAccountData = Omit<Account, 'id'>;
@@ -37,6 +38,7 @@ function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Account>
         lastActivity: new Date().toISOString(),
         balanceDifference: 0,
         category: category,
+        includeInNetWorth: true, // Default to true
     };
 }
 
@@ -50,7 +52,6 @@ export async function getAccounts(): Promise<Account[]> {
   const accountsRefPath = getAccountsRefPath(currentUser);
   const accountsRef = ref(database, accountsRefPath);
 
-  console.log("Fetching accounts from Firebase RTDB:", accountsRefPath);
   try {
     const snapshot = await get(accountsRef);
     if (snapshot.exists()) {
@@ -60,6 +61,7 @@ export async function getAccounts(): Promise<Account[]> {
         id,
         ...getDefaultAccountValues((data as Account).category || 'asset'), // Ensure defaults
         ...(data as Omit<Account, 'id'>),
+        includeInNetWorth: (data as Account).includeInNetWorth === undefined ? true : (data as Account).includeInNetWorth, // Ensure default if field is missing
       }));
     }
     return []; // No accounts found
@@ -89,6 +91,7 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
   const newAccountWithDefaults: Omit<Account, 'id'> = {
       ...getDefaultAccountValues(accountData.category),
       ...accountData,
+      includeInNetWorth: accountData.includeInNetWorth === undefined ? true : accountData.includeInNetWorth,
   };
 
   const newAccountWithId: Account = {
@@ -96,7 +99,6 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
     ...newAccountWithDefaults,
   };
 
-  console.log("Adding account to Firebase RTDB:", newAccountWithId);
   try {
     await set(newAccountRef, newAccountWithDefaults); // Save data without the id field itself
     return newAccountWithId;
@@ -119,28 +121,32 @@ export async function updateAccount(updatedAccountData: Account): Promise<Accoun
   const snapshot = await get(accountRef);
   let dataToSet: Omit<Account, 'id'>;
 
+  const categoryToUse = updatedAccountData.category || (snapshot.exists() ? (snapshot.val() as Account).category : 'asset');
+
+
   if (snapshot.exists()) {
       const existingData = snapshot.val() as Omit<Account, 'id'>;
       dataToSet = {
-          ...getDefaultAccountValues(updatedAccountData.category || existingData.category || 'asset'),
+          ...getDefaultAccountValues(categoryToUse),
           ...existingData,
           ...updatedAccountData, // Apply updates
+          includeInNetWorth: updatedAccountData.includeInNetWorth === undefined ? (existingData.includeInNetWorth === undefined ? true : existingData.includeInNetWorth) : updatedAccountData.includeInNetWorth,
       };
       delete (dataToSet as any).id; // Remove id from the object to be saved
   } else {
       // If for some reason it doesn't exist, treat as adding it with this ID
       dataToSet = {
-          ...getDefaultAccountValues(updatedAccountData.category || 'asset'),
+          ...getDefaultAccountValues(categoryToUse),
           ...updatedAccountData,
+          includeInNetWorth: updatedAccountData.includeInNetWorth === undefined ? true : updatedAccountData.includeInNetWorth,
       };
       delete (dataToSet as any).id;
   }
 
 
-  console.log("Updating account in Firebase RTDB:", updatedAccountData.id, dataToSet);
   try {
     await set(accountRef, dataToSet); // Using set to overwrite with new data
-    return updatedAccountData; // Return the full account object passed in
+    return { ...updatedAccountData, includeInNetWorth: dataToSet.includeInNetWorth }; // Return the full account object passed in, ensuring includeInNetWorth is resolved
   } catch (error) {
     console.error("Error updating account in Firebase:", error);
     throw error;
@@ -155,7 +161,6 @@ export async function deleteAccount(accountId: string): Promise<void> {
   const accountRefPath = getSingleAccountRefPath(currentUser, accountId);
   const accountRef = ref(database, accountRefPath);
 
-  console.log("Deleting account from Firebase RTDB:", accountRefPath);
   try {
     await remove(accountRef);
     // Also delete associated transactions for this account

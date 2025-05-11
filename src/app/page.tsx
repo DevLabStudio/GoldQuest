@@ -95,14 +95,17 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); 
+  }, [toast]);
 
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
-    return accounts.reduce((sum, account) => {
-      return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
-    }, 0);
+    return accounts
+        .filter(acc => acc.includeInNetWorth !== false) // Only include if true or undefined
+        .reduce((sum, account) => {
+            return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
+        }, 0);
   }, [accounts, preferredCurrency, isLoading]);
+
 
   const periodTransactions = useMemo(() => {
     if (isLoading) return [];
@@ -120,7 +123,7 @@ export default function DashboardPage() {
     return periodTransactions.reduce((sum, tx) => {
       if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers from income
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account) {
+        if (account && account.includeInNetWorth !== false) { // Check if account should be included
           return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
         }
       }
@@ -133,7 +136,7 @@ export default function DashboardPage() {
     return periodTransactions.reduce((sum, tx) => {
       if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers from expenses
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account) {
+        if (account && account.includeInNetWorth !== false) { // Check if account should be included
           return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
         }
       }
@@ -149,7 +152,7 @@ export default function DashboardPage() {
     periodTransactions.forEach(tx => {
       if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account) {
+        if (account && account.includeInNetWorth !== false) { // Check if account should be included
           const categoryName = tx.category || 'Uncategorized';
           const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
           expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
@@ -184,7 +187,7 @@ export default function DashboardPage() {
     periodTransactions.forEach(tx => {
       if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account) {
+        if (account && account.includeInNetWorth !== false) { // Check if account should be included
           const categoryName = tx.category || 'Uncategorized Income';
           const convertedAmount = convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
           incomeCategoryTotals[categoryName] = (incomeCategoryTotals[categoryName] || 0) + convertedAmount;
@@ -211,7 +214,7 @@ export default function DashboardPage() {
     const last12MonthsKeys: string[] = [];
     for (let i = 11; i >= 0; i--) {
         const targetMonthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthKey = formatDateFns(targetMonthDate, 'MMM'); 
+        const monthKey = formatDateFns(targetMonthDate, 'MMM');
         monthlyData[monthKey] = { income: 0, expenses: 0 };
         last12MonthsKeys.push(monthKey);
     }
@@ -222,7 +225,7 @@ export default function DashboardPage() {
         const monthKey = formatDateFns(txDate, 'MMM');
         const account = accounts.find(acc => acc.id === tx.accountId);
 
-        if (account && monthlyData[monthKey] && tx.category !== 'Transfer') { // Exclude transfers
+        if (account && monthlyData[monthKey] && tx.category !== 'Transfer' && account.includeInNetWorth !== false) { // Exclude transfers and check includeInNetWorth
             if (tx.amount > 0) {
                 monthlyData[monthKey].income += convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
             } else if (tx.amount < 0) {
@@ -230,7 +233,7 @@ export default function DashboardPage() {
             }
         }
     });
-    
+
     return last12MonthsKeys.map(monthKey => ({
         month: monthKey,
         income: monthlyData[monthKey].income,
@@ -273,7 +276,7 @@ export default function DashboardPage() {
     <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         <div className="xl:col-span-2">
-          <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
+          <TotalNetWorthCard accounts={accounts} preferredCurrency={preferredCurrency} />
         </div>
          <SpendingsBreakdown title={`Top Spendings (${dateRangeLabel})`} data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
@@ -290,7 +293,7 @@ export default function DashboardPage() {
                   </CardContent>
             </Card>
           ) : (
-            <IncomeSourceChart data={incomeSourceDataActual} currency={getCurrencySymbol(preferredCurrency)} />
+            <IncomeSourceChart data={incomeSourceDataActual} currency={preferredCurrency} />
           )}
         </div>
       </div>
@@ -313,4 +316,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-
