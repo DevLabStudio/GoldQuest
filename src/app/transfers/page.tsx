@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -407,13 +408,16 @@ export default function TransfersPage() {
                         </TableHeader>
                         <TableBody>
                             {transferTransactionPairs.map((pair) => {
-                                const formattedAmount = formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true);
-
                                 return (
                                     <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{pair.from.description || 'Transfer'}</TableCell>
                                         <TableCell className="text-right font-medium">
-                                            {formattedAmount}
+                                            <div>{formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, pair.from.transactionCurrency, false)}</div>
+                                            {pair.from.transactionCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                            <div className="text-xs text-muted-foreground">
+                                                (≈ {formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true)})
+                                            </div>
+                                            )}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(pair.from.date)}</TableCell>
                                         <TableCell className="text-muted-foreground">{getAccountName(pair.from.accountId)}</TableCell>
@@ -512,7 +516,7 @@ export default function TransfersPage() {
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
-              initialData={initialFormDataForEdit}
+              initialData={initialFormDataForEdit || {date: new Date()}}
             />
           )}
            {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (

@@ -476,12 +476,16 @@ export default function TransactionsOverviewPage() {
                                 if (!account) return null;
 
                                 const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
-                                const formattedAmount = formatCurrency(transaction.amount, transaction.transactionCurrency, preferredCurrency, true);
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{transaction.description}</TableCell>
                                         <TableCell className={`text-right font-medium ${transaction.amount >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
-                                            {formattedAmount}
+                                            <div>{formatCurrency(transaction.amount, transaction.transactionCurrency, transaction.transactionCurrency, false)}</div>
+                                            {transaction.transactionCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                            <div className="text-xs text-muted-foreground">
+                                                (≈ {formatCurrency(transaction.amount, transaction.transactionCurrency, preferredCurrency, true)})
+                                            </div>
+                                            )}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(transaction.date)}</TableCell>
                                         <TableCell className="text-muted-foreground">{account.name}</TableCell>
@@ -650,4 +654,3 @@ export default function TransactionsOverviewPage() {
     </div>
   );
 }
-
