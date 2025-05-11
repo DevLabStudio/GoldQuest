@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
-import { CalendarIcon, ArrowRightLeft } from 'lucide-react';
+import { CalendarIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format as formatDateFns, parseISO } from 'date-fns';
 import type { Account } from '@/services/account-sync';
@@ -19,7 +19,6 @@ import type { Category } from '@/services/categories';
 import type { Tag } from '@/services/tags';
 import type { Transaction } from '@/services/transactions';
 import { getCurrencySymbol, supportedCurrencies } from '@/lib/currency';
-import { Textarea } from '@/components/ui/textarea';
 import { toast } from "@/hooks/use-toast";
 
 const transactionTypes = ['expense', 'income', 'transfer'] as const;
@@ -106,6 +105,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         date: initialData.date ? (typeof initialData.date === 'string' ? parseISO(initialData.date.includes('T') ? initialData.date : initialData.date + 'T00:00:00Z') : initialData.date) : new Date(),
         tags: initialData.tags || [],
         transactionCurrency: (initialData as Transaction)?.transactionCurrency || accounts.find(acc => acc.id === (initialData as any)?.accountId)?.currency || 'BRL',
+        description: initialData.description || '',
     } : {
       type: initialType,
       description: "",
@@ -192,7 +192,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6"> {/* Main form spacing */}
          <FormField
           control={form.control}
           name="type"
@@ -233,301 +233,244 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
           )}
         />
 
-        {transactionType === 'transfer' ? (
-          <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-               <FormField
-                control={form.control}
-                name="fromAccountId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>From Account</FormLabel>
-                    <Select onValueChange={(value) => {
-                        field.onChange(value);
-                        const acc = accounts.find(a => a.id === value);
-                        if (acc) form.setValue('transactionCurrency', acc.currency);
-                    }} defaultValue={field.value} disabled={!!initialData}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select source account" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {accounts.map((acc) => (
-                          <SelectItem key={acc.id} value={acc.id} disabled={acc.id === selectedToAccountId}>
-                            {acc.name} ({getCurrencySymbol(acc.currency)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-               <FormField
-                control={form.control}
-                name="toAccountId"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>To Account</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!!initialData}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select destination account" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {accounts.map((acc) => (
-                          <SelectItem key={acc.id} value={acc.id} disabled={acc.id === selectedFromAccountId}>
-                             {acc.name} ({getCurrencySymbol(acc.currency)})
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <FormField
-                control={form.control}
-                name="amount"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Amount ({getCurrencySymbol(formTransactionCurrency)})</FormLabel>
-                    <FormControl>
-                      <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''}/>
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-              <FormField
-                  control={form.control}
-                  name="transactionCurrency"
-                  render={({ field }) => (
-                    <FormItem>
-                      <FormLabel>Transaction Currency</FormLabel>
-                       <Select onValueChange={field.onChange} defaultValue={field.value} disabled={true}>
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select transaction currency" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {supportedCurrencies.map((curr) => (
-                            <SelectItem key={curr} value={curr}>
-                              {curr} ({getCurrencySymbol(curr)})
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormDescription>Currency of the amount being transferred. Determined by 'From Account'.</FormDescription>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-            </div>
-          </>
-        ) : (
-           <>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+            {/* Left Column */}
+            <div className="space-y-4">
                 <FormField
                     control={form.control}
-                    name="accountId"
+                    name="description"
                     render={({ field }) => (
-                    <FormItem>
-                        <FormLabel>Account</FormLabel>
-                        <Select onValueChange={(value) => {
-                            field.onChange(value);
-                            const acc = accounts.find(a => a.id === value);
-                            if (acc) form.setValue('transactionCurrency', acc.currency);
-                        }} defaultValue={field.value} disabled={!!initialData}>
+                        <FormItem>
+                        <FormLabel>Description</FormLabel>
                         <FormControl>
-                            <SelectTrigger>
-                            <SelectValue placeholder="Select account" />
-                            </SelectTrigger>
+                            <Input placeholder="Transaction description" {...field} value={field.value || ''}/>
                         </FormControl>
-                        <SelectContent>
-                            {accounts.map((acc) => (
-                            <SelectItem key={acc.id} value={acc.id}>
-                                {acc.name} ({getCurrencySymbol(acc.currency)})
-                            </SelectItem>
-                            ))}
-                        </SelectContent>
-                        </Select>
                         <FormMessage />
-                    </FormItem>
+                        </FormItem>
                     )}
                 />
-                <FormField
+
+                {transactionType === 'transfer' ? (
+                <>
+                    <FormField
+                        control={form.control}
+                        name="fromAccountId"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>From Account</FormLabel>
+                            <Select onValueChange={(value) => {
+                                field.onChange(value);
+                                const acc = accounts.find(a => a.id === value);
+                                if (acc) form.setValue('transactionCurrency', acc.currency);
+                            }} defaultValue={field.value} disabled={!!initialData}>
+                            <FormControl>
+                                <SelectTrigger>
+                                <SelectValue placeholder="Select source account" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {accounts.map((acc) => (
+                                <SelectItem key={acc.id} value={acc.id} disabled={acc.id === selectedToAccountId}>
+                                    {acc.name} ({getCurrencySymbol(acc.currency)})
+                                </SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                    <FormField
+                        control={form.control}
+                        name="toAccountId"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>To Account</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value} disabled={!!initialData}>
+                            <FormControl>
+                                <SelectTrigger>
+                                <SelectValue placeholder="Select destination account" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {accounts.map((acc) => (
+                                <SelectItem key={acc.id} value={acc.id} disabled={acc.id === selectedFromAccountId}>
+                                    {acc.name} ({getCurrencySymbol(acc.currency)})
+                                </SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                </>
+                ) : (
+                    <FormField
+                        control={form.control}
+                        name="accountId"
+                        render={({ field }) => (
+                        <FormItem>
+                            <FormLabel>Account</FormLabel>
+                            <Select onValueChange={(value) => {
+                                field.onChange(value);
+                                const acc = accounts.find(a => a.id === value);
+                                if (acc) form.setValue('transactionCurrency', acc.currency);
+                            }} defaultValue={field.value} disabled={!!initialData}>
+                            <FormControl>
+                                <SelectTrigger>
+                                <SelectValue placeholder="Select account" />
+                                </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                                {accounts.map((acc) => (
+                                <SelectItem key={acc.id} value={acc.id}>
+                                    {acc.name} ({getCurrencySymbol(acc.currency)})
+                                </SelectItem>
+                                ))}
+                            </SelectContent>
+                            </Select>
+                            <FormMessage />
+                        </FormItem>
+                        )}
+                    />
+                )}
+                 <FormField
+                    control={form.control}
+                    name="date"
+                    render={({ field }) => (
+                        <FormItem className="flex flex-col">
+                        <FormLabel>Date</FormLabel>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                            <FormControl>
+                                <Button
+                                variant={"outline"}
+                                className={cn(
+                                    "w-full pl-3 text-left font-normal",
+                                    !field.value && "text-muted-foreground"
+                                )}
+                                >
+                                {field.value ? (
+                                    formatDateFns(field.value, "PPP")
+                                ) : (
+                                    <span>Pick a date</span>
+                                )}
+                                <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
+                                </Button>
+                            </FormControl>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                            <Calendar
+                                mode="single"
+                                selected={field.value}
+                                onSelect={field.onChange}
+                                disabled={(date) =>
+                                date > new Date() || date < new Date("1900-01-01")
+                                }
+                                initialFocus
+                            />
+                            </PopoverContent>
+                        </Popover>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
+
+            {/* Right Column */}
+            <div className="space-y-4">
+                 <FormField
                     control={form.control}
                     name="amount"
                     render={({ field }) => (
                     <FormItem>
                         <FormLabel>Amount ({getCurrencySymbol(formTransactionCurrency)})</FormLabel>
                         <FormControl>
-                        <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''} />
+                        <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''}/>
                         </FormControl>
                         <FormMessage />
                     </FormItem>
                     )}
                 />
-              </div>
-              <FormField
-                  control={form.control}
-                  name="transactionCurrency"
-                  render={({ field }) => (
-                  <FormItem>
-                      <FormLabel>Transaction Currency</FormLabel>
-                      <Select onValueChange={field.onChange} defaultValue={field.value} disabled={true}>
-                      <FormControl>
-                          <SelectTrigger>
-                          <SelectValue placeholder="Select transaction currency" />
-                          </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                          {supportedCurrencies.map((curr) => (
-                          <SelectItem key={curr} value={curr}>
-                              {curr} ({getCurrencySymbol(curr)})
-                          </SelectItem>
-                          ))}
-                      </SelectContent>
-                      </Select>
-                      <FormDescription>Determined by selected Account.</FormDescription>
-                      <FormMessage />
-                  </FormItem>
-                  )}
-              />
-           </>
-        )}
-        
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <FormField
-            control={form.control}
-            name="date"
-            render={({ field }) => (
-                <FormItem className="flex flex-col">
-                <FormLabel>Date</FormLabel>
-                <Popover>
-                    <PopoverTrigger asChild>
-                    <FormControl>
-                        <Button
-                        variant={"outline"}
-                        className={cn(
-                            "w-full pl-3 text-left font-normal",
-                            !field.value && "text-muted-foreground"
-                        )}
-                        >
-                        {field.value ? (
-                            formatDateFns(field.value, "PPP")
-                        ) : (
-                            <span>Pick a date</span>
-                        )}
-                        <CalendarIcon className="ml-auto h-4 w-4 opacity-50" />
-                        </Button>
-                    </FormControl>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                    <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        disabled={(date) =>
-                        date > new Date() || date < new Date("1900-01-01")
-                        }
-                        initialFocus
-                    />
-                    </PopoverContent>
-                </Popover>
-                <FormMessage />
-                </FormItem>
-            )}
-            />
-            
-            {transactionType !== 'transfer' && (
                 <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>Category</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value}>
-                        <FormControl>
-                        <SelectTrigger>
-                            <SelectValue placeholder="Select category" />
-                        </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                        {categories
-                            .sort((a, b) => a.name.localeCompare(b.name))
-                            .map((cat) => (
-                            <SelectItem key={cat.id} value={cat.name}>
-                                {cat.name}
-                            </SelectItem>
-                        ))}
-                        </SelectContent>
-                    </Select>
-                    <FormMessage />
-                    </FormItem>
-                )}
+                    control={form.control}
+                    name="transactionCurrency"
+                    render={({ field }) => (
+                        <FormItem>
+                        <FormLabel>Transaction Currency</FormLabel>
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={true}>
+                            <FormControl>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select transaction currency" />
+                            </SelectTrigger>
+                            </FormControl>
+                            <SelectContent>
+                            {supportedCurrencies.map((curr) => (
+                                <SelectItem key={curr} value={curr}>
+                                {curr} ({getCurrencySymbol(curr)})
+                                </SelectItem>
+                            ))}
+                            </SelectContent>
+                        </Select>
+                        <FormDescription>Currency of the amount. Usually determined by selected Account.</FormDescription>
+                        <FormMessage />
+                        </FormItem>
+                    )}
                 />
-            )}
+                {transactionType !== 'transfer' && (
+                    <FormField
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                            <FormItem>
+                            <FormLabel>Category</FormLabel>
+                            <Select onValueChange={field.onChange} defaultValue={field.value}>
+                                <FormControl>
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select category" />
+                                </SelectTrigger>
+                                </FormControl>
+                                <SelectContent>
+                                {categories
+                                    .sort((a, b) => a.name.localeCompare(b.name))
+                                    .map((cat) => (
+                                    <SelectItem key={cat.id} value={cat.name}>
+                                        {cat.name}
+                                    </SelectItem>
+                                ))}
+                                </SelectContent>
+                            </Select>
+                            <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                )}
+                 <FormField
+                    control={form.control}
+                    name="tags"
+                    render={({ field: controllerField }) => ( // Renamed field to avoid conflict
+                        <FormItem>
+                        <FormLabel>Tags</FormLabel>
+                            <FormControl>
+                                <Input
+                                    placeholder="tag1, tag2, ..."
+                                    value={controllerField.value?.join(', ') || ''}
+                                    onChange={(e) => controllerField.onChange(parseTagsInput(e.target.value))}
+                                />
+                            </FormControl>
+                        <FormDescription>
+                            Separate tags with commas. Existing tags: {tags.slice(0, 5).map(t => t.name).join(', ')}{tags.length > 5 ? '...' : ''}
+                        </FormDescription>
+                        <FormMessage />
+                        </FormItem>
+                    )}
+                />
+            </div>
         </div>
 
-
-        <FormField
-          control={form.control}
-          name="description"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>Description (Optional)</FormLabel>
-              <FormControl>
-                <Textarea
-                  placeholder="Add a note or description..."
-                  className="resize-none"
-                  {...field}
-                  value={field.value || ''}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
-        />
-
-         <FormField
-            control={form.control}
-            name="tags"
-            render={({ field }) => (
-                <FormItem>
-                <FormLabel>Tags (Optional)</FormLabel>
-                 <Controller
-                      name="tags"
-                      control={form.control}
-                      defaultValue={initialData?.tags || []}
-                      render={({ field: controllerField }) => (
-                          <FormControl>
-                              <Textarea
-                                placeholder="Enter tags separated by commas (e.g., work, project-x)"
-                                className="resize-none"
-                                value={controllerField.value?.join(', ') || ''}
-                                onChange={(e) => controllerField.onChange(parseTagsInput(e.target.value))}
-                              />
-                          </FormControl>
-                      )}
-                 />
-                 <FormDescription>
-                    Separate tags with commas. Existing tags: {tags.map(t => t.name).join(', ')}
-                 </FormDescription>
-                 <FormMessage />
-                </FormItem>
-            )}
-            />
-
-
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? (initialData ? "Saving..." : "Adding...") : (initialData ? "Save Changes" : `Add ${transactionType.charAt(0).toUpperCase() + transactionType.slice(1)}`)}
+          {isLoading ? (initialData?.type ? "Saving..." : "Adding...") : (initialData?.type ? "Save Changes" : `Add ${transactionType.charAt(0).toUpperCase() + transactionType.slice(1)}`)}
         </Button>
       </form>
     </Form>
