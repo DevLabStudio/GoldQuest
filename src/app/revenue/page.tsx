@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -16,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, CopyPlus } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -52,6 +53,7 @@ export default function RevenuePage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
 
   useEffect(() => {
@@ -237,6 +239,7 @@ export default function RevenuePage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
+      setClonedTransactionData(undefined);
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -272,6 +275,7 @@ export default function RevenuePage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
+      setClonedTransactionData(undefined);
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -279,7 +283,7 @@ export default function RevenuePage() {
   };
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (accounts.length === 0) {
+    if (accounts.length === 0) { 
         toast({
             title: "No Accounts",
             description: "Please add an account first before adding transactions.",
@@ -296,6 +300,44 @@ export default function RevenuePage() {
         return;
     }
     setTransactionTypeToAdd(type);
+    setClonedTransactionData(undefined);
+    setIsAddTransactionDialogOpen(true);
+  };
+
+  const openCloneAndEditDialog = (transaction: Transaction) => {
+    const typeBasedOnAmount = transaction.amount < 0 ? 'expense' : 'income';
+    let typeForForm: 'expense' | 'income' | 'transfer' = typeBasedOnAmount;
+
+    const baseClonedData: Partial<AddTransactionFormData> & { date: Date } = {
+        amount: Math.abs(transaction.amount),
+        transactionCurrency: transaction.transactionCurrency,
+        date: parseISO(transaction.date.includes('T') ? transaction.date : transaction.date + 'T00:00:00Z'),
+        description: `Clone of: ${transaction.description}`,
+        category: transaction.category === 'Transfer' ? undefined : transaction.category,
+        tags: transaction.tags || [],
+    };
+
+    if (transaction.category === 'Transfer') {
+        typeForForm = typeBasedOnAmount;
+        toast({
+            title: "Cloning Transfer Leg",
+            description: `Cloned as ${typeForForm}. To create a new transfer, change type to 'Transfer' and specify accounts.`,
+            variant: "default",
+            duration: 7000,
+        });
+        setClonedTransactionData({
+            ...baseClonedData,
+            type: typeForForm,
+            accountId: transaction.accountId,
+        });
+    } else {
+        setClonedTransactionData({
+            ...baseClonedData,
+            type: typeForForm,
+            accountId: transaction.accountId,
+        });
+    }
+    setTransactionTypeToAdd(typeForForm);
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -373,8 +415,8 @@ export default function RevenuePage() {
                             <TableHead>Description</TableHead>
                             <TableHead className="text-right">Amount</TableHead>
                             <TableHead>Date</TableHead>
-                            <TableHead>Source account</TableHead> {}
-                            <TableHead>Destination account</TableHead> {}
+                            <TableHead>Source</TableHead> 
+                            <TableHead>Destination Account</TableHead> 
                             <TableHead>Category</TableHead>
                             <TableHead>Tags</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -395,7 +437,7 @@ export default function RevenuePage() {
                                             {formattedAmount}
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(transaction.date)}</TableCell>
-                                        <TableCell className="text-muted-foreground">{transaction.description}</TableCell> {}
+                                        <TableCell className="text-muted-foreground">{transaction.description}</TableCell> 
                                         <TableCell className="text-muted-foreground">{account.name}</TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
@@ -428,6 +470,9 @@ export default function RevenuePage() {
                                                 <Edit className="mr-2 h-4 w-4" />
                                                 <span>Edit</span>
                                                 </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openCloneAndEditDialog(transaction)}>
+                                                  <CopyPlus className="mr-2 h-4 w-4" /> Clone & Edit
+                                                </DropdownMenuItem>
                                                 <AlertDialog>
                                                     <AlertDialogTrigger asChild>
                                                         <div
@@ -438,7 +483,7 @@ export default function RevenuePage() {
                                                             <span>Delete</span>
                                                         </div>
                                                     </AlertDialogTrigger>
-                                                    {selectedTransaction?.id === transaction.id && (
+                                                    {selectedTransaction?.id === transaction.id && !isEditDialogOpen && (
                                                         <AlertDialogContent>
                                                             <AlertDialogHeader>
                                                             <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -500,17 +545,13 @@ export default function RevenuePage() {
                         accounts={accounts}
                         categories={categories}
                         tags={tags}
-                        onTransactionAdded={handleUpdateTransaction}
+                        onTransactionAdded={handleUpdateTransaction} // This effectively becomes "onSaveEditedTransaction"
                         isLoading={isLoading}
                         initialData={{
+                            ...selectedTransaction,
                             type: selectedTransaction.amount < 0 ? 'expense' : 'income',
-                            accountId: selectedTransaction.accountId,
                             amount: Math.abs(selectedTransaction.amount),
-                            transactionCurrency: selectedTransaction.transactionCurrency,
                             date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
-                            category: selectedTransaction.category,
-                            description: selectedTransaction.description,
-                            tags: selectedTransaction.tags || []
                         }}
                     />
                 )}
@@ -523,15 +564,24 @@ export default function RevenuePage() {
             </DialogContent>
         </Dialog>
 
-       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
+       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
+        setIsAddTransactionDialogOpen(open);
+        if (!open) {
+            setClonedTransactionData(undefined);
+            setTransactionTypeToAdd(null);
+        }
+       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
+             <DialogTitle>
+                {clonedTransactionData ? 'Clone & Edit Transaction' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}
+            </DialogTitle>
             <DialogDescription>
               Enter the details for your new {transactionTypeToAdd || 'transaction'}.
             </DialogDescription>
           </DialogHeader>
-          {accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd && (
+          {isLoading ? <Skeleton className="h-64 w-full" /> : 
+          (accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={accounts}
               categories={categories}
@@ -540,6 +590,7 @@ export default function RevenuePage() {
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
+              initialData={clonedTransactionData || {date: new Date()}}
             />
           )}
            {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
@@ -548,10 +599,10 @@ export default function RevenuePage() {
                    You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.
                </div>
             )}
-             {isLoading && <Skeleton className="h-40 w-full" /> }
         </DialogContent>
       </Dialog>
 
     </div>
   );
 }
+

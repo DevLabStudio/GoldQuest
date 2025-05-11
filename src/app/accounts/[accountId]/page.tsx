@@ -18,7 +18,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, ArrowLeft, CopyPlus } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -59,6 +59,8 @@ export default function AccountDetailPage() {
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
+
 
   const fetchData = async () => {
     if (!accountId || typeof window === 'undefined') {
@@ -73,7 +75,7 @@ export default function AccountDetailPage() {
         setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
-            getAccounts(), // Fetches all accounts for the form
+            getAccounts(), 
             getCategories(),
             getTags()
         ]);
@@ -161,7 +163,6 @@ export default function AccountDetailPage() {
 
   const handleUpdateTransaction = async (formData: AddTransactionFormData) => {
     if (!selectedTransaction) return;
-    // Simplified: Assume form data is for the current account context
     const transactionAmount = formData.type === 'expense' ? -Math.abs(formData.amount) : Math.abs(formData.amount);
     const transactionToUpdate: Transaction = {
       ...selectedTransaction,
@@ -175,7 +176,7 @@ export default function AccountDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      await fetchData(); // Refetch data for this account
+      await fetchData(); 
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
@@ -213,6 +214,7 @@ export default function AccountDetailPage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       await fetchData();
       setIsAddTransactionDialogOpen(false);
+      setClonedTransactionData(undefined); // Reset cloned data
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -223,7 +225,7 @@ export default function AccountDetailPage() {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const currentAccounts = await getAccounts(); // Fetch fresh for names
+      const currentAccounts = await getAccounts(); 
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
@@ -251,12 +253,12 @@ export default function AccountDetailPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       await fetchData();
       setIsAddTransactionDialogOpen(false);
+      setClonedTransactionData(undefined); // Reset cloned data
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
     }
   };
-
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
     if (!account && type !== 'transfer') {
@@ -268,6 +270,44 @@ export default function AccountDetailPage() {
         return;
     }
     setTransactionTypeToAdd(type);
+    setClonedTransactionData(undefined); // Ensure cloned data is reset for a fresh "add"
+    setIsAddTransactionDialogOpen(true);
+  };
+
+  const openCloneAndEditDialog = (transaction: Transaction) => {
+    const typeBasedOnAmount = transaction.amount < 0 ? 'expense' : 'income';
+    let typeForForm: 'expense' | 'income' | 'transfer' = typeBasedOnAmount;
+
+    const baseClonedData: Partial<AddTransactionFormData> & { date: Date } = {
+        amount: Math.abs(transaction.amount),
+        transactionCurrency: transaction.transactionCurrency,
+        date: parseISO(transaction.date.includes('T') ? transaction.date : transaction.date + 'T00:00:00Z'),
+        description: `Clone of: ${transaction.description}`,
+        category: transaction.category === 'Transfer' ? undefined : transaction.category,
+        tags: transaction.tags || [],
+    };
+
+    if (transaction.category === 'Transfer') {
+        typeForForm = typeBasedOnAmount;
+        toast({
+            title: "Cloning Transfer Leg",
+            description: `Cloned as ${typeForForm}. To create a new transfer, change type to 'Transfer' and specify accounts.`,
+            variant: "default",
+            duration: 7000,
+        });
+        setClonedTransactionData({
+            ...baseClonedData,
+            type: typeForForm,
+            accountId: transaction.accountId,
+        });
+    } else {
+        setClonedTransactionData({
+            ...baseClonedData,
+            type: typeForForm,
+            accountId: transaction.accountId,
+        });
+    }
+    setTransactionTypeToAdd(typeForForm);
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -281,11 +321,11 @@ export default function AccountDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading) {
+  if (isLoading && !account) { // Added !account for initial loading state
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
-        <Skeleton className="h-64 w-full mb-8" /> {/* Skeleton for chart */}
+        <Skeleton className="h-64 w-full mb-8" />
         <div className="flex flex-col md:flex-row gap-8">
             <div className="flex-grow">
                 <Skeleton className="h-96 w-full" />
@@ -437,6 +477,9 @@ export default function AccountDetailPage() {
                                 <DropdownMenuItem onClick={() => openEditDialog(transaction)}>
                                   <Edit className="mr-2 h-4 w-4" /> Edit
                                 </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openCloneAndEditDialog(transaction)}>
+                                  <CopyPlus className="mr-2 h-4 w-4" /> Clone & Edit
+                                </DropdownMenuItem>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
                                     <div
@@ -446,7 +489,7 @@ export default function AccountDetailPage() {
                                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                                     </div>
                                   </AlertDialogTrigger>
-                                  {selectedTransaction?.id === transaction.id && (
+                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( // Ensure not to show delete confirmation if edit dialog is open for the same tx
                                     <AlertDialogContent>
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -482,9 +525,9 @@ export default function AccountDetailPage() {
         <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
           <MonthlySummarySidebar
             transactions={filteredTransactions}
-            accounts={[account]} // Pass current account in an array
+            accounts={account ? [account] : []}
             preferredCurrency={preferredCurrency}
-            transactionType="all" // Or derive based on account type if needed
+            transactionType="all" 
             isLoading={isLoading}
           />
         </div>
@@ -503,38 +546,52 @@ export default function AccountDetailPage() {
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleUpdateTransaction}
+              onTransactionAdded={handleUpdateTransaction} // This effectively becomes "onSaveEditedTransaction"
               isLoading={isLoading}
               initialData={{
+                ...selectedTransaction, // Pass the full selected transaction for editing
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                accountId: selectedTransaction.accountId, // Pre-fill if needed, though context implies it's for this account
-                amount: Math.abs(selectedTransaction.amount),
-                transactionCurrency: selectedTransaction.transactionCurrency,
+                amount: Math.abs(selectedTransaction.amount), // Amount should be positive in form
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
-                category: selectedTransaction.category,
-                description: selectedTransaction.description,
-                tags: selectedTransaction.tags || []
               }}
             />
           )}
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
+      <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
+        setIsAddTransactionDialogOpen(open);
+        if (!open) {
+            setClonedTransactionData(undefined); // Reset cloned data when dialog closes
+            setTransactionTypeToAdd(null);
+        }
+      }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'} for {account.name}</DialogTitle>
+             <DialogTitle>
+              {clonedTransactionData ? 'Clone & Edit Transaction' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}
+              {account && !clonedTransactionData && ` for ${account.name}`}
+            </DialogTitle>
           </DialogHeader>
-          {allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd && (
+          {isLoading ? <Skeleton className="h-64 w-full"/> : 
+          (allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleTransactionAdded}
-              onTransferAdded={handleTransferAdded}
+              onTransactionAdded={handleTransactionAdded} // For new or cloned
+              onTransferAdded={handleTransferAdded}     // For new or cloned transfers
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
-              initialData={transactionTypeToAdd !== 'transfer' ? { accountId: account.id, transactionCurrency: account.currency } : { fromAccountId: account.id, transactionCurrency: account.currency } }
+              initialData={
+                clonedTransactionData ||
+                (transactionTypeToAdd !== 'transfer' && account
+                    ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
+                    : (transactionTypeToAdd === 'transfer' && account 
+                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date() }
+                        : {date: new Date()}) // Fallback for safety
+                )
+              }
             />
           )}
         </DialogContent>
