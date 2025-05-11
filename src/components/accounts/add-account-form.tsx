@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -10,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { popularBanks } from '@/lib/banks'; // Import bank list
+import { popularBanks, type BankInfo } from '@/lib/banks'; // Import bank list and type
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency'; // Import currency utils
 import type { NewAccountData } from '@/services/account-sync'; // Use NewAccountData
+import Image from 'next/image';
 
 // Define Zod schema for form validation
 const formSchema = z.object({
@@ -78,12 +78,27 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {popularBanks.map((bank) => (
-                    <SelectItem key={bank} value={bank}>
-                      {bank}
+                  {popularBanks.map((bank: BankInfo) => (
+                    <SelectItem key={bank.name} value={bank.name}>
+                      <div className="flex items-center">
+                        <Image 
+                            src={bank.iconUrl} 
+                            alt={`${bank.name} logo`} 
+                            width={20} 
+                            height={20} 
+                            className="mr-2 rounded-sm" 
+                            data-ai-hint={bank.dataAiHint}
+                        />
+                        {bank.name}
+                      </div>
                     </SelectItem>
                   ))}
-                   <SelectItem value="Other">Other (Specify in Name)</SelectItem>
+                   <SelectItem value="Other">
+                     <div className="flex items-center">
+                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span> {/* Placeholder for "Other" */}
+                        Other (Specify in Name)
+                      </div>
+                    </SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -186,4 +201,3 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
 };
 
 export default AddAccountForm;
-

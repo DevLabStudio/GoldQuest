@@ -10,10 +10,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { popularBanks } from '@/lib/banks';
-import { popularExchanges, popularWallets } from '@/lib/crypto-providers'; // Import crypto providers
+import { popularBanks, type BankInfo } from '@/lib/banks';
+import { popularExchanges, popularWallets, type CryptoProviderInfo } from '@/lib/crypto-providers'; // Import crypto providers
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { Account } from '@/services/account-sync';
+import Image from 'next/image';
 
 // Define Zod schema for form validation (adjust accountType enum based on category if needed)
 const formSchema = z.object({
@@ -35,8 +36,15 @@ interface EditAccountFormProps {
 }
 
 // Helper to get appropriate provider list based on category
-const getProviderList = (category: 'asset' | 'crypto'): string[] => {
-    return category === 'asset' ? popularBanks : [...popularExchanges, ...popularWallets].sort();
+const getProviderList = (category: 'asset' | 'crypto'): Array<BankInfo | CryptoProviderInfo> => {
+    if (category === 'asset') {
+        return popularBanks;
+    } else {
+        // Ensure unique names if merging, though for now they are separate objects with 'name'
+        const providers = [...popularExchanges, ...popularWallets];
+        // Sort them by name
+        return providers.sort((a, b) => a.name.localeCompare(b.name));
+    }
 }
 
 // Helper to get appropriate account types based on category
@@ -108,11 +116,28 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                 </FormControl>
                 <SelectContent>
                   {providerList.map((provider) => (
-                    <SelectItem key={provider} value={provider}>
-                      {provider}
+                    <SelectItem key={provider.name} value={provider.name}>
+                      <div className="flex items-center">
+                        <Image 
+                            src={provider.iconUrl} 
+                            alt={`${provider.name} logo`} 
+                            width={20} 
+                            height={20} 
+                            className="mr-2 rounded-sm"
+                            data-ai-hint={provider.dataAiHint}
+                        />
+                        {provider.name}
+                      </div>
                     </SelectItem>
                   ))}
-                   <SelectItem value="Other">Other (Specify in Name)</SelectItem>
+                   <SelectItem value="Other">
+                     <div className="flex items-center">
+                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">
+                            {account.category === 'asset' ? '🏦' : '💠'}
+                        </span>
+                        Other (Specify in Name)
+                      </div>
+                   </SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -214,4 +239,4 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
 };
 
 export default EditAccountForm;
-
+```

@@ -10,9 +10,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { popularExchanges, popularWallets } from '@/lib/crypto-providers'; // Import crypto provider lists
+import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers'; // Import crypto provider lists and type
 import { getCurrencySymbol } from '@/lib/currency'; // Import currency utils
 import type { NewAccountData } from '@/services/account-sync'; // Use NewAccountData
+import Image from 'next/image';
 
 // Define allowed fiat currencies
 const allowedFiatCurrencies = ['EUR', 'USD', 'BRL'] as const;
@@ -63,8 +64,6 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
     form.reset(); // Reset form after successful submission
   }
 
-  // Combine exchanges and wallets for the provider dropdown
-  const cryptoProviders = [...popularExchanges, ...popularWallets].sort();
   const selectedCurrency = form.watch('currency'); // Watch the currency field
 
   return (
@@ -83,12 +82,27 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {cryptoProviders.map((provider) => (
-                    <SelectItem key={provider} value={provider}>
-                      {provider}
+                  {allCryptoProviders.map((provider: CryptoProviderInfo) => (
+                    <SelectItem key={provider.name} value={provider.name}>
+                       <div className="flex items-center">
+                        <Image 
+                            src={provider.iconUrl} 
+                            alt={`${provider.name} logo`} 
+                            width={20} 
+                            height={20} 
+                            className="mr-2 rounded-sm"
+                            data-ai-hint={provider.dataAiHint} 
+                        />
+                        {provider.name}
+                      </div>
                     </SelectItem>
                   ))}
-                   <SelectItem value="Other">Other (Specify in Name)</SelectItem>
+                   <SelectItem value="Other">
+                     <div className="flex items-center">
+                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">💠</span> {/* Placeholder for "Other" */}
+                        Other (Specify in Name)
+                      </div>
+                   </SelectItem>
                 </SelectContent>
               </Select>
               <FormMessage />
@@ -193,4 +207,4 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
 };
 
 export default AddCryptoForm;
-
+```
