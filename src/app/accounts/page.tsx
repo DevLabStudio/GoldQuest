@@ -253,7 +253,7 @@ export default function AccountsPage() {
                     </div>
                   </TableCell>
                    <TableCell className="text-muted-foreground">
-                       {format(new Date(account.lastActivity || Date.now()), 'PP')}
+                       {account.lastActivity ? format(new Date(account.lastActivity), 'PP') : 'N/A'}
                    </TableCell>
                    <TableCell className="text-muted-foreground">
                        {formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false)}
@@ -295,8 +295,8 @@ export default function AccountsPage() {
                   No {category} accounts added yet.
                    <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
                      <DialogTrigger asChild>
-                        <Button variant="link" className="ml-2 px-0 h-auto text-primary">
-                            Add your first {category} account
+                        <Button variant="default" size="sm" className="ml-2">
+                           <PlusCircle className="mr-2 h-4 w-4" /> Add your first {category} account
                         </Button>
                       </DialogTrigger>
                      <DialogContent className="sm:max-w-3xl">
@@ -395,3 +395,6 @@ export default function AccountsPage() {
     </div>
   );
 }
+
+
+    
