@@ -53,4 +53,3 @@ export const popularBanks: BankInfo[] = [
 
 // Sort alphabetically for better usability in dropdowns
 popularBanks.sort((a, b) => a.name.localeCompare(b.name));
-```

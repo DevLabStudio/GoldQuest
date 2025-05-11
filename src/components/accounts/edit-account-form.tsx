@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -62,7 +61,7 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
             { value: 'exchange', label: 'Exchange Account' },
             { value: 'wallet', label: 'Self-Custody Wallet' },
             { value: 'staking', label: 'Staking/Yield Account' },
-            { value: 'other', label: 'Other Crypto Holding' },
+            { value: 'other Crypto Holding', label: 'Other Crypto Holding' },
         ];
     }
 }
@@ -239,4 +238,3 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
 };
 
 export default EditAccountForm;
-```

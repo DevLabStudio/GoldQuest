@@ -207,4 +207,3 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
 };
 
 export default AddCryptoForm;
-```

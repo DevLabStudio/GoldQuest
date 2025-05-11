@@ -46,4 +46,3 @@ export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularE
 
 popularExchanges.sort((a, b) => a.name.localeCompare(b.name));
 popularWallets.sort((a, b) => a.name.localeCompare(b.name));
-```
