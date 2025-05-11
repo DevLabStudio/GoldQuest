@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -5,7 +6,7 @@ import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
-import { PlusCircle, Edit, Trash2, MoreHorizontal } from "lucide-react";
+import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye } from "lucide-react"; // Added Eye icon
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -17,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format } from 'date-fns';
+import Link from 'next/link'; // Import Link
 
 
 export default function AccountsPage() {
@@ -180,9 +182,9 @@ export default function AccountsPage() {
       onOpenChange: (open: boolean) => void;
       AddFormComponent: FC<{ onAccountAdded: (data: NewAccountData) => void }>;
   }
-  
+
   const AccountTable: FC<AccountTableProps> = ({ accounts, title, category, onAddClick, isAddDialogOpen, onOpenChange, AddFormComponent }) => (
-    <Card className="mb-8"> 
+    <Card className="mb-8">
       <CardHeader>
          <div className="flex justify-between items-center">
             <CardTitle>{title}</CardTitle>
@@ -210,7 +212,7 @@ export default function AccountsPage() {
           <TableHeader>
             <TableRow>
               <TableHead>Name</TableHead>
-              <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead> 
+              <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
               <TableHead>Current balance</TableHead>
               <TableHead>Last activity</TableHead>
               <TableHead>Balance difference</TableHead>
@@ -219,7 +221,7 @@ export default function AccountsPage() {
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              [...Array(2)].map((_, i) => ( 
+              [...Array(2)].map((_, i) => (
                 <TableRow key={`skeleton-${category}-${i}`}>
                   <TableCell><Skeleton className="h-5 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-5 w-32" /></TableCell>
@@ -232,8 +234,12 @@ export default function AccountsPage() {
             ) : accounts.length > 0 ? (
               accounts.map((account) => (
                 <TableRow key={account.id} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">{account.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell> 
+                  <TableCell className="font-medium">
+                     <Link href={`/accounts/${account.id}`} className="hover:underline text-primary">
+                        {account.name}
+                     </Link>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell>
                   <TableCell>
                     <div className="flex flex-col">
                       <span className="font-semibold text-primary">
@@ -261,6 +267,12 @@ export default function AccountsPage() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end">
+                        <DropdownMenuItem asChild>
+                            <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
+                                <Eye className="mr-2 h-4 w-4" />
+                                <span>View Transactions</span>
+                            </Link>
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => openEditDialog(account)}>
                           <Edit className="mr-2 h-4 w-4" />
                           <span>Edit</span>
@@ -341,7 +353,7 @@ export default function AccountsPage() {
 
         <AccountTable
             accounts={assetAccounts}
-            title="Property (Asset Accounts)" 
+            title="Property (Asset Accounts)"
             category="asset"
             onAddClick={() => setIsAddAssetDialogOpen(true)}
             isAddDialogOpen={isAddAssetDialogOpen}
@@ -351,12 +363,12 @@ export default function AccountsPage() {
 
         <AccountTable
             accounts={cryptoAccounts}
-            title="Self-Custody (Crypto Accounts)" 
+            title="Self-Custody (Crypto Accounts)"
             category="crypto"
             onAddClick={() => setIsAddCryptoDialogOpen(true)}
             isAddDialogOpen={isAddCryptoDialogOpen}
             onOpenChange={setIsAddCryptoDialogOpen}
-            AddFormComponent={AddCryptoForm} 
+            AddFormComponent={AddCryptoForm}
         />
 
 
