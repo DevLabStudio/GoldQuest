@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -6,8 +5,8 @@ import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
-import { PlusCircle, Edit, Trash2, MoreHorizontal, Wallet } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { PlusCircle, Edit, Trash2, MoreHorizontal } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import AddAccountForm from '@/components/accounts/add-account-form';
@@ -193,7 +192,7 @@ export default function AccountsPage() {
                    <PlusCircle className="mr-2 h-4 w-4" /> Create new {category} account
                  </Button>
                </DialogTrigger>
-               <DialogContent className="sm:max-w-[425px]">
+               <DialogContent className="sm:max-w-3xl">
                  <DialogHeader>
                    <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
                    <DialogDescription>
@@ -240,7 +239,6 @@ export default function AccountsPage() {
                       <span className="font-semibold text-primary">
                         {formatCurrency(account.balance, account.currency, account.currency, false)}
                       </span>
-                      {/* Show converted value if preferredCurrency is different from account.currency */}
                       {preferredCurrency && account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                         <span className="text-xs text-muted-foreground mt-1">
                             (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
@@ -289,7 +287,7 @@ export default function AccountsPage() {
                             Add your first {category} account
                         </Button>
                       </DialogTrigger>
-                     <DialogContent className="sm:max-w-[425px]">
+                     <DialogContent className="sm:max-w-3xl">
                         <DialogHeader>
                           <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
                            <DialogDescription>
@@ -313,7 +311,7 @@ export default function AccountsPage() {
                           <PlusCircle className="mr-2 h-4 w-4" /> Create new {category} account
                       </Button>
                   </DialogTrigger>
-                  <DialogContent className="sm:max-w-[425px]">
+                  <DialogContent className="sm:max-w-3xl">
                       <DialogHeader>
                          <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
                            <DialogDescription>
@@ -366,7 +364,7 @@ export default function AccountsPage() {
           setIsEditDialogOpen(open);
           if (!open) setSelectedAccount(null);
       }}>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
                   <DialogTitle>Edit Account</DialogTitle>
                   <DialogDescription>
@@ -385,4 +383,3 @@ export default function AccountsPage() {
     </div>
   );
 }
-

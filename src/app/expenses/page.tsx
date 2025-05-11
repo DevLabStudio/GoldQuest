@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -493,7 +492,7 @@ export default function ExpensesPage() {
             setIsEditDialogOpen(open);
             if (!open) setSelectedTransaction(null);
         }}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Transaction</DialogTitle>
                     <DialogDescription>
@@ -529,7 +528,7 @@ export default function ExpensesPage() {
         </Dialog>
 
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
             <DialogDescription>
@@ -560,4 +559,3 @@ export default function ExpensesPage() {
     </div>
   );
 }
-

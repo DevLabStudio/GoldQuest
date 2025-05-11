@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -18,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; 
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react'; 
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -357,7 +356,7 @@ export default function TransactionsOverviewPage() {
                 Add Income
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
-                <TransferIconOriginal className="mr-2 h-4 w-4" />
+                <TransferIcon className="mr-2 h-4 w-4" />
                 Add Transfer
                 </DropdownMenuItem>
             </DropdownMenuContent>
@@ -533,7 +532,7 @@ export default function TransactionsOverviewPage() {
             setIsEditDialogOpen(open);
             if (!open) setSelectedTransaction(null);
         }}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Transaction</DialogTitle>
                     <DialogDescription>
@@ -569,7 +568,7 @@ export default function TransactionsOverviewPage() {
         </Dialog>
 
        <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
             <DialogDescription>
@@ -599,4 +598,3 @@ export default function TransactionsOverviewPage() {
     </div>
   );
 }
-

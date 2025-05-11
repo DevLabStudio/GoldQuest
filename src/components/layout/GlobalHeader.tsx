@@ -174,7 +174,7 @@ const GlobalHeader: FC = () => {
       </div>
 
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={setIsAddTransactionDialogOpen}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>Add New {transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}</DialogTitle>
             <DialogDescription>
@@ -188,8 +188,6 @@ const GlobalHeader: FC = () => {
               <Skeleton className="h-10 w-full" />
             </div>
           ) : (accounts.length > 0 && categories.length > 0 && tagsList.length > 0 && transactionTypeToAdd) ? (
-            // This condition implicitly handles the checks done in useEffect because
-            // if those checks failed, isAddTransactionDialogOpen would be false.
             <AddTransactionForm
               accounts={accounts}
               categories={categories}
@@ -200,10 +198,6 @@ const GlobalHeader: FC = () => {
               initialType={transactionTypeToAdd}
             />
           ) : (
-            // This message is shown if loading is false BUT the dialog is still trying to open
-            // (e.g., if checks in useEffect failed and set isAddTransactionDialogOpen to false,
-            // this part might not even be reached if the dialog truly closes.
-            // However, if there's a slight delay or if essential data like categories/tags are missing.)
             <div className="py-4 text-center text-muted-foreground">
                 {!isLoadingDataForForm && 
                  ( (accounts.length === 0 && transactionTypeToAdd !== 'transfer') || 

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
 import { getTags, addTag, updateTag, deleteTag, type Tag, getTagStyle } from "@/services/tags.tsx"; 
@@ -63,7 +63,7 @@ export default function TagsPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, [toast]); 
 
   const localFetchTags = async () => { 
     setIsLoading(true); setError(null);
@@ -163,7 +163,7 @@ export default function TagsPage() {
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Tag
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Tag</DialogTitle>
               <DialogDescription>
@@ -252,7 +252,7 @@ export default function TagsPage() {
                          Add your first tag
                     </Button>
                   </DialogTrigger>
-                 <DialogContent className="sm:max-w-[425px]">
+                 <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                       <DialogTitle>Add New Tag</DialogTitle>
                       <DialogDescription>
@@ -273,7 +273,7 @@ export default function TagsPage() {
                           <PlusCircle className="mr-2 h-4 w-4" /> Add New Tag
                        </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
+                    <DialogContent className="sm:max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>Add New Tag</DialogTitle>
                         <DialogDescription>
@@ -291,7 +291,7 @@ export default function TagsPage() {
             setIsEditDialogOpen(open);
             if (!open) setSelectedTag(null); 
         }}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Tag</DialogTitle>
                     <DialogDescription>
@@ -311,4 +311,3 @@ export default function TagsPage() {
     </div>
   );
 }
-

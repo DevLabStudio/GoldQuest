@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Edit, Trash2 } from 'lucide-react';
 import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories.tsx";
@@ -66,7 +66,7 @@ export default function CategoriesPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, []); // Corrected dependency array
+  }, [toast]); 
 
   const localFetchCategories = async () => {
     setIsLoading(true); setError(null);
@@ -166,7 +166,7 @@ export default function CategoriesPage() {
               <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
             </Button>
           </DialogTrigger>
-          <DialogContent className="sm:max-w-[425px]">
+          <DialogContent className="sm:max-w-2xl">
             <DialogHeader>
               <DialogTitle>Add New Category</DialogTitle>
               <DialogDescription>
@@ -255,7 +255,7 @@ export default function CategoriesPage() {
                          Add your first category
                     </Button>
                   </DialogTrigger>
-                 <DialogContent className="sm:max-w-[425px]">
+                 <DialogContent className="sm:max-w-2xl">
                     <DialogHeader>
                       <DialogTitle>Add New Category</DialogTitle>
                       <DialogDescription>
@@ -276,7 +276,7 @@ export default function CategoriesPage() {
                           <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
                        </Button>
                     </DialogTrigger>
-                    <DialogContent className="sm:max-w-[425px]">
+                    <DialogContent className="sm:max-w-2xl">
                       <DialogHeader>
                         <DialogTitle>Add New Category</DialogTitle>
                         <DialogDescription>
@@ -294,7 +294,7 @@ export default function CategoriesPage() {
             setIsEditDialogOpen(open);
             if (!open) setSelectedCategory(null); 
         }}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
                     <DialogTitle>Edit Category</DialogTitle>
                     <DialogDescription>
@@ -314,4 +314,3 @@ export default function CategoriesPage() {
     </div>
   );
 }
-

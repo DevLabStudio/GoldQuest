@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -12,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
-import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIconOriginal, ChevronDown } from 'lucide-react'; 
+import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react'; 
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -358,7 +357,7 @@ export default function TransfersPage() {
                 Add Income
                 </DropdownMenuItem>
                 <DropdownMenuItem onClick={() => openAddTransactionDialog('transfer')}>
-                <TransferIconOriginal className="mr-2 h-4 w-4" />
+                <TransferIcon className="mr-2 h-4 w-4" />
                 Add Transfer
                 </DropdownMenuItem>
             </DropdownMenuContent>
@@ -383,7 +382,7 @@ export default function TransfersPage() {
                                 </CardDescription>
                             </div>
                              <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('transfer')}>
-                                <TransferIconOriginal className="mr-2 h-4 w-4" /> Create new transfer
+                                <TransferIcon className="mr-2 h-4 w-4" /> Create new transfer
                             </Button>
                         </div>
                     </CardHeader>
@@ -495,7 +494,7 @@ export default function TransfersPage() {
           setIsAddTransactionDialogOpen(open);
           if (!open) setEditingTransferPair(null); 
       }}>
-        <DialogContent className="sm:max-w-[480px]">
+        <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>
                 {editingTransferPair ? 'Edit Transfer' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}
@@ -528,4 +527,3 @@ export default function TransfersPage() {
     </div>
   );
 }
-
