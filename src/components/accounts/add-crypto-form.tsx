@@ -10,32 +10,29 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers'; // Import crypto provider lists and type
-import { getCurrencySymbol } from '@/lib/currency'; // Import currency utils
-import type { NewAccountData } from '@/services/account-sync'; // Use NewAccountData
+import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers'; 
+import { getCurrencySymbol } from '@/lib/currency'; 
+import type { NewAccountData } from '@/services/account-sync'; 
 import Image from 'next/image';
 
-// Define allowed fiat currencies
 const allowedFiatCurrencies = ['EUR', 'USD', 'BRL'] as const;
 
-// Define Zod schema for form validation
 const formSchema = z.object({
   providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
-  accountType: z.enum(['exchange', 'wallet', 'staking', 'other'], { // Crypto-specific types
+  accountType: z.enum(['exchange', 'wallet', 'staking', 'other'], { 
     required_error: "Account type is required",
   }),
-  // Restrict currency to specific fiat options
   currency: z.enum(allowedFiatCurrencies, {
       required_error: "Fiat currency is required",
   }),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative"), // Coerce to number
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative"), 
 });
 
 type AddCryptoFormData = z.infer<typeof formSchema>;
 
 interface AddCryptoFormProps {
-  onAccountAdded: (account: NewAccountData) => void; // Callback when account is added, use NewAccountData
+  onAccountAdded: (account: NewAccountData) => void; 
 }
 
 const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
@@ -44,27 +41,26 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
     defaultValues: {
       providerName: "",
       accountName: "",
-      accountType: undefined, // Default to no selection
-      currency: "BRL", // Default to BRL
+      accountType: undefined, 
+      currency: "BRL", 
       balance: 0,
     },
   });
 
   function onSubmit(values: AddCryptoFormData) {
-    // Prepare data in the expected NewAccountData format, setting category to 'crypto'
     const newAccountData: NewAccountData = {
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
-        currency: values.currency.toUpperCase(), // Ensure currency symbol is uppercase
+        currency: values.currency.toUpperCase(), 
         providerName: values.providerName,
-        category: 'crypto', // Explicitly set category for this form
+        category: 'crypto', 
     };
     onAccountAdded(newAccountData);
-    form.reset(); // Reset form after successful submission
+    form.reset(); 
   }
 
-  const selectedCurrency = form.watch('currency'); // Watch the currency field
+  const selectedCurrency = form.watch('currency'); 
 
   return (
     <Form {...form}>
@@ -87,7 +83,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                        <div className="flex items-center">
                         <Image 
                             src={provider.iconUrl} 
-                            alt={`${provider.name} logo`} 
+                            alt={`${provider.name} logo placeholder`}
                             width={20} 
                             height={20} 
                             className="mr-2 rounded-sm"
@@ -99,7 +95,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                   ))}
                    <SelectItem value="Other">
                      <div className="flex items-center">
-                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">💠</span> {/* Placeholder for "Other" */}
+                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">💠</span> 
                         Other (Specify in Name)
                       </div>
                    </SelectItem>
@@ -157,7 +153,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
               name="currency"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Fiat Currency</FormLabel> {/* Changed Label */}
+                  <FormLabel>Fiat Currency</FormLabel> 
                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                       <SelectTrigger>
@@ -173,7 +169,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                     </SelectContent>
                   </Select>
                    <FormDescription>
-                       Select the fiat currency for this account. {/* Changed Description */}
+                       Select the fiat currency for this account. 
                    </FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -185,10 +181,8 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
               name="balance"
               render={({ field }) => (
                 <FormItem>
-                  {/* Dynamically update label with selected currency symbol */}
                   <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
                   <FormControl>
-                    {/* Use step="0.01" for currency */}
                     <Input type="number" placeholder="0.00" step="0.01" {...field} />
                   </FormControl>
                    <FormDescription>

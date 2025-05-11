@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -9,14 +10,14 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { popularBanks, type BankInfo } from '@/lib/banks'; // Import bank list and type
-import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency'; // Import currency utils
-import type { NewAccountData } from '@/services/account-sync'; // Use NewAccountData
+import { popularBanks, type BankInfo } from '@/lib/banks'; 
+import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency'; 
+import type { NewAccountData } from '@/services/account-sync'; 
 import Image from 'next/image';
 
 // Define Zod schema for form validation
 const formSchema = z.object({
-  providerName: z.string().min(1, "Provider name is required"), // Renamed from bankName
+  providerName: z.string().min(1, "Provider name is required"), 
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
   accountType: z.enum(['checking', 'savings', 'credit card', 'investment', 'other'], {
     required_error: "Account type is required",
@@ -25,56 +26,55 @@ const formSchema = z.object({
       (val) => supportedCurrencies.includes(val.toUpperCase()),
       { message: "Unsupported currency" }
   ),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative for initial setup"), // Coerce to number
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative for initial setup"),
 });
 
 type AddAccountFormData = z.infer<typeof formSchema>;
 
 interface AddAccountFormProps {
-  onAccountAdded: (account: NewAccountData) => void; // Callback when account is added, use NewAccountData
+  onAccountAdded: (account: NewAccountData) => void; 
 }
 
 const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
   const form = useForm<AddAccountFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      providerName: "", // Renamed default
+      providerName: "", 
       accountName: "",
-      accountType: undefined, // Default to no selection
-      currency: "BRL", // Default to BRL
+      accountType: undefined, 
+      currency: "BRL", 
       balance: 0,
     },
   });
 
   function onSubmit(values: AddAccountFormData) {
-    // Prepare data in the expected NewAccountData format, setting category to 'asset'
     const newAccountData: NewAccountData = {
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
-        currency: values.currency.toUpperCase(), // Ensure currency is uppercase
-        providerName: values.providerName, // Renamed field
-        category: 'asset', // Explicitly set category for this form
+        currency: values.currency.toUpperCase(), 
+        providerName: values.providerName, 
+        category: 'asset', 
     };
     onAccountAdded(newAccountData);
-    form.reset(); // Reset form after successful submission
+    form.reset(); 
   }
 
-  const selectedCurrency = form.watch('currency'); // Watch the currency field
+  const selectedCurrency = form.watch('currency'); 
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="providerName" // Renamed field
+          name="providerName" 
           render={({ field }) => (
             <FormItem>
-              <FormLabel>Bank/Institution Name</FormLabel> {/* Updated label */}
+              <FormLabel>Bank/Institution Name</FormLabel> 
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a bank or institution" /> {/* Updated placeholder */}
+                    <SelectValue placeholder="Select a bank or institution" /> 
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
@@ -83,7 +83,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                       <div className="flex items-center">
                         <Image 
                             src={bank.iconUrl} 
-                            alt={`${bank.name} logo`} 
+                            alt={`${bank.name} logo placeholder`} 
                             width={20} 
                             height={20} 
                             className="mr-2 rounded-sm" 
@@ -95,7 +95,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                   ))}
                    <SelectItem value="Other">
                      <div className="flex items-center">
-                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span> {/* Placeholder for "Other" */}
+                        <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span> 
                         Other (Specify in Name)
                       </div>
                     </SelectItem>
@@ -179,10 +179,8 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
               name="balance"
               render={({ field }) => (
                 <FormItem>
-                   {/* Dynamically update label with currency symbol */}
                   <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
                   <FormControl>
-                    {/* Use step="0.01" for currency */}
                     <Input type="number" placeholder="0.00" step="0.01" {...field} />
                   </FormControl>
                   <FormMessage />
@@ -194,7 +192,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
             Enter the current balance in the selected currency.
          </FormDescription>
 
-        <Button type="submit" className="w-full">Add Asset Account</Button> {/* Updated button text */}
+        <Button type="submit" className="w-full">Add Asset Account</Button> 
       </form>
     </Form>
   );

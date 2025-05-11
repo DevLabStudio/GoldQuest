@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -10,43 +11,36 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { popularBanks, type BankInfo } from '@/lib/banks';
-import { popularExchanges, popularWallets, type CryptoProviderInfo } from '@/lib/crypto-providers'; // Import crypto providers
+import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers'; 
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { Account } from '@/services/account-sync';
 import Image from 'next/image';
 
-// Define Zod schema for form validation (adjust accountType enum based on category if needed)
+const allowedFiatCurrenciesForCrypto = ['EUR', 'USD', 'BRL'] as const;
+
 const formSchema = z.object({
-  providerName: z.string().min(1, "Provider name is required"), // Renamed from bankName
+  providerName: z.string().min(1, "Provider name is required"), 
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
-  accountType: z.string().min(1, "Account type is required"), // Allow string for flexibility between asset/crypto types initially
-  currency: z.string().min(3, "Currency is required").refine(
-      (val) => supportedCurrencies.includes(val.toUpperCase()),
-      { message: "Unsupported currency" }
-  ),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}), // Balance can be negative for updates
+  accountType: z.string().min(1, "Account type is required"), 
+  currency: z.string().min(3, "Currency is required"), // Validated dynamically below
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}), 
 });
 
 type EditAccountFormData = z.infer<typeof formSchema>;
 
 interface EditAccountFormProps {
-  account: Account; // The account to edit
-  onAccountUpdated: (updatedAccount: Account) => void; // Callback when account is updated
+  account: Account; 
+  onAccountUpdated: (updatedAccount: Account) => void; 
 }
 
-// Helper to get appropriate provider list based on category
 const getProviderList = (category: 'asset' | 'crypto'): Array<BankInfo | CryptoProviderInfo> => {
     if (category === 'asset') {
         return popularBanks;
     } else {
-        // Ensure unique names if merging, though for now they are separate objects with 'name'
-        const providers = [...popularExchanges, ...popularWallets];
-        // Sort them by name
-        return providers.sort((a, b) => a.name.localeCompare(b.name));
+        return allCryptoProviders;
     }
 }
 
-// Helper to get appropriate account types based on category
 const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: string }[] => {
     if (category === 'asset') {
         return [
@@ -56,7 +50,7 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
             { value: 'investment', label: 'Investment' },
             { value: 'other', label: 'Other' },
         ];
-    } else { // category === 'crypto'
+    } else { 
         return [
             { value: 'exchange', label: 'Exchange Account' },
             { value: 'wallet', label: 'Self-Custody Wallet' },
@@ -66,47 +60,53 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
     }
 }
 
-
 const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }) => {
   const form = useForm<EditAccountFormData>({
-    resolver: zodResolver(formSchema),
+    resolver: zodResolver(formSchema.refine(data => {
+        if (account.category === 'crypto') {
+            return allowedFiatCurrenciesForCrypto.includes(data.currency.toUpperCase() as any);
+        }
+        return supportedCurrencies.includes(data.currency.toUpperCase());
+    }, {
+        message: account.category === 'crypto' ? `Currency for crypto accounts must be one of: ${allowedFiatCurrenciesForCrypto.join(', ')}` : "Unsupported currency",
+        path: ['currency'],
+    })),
     defaultValues: {
-      providerName: account.providerName || "", // Use providerName
+      providerName: account.providerName || "", 
       accountName: account.name,
-      accountType: account.type, // Use existing type string
+      accountType: account.type, 
       currency: account.currency.toUpperCase(),
       balance: account.balance,
     },
   });
 
   function onSubmit(values: EditAccountFormData) {
-    // Prepare data in the expected Account format, keeping the original ID and category
     const updatedAccountData: Account = {
-        ...account, // Spread existing account data to preserve ID, category, etc.
+        ...account, 
         name: values.accountName,
         type: values.accountType,
         balance: values.balance,
         currency: values.currency.toUpperCase(),
-        providerName: values.providerName, // Use providerName
-        // category remains unchanged from the original 'account' object
+        providerName: values.providerName, 
     };
     onAccountUpdated(updatedAccountData);
-    // Optionally reset form or close dialog here via callback
   }
 
-  const selectedCurrency = form.watch('currency'); // Watch the currency field
-  const providerList = getProviderList(account.category); // Get providers based on existing account category
-  const accountTypes = getAccountTypes(account.category); // Get account types based on existing category
+  const selectedCurrency = form.watch('currency'); 
+  const providerList = getProviderList(account.category); 
+  const accountTypes = getAccountTypes(account.category); 
+  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : supportedCurrencies;
+
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <FormField
           control={form.control}
-          name="providerName" // Use providerName
+          name="providerName" 
           render={({ field }) => (
             <FormItem>
-              <FormLabel>{account.category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'} Name</FormLabel> {/* Dynamic Label */}
+              <FormLabel>{account.category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'} Name</FormLabel> 
               <Select onValueChange={field.onChange} defaultValue={field.value}>
                 <FormControl>
                   <SelectTrigger>
@@ -119,7 +119,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                       <div className="flex items-center">
                         <Image 
                             src={provider.iconUrl} 
-                            alt={`${provider.name} logo`} 
+                            alt={`${provider.name} logo placeholder`}
                             width={20} 
                             height={20} 
                             className="mr-2 rounded-sm"
@@ -200,13 +200,16 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      {supportedCurrencies.map((curr) => (
+                      {currencyOptions.map((curr) => (
                         <SelectItem key={curr} value={curr}>
                           {curr} ({getCurrencySymbol(curr)})
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
+                   <FormDescription>
+                      {account.category === 'crypto' ? 'Fiat currency for this crypto account.' : 'Account currency.'}
+                   </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -219,7 +222,6 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                 <FormItem>
                   <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
                   <FormControl>
-                    {/* Use step="0.01" for currency */}
                     <Input type="number" placeholder="0.00" step="0.01" {...field} />
                   </FormControl>
                   <FormMessage />
