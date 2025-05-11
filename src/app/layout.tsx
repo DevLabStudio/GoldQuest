@@ -1,10 +1,10 @@
-
 import type { Metadata } from 'next';
 import { Oxanium } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
-import AuthWrapper from '@/components/layout/auth-wrapper'; 
+import AuthWrapper from '@/components/layout/auth-wrapper';
+import { AuthProvider } from '@/contexts/AuthContext'; // Import AuthProvider
 
 // Configure Oxanium font
 const oxanium = Oxanium({
@@ -33,8 +33,9 @@ export default function RootLayout({
           'min-h-screen flex flex-col'
         )}
       >
-        {/* AuthWrapper now contains DateRangeProvider, SidebarProvider, GlobalHeader, and then children */}
-        <AuthWrapper>{children}</AuthWrapper>
+        <AuthProvider> {/* Wrap with AuthProvider */}
+          <AuthWrapper>{children}</AuthWrapper>
+        </AuthProvider>
         <Toaster />
       </body>
     </html>

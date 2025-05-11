@@ -1,10 +1,9 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
-import { useAuth } from '@/hooks/useAuth';
+import { useAuthContext } from '@/contexts/AuthContext'; // Use new AuthContext
 import LoginPage from '@/app/login/page';
-import { 
+import {
     SidebarProvider,
     Sidebar,
     SidebarHeader,
@@ -24,11 +23,10 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
 import { cn } from '@/lib/utils';
-import { DateRangeProvider } from '@/contexts/DateRangeContext'; // Import Provider
-import GlobalHeader from './GlobalHeader'; // Import GlobalHeader
+import { DateRangeProvider } from '@/contexts/DateRangeContext';
+import GlobalHeader from './GlobalHeader';
 import { Button } from '@/components/ui/button';
 
-// SVG Logo Component (moved from layout.tsx)
 const LogoIcon = () => (
   <svg
     width="24"
@@ -59,17 +57,17 @@ interface AuthWrapperProps {
 }
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isAuthenticated, user, logout, isLoadingAuth } = useAuth();
+  const { isAuthenticated, user, signOut, isLoadingAuth } = useAuthContext(); // Use new context
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
-    setIsClient(true); // Ensures this runs only on client after mount
+    setIsClient(true);
   }, []);
 
   useEffect(() => {
-    if (isClient) { // Only run this logic on the client after mount
+    if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
     }
   }, [pathname, isClient]);
@@ -78,15 +76,20 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
 
   if (!isClient || isLoadingAuth) {
-    return <div className="flex items-center justify-center min-h-screen">Loading authentication...</div>;
+    return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Loading authentication...</div>;
   }
 
   if (!isAuthenticated) {
-    return <LoginPage />;
+    // Only render LoginPage if not on signup page to avoid redirect loops
+    if (pathname !== '/signup') {
+        return <LoginPage />;
+    }
+    // Allow signup page to render for unauthenticated users
+    return <>{children}</>;
   }
 
   return (
-    <DateRangeProvider> {/* Wrap with DateRangeProvider */}
+    <DateRangeProvider>
       <SidebarProvider>
         <Sidebar side="left" variant="inset" collapsible="icon">
           <SidebarHeader className="items-center justify-between">
@@ -164,7 +167,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         <SidebarMenuItem className="ml-4">
                            <Link href="/transfers" passHref>
                                <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
-                                   <ArrowLeftRight /> {/* Using ArrowLeftRight as TransferIconOriginal alias */}
+                                   <ArrowLeftRight />
                                    <span>Transfers</span>
                                </SidebarMenuButton>
                            </Link>
@@ -231,21 +234,21 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
           <SidebarFooter className="p-2 border-t border-sidebar-border">
             <div className="flex items-center gap-3 p-2">
               <Avatar className="h-9 w-9">
-                <AvatarImage src="https://picsum.photos/40/40" alt={user || "User"} data-ai-hint="user avatar" />
-                <AvatarFallback>{user ? user.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
+                <AvatarImage src={user?.photoURL || "https://picsum.photos/40/40"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
+                <AvatarFallback>{user?.email ? user.email.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
               </Avatar>
               <div className="flex flex-col">
-                  <span className="text-sm font-medium text-sidebar-foreground">{user || "User"}</span>
-                   <Button variant="link" size="sm" onClick={logout} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
+                  <span className="text-sm font-medium text-sidebar-foreground">{user?.displayName || user?.email || "User"}</span>
+                   <Button variant="link" size="sm" onClick={signOut} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
                       Logout
                    </Button>
               </div>
             </div>
           </SidebarFooter>
         </Sidebar>
-        <SidebarInset className="flex flex-col flex-1"> {/* Ensure SidebarInset can grow and contain header + content */}
-            <GlobalHeader /> {/* Add GlobalHeader here */}
-            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8"> {/* Main content area */}
+        <SidebarInset className="flex flex-col flex-1">
+            <GlobalHeader />
+            <main className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
               {children}
             </main>
         </SidebarInset>

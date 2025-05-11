@@ -1,180 +1,152 @@
-import { format } from 'date-fns'; // Import date-fns for formatting
+import { database, auth } from '@/lib/firebase';
+import { ref, set, get, child, push, remove, update } from 'firebase/database';
+import type { User } from 'firebase/auth';
 
 /**
  * Represents a financial account.
  */
 export interface Account {
-  /**
-   * The ID of the account.
-   */
   id: string;
-   /**
-   * The name/nickname of the account given by the user.
-   */
   name: string;
-  /**
-   * The type of the account (e.g., checking, savings, credit card). Often used as 'Role'.
-   */
   type: string;
-  /**
-   * The current balance of the account.
-   */
   balance: number;
-  /**
-   * The currency code for the account's balance (e.g., 'BRL', 'USD', 'EUR').
-   */
   currency: string;
-  /**
-   * The name of the bank, institution, exchange, or wallet provider.
-   */
-  providerName?: string; // Renamed from bankName for generality
-   /**
-   * Placeholder: Indicates if the account is currently active.
-   */
+  providerName?: string;
   isActive?: boolean;
-  /**
-   * Placeholder: The date of the last recorded activity for the account.
-   */
-  lastActivity?: string; // Store as ISO string or timestamp, format on display
-  /**
-   * Placeholder: The difference in balance since a certain point (e.g., last statement).
-   */
+  lastActivity?: string;
   balanceDifference?: number;
-  /**
-   * Category of the account (e.g., traditional asset or crypto).
-   */
   category: 'asset' | 'crypto';
 }
 
-/** Data needed to create an account, excluding the system-generated ID. */
 export type NewAccountData = Omit<Account, 'id'>;
 
+function getAccountsRefPath(currentUser: User | null) {
+  if (!currentUser?.uid) throw new Error("User not authenticated to access accounts.");
+  return `users/${currentUser.uid}/accounts`;
+}
 
-/**
- * Asynchronously retrieves a list of financial accounts.
- * Simulates fetching manually added accounts. In a real app, this would fetch from a database.
- *
- * @returns A promise that resolves to an array of Account objects.
- */
-export async function getAccounts(): Promise<Account[]> {
-   console.log("Simulating fetching accounts...");
-   await new Promise(resolve => setTimeout(resolve, 500));
-
-   const storedAccounts = localStorage.getItem('userAccounts');
-   let accounts: Account[];
-
-   if (storedAccounts) {
-     try {
-       // Parse and ensure placeholder fields exist
-       const parsedAccounts = JSON.parse(storedAccounts) as Partial<Account>[];
-        accounts = parsedAccounts.map(acc => ({
-            ...getDefaultAccountValues(acc.category || 'asset'), // Apply defaults first based on category
-            ...acc, // Override with stored values
-        })) as Account[]; // Assert type after mapping
-     } catch (e) {
-       console.error("Failed to parse stored accounts, using default.", e);
-       accounts = getDefaultAccounts();
-       localStorage.setItem('userAccounts', JSON.stringify(accounts));
-     }
-   } else {
-     accounts = getDefaultAccounts();
-     localStorage.setItem('userAccounts', JSON.stringify(accounts));
-   }
-
-   return accounts;
+function getSingleAccountRefPath(currentUser: User | null, accountId: string) {
+  if (!currentUser?.uid) throw new Error("User not authenticated to access account.");
+  return `users/${currentUser.uid}/accounts/${accountId}`;
 }
 
 // Helper function to provide default values for potentially missing fields
 function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Account> {
     return {
-        isActive: true, // Assume active by default
-        lastActivity: new Date().toISOString(), // Default to now
-        balanceDifference: 0, // Default to zero difference
-        category: category, // Ensure category is set
+        isActive: true,
+        lastActivity: new Date().toISOString(),
+        balanceDifference: 0,
+        category: category,
     };
 }
 
+export async function getAccounts(): Promise<Account[]> {
+  const currentUser = auth.currentUser;
+  const accountsRefPath = getAccountsRefPath(currentUser);
+  const accountsRef = ref(database, accountsRefPath);
 
-function getDefaultAccounts(): Account[] {
-  // Return an empty array or minimal default accounts
-  return [];
-}
-
-
-/**
- * Simulates adding a new account to localStorage.
- * Adds default values for placeholder fields.
- * @param accountData - The data for the new account (without ID). Requires category.
- * @returns A promise resolving to the newly created account with an ID.
- */
-export async function addAccount(accountData: NewAccountData): Promise<Account> {
-    console.log("Simulating adding account:", accountData);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const newAccount: Account = {
-        ...getDefaultAccountValues(accountData.category), // Add default placeholders based on category
-        ...accountData, // User provided data overrides defaults
-        id: `manual-${Math.random().toString(36).substring(2, 9)}`,
-    };
-
-    const currentAccounts = await getAccounts();
-    const updatedAccounts = [...currentAccounts, newAccount];
-    localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
-
-    console.log("Account added (simulated):", newAccount);
-    return newAccount;
-}
-
-/**
- * Simulates updating an existing account in localStorage.
- * Ensures placeholder fields are preserved or updated.
- * @param updatedAccount - The account object with updated details. Must include the correct ID and category.
- * @returns A promise resolving to the updated account.
- */
-export async function updateAccount(updatedAccount: Account): Promise<Account> {
-    console.log("Simulating updating account:", updatedAccount.id);
-    await new Promise(resolve => setTimeout(resolve, 300));
-
-    const currentAccounts = await getAccounts();
-    const accountIndex = currentAccounts.findIndex(acc => acc.id === updatedAccount.id);
-
-    if (accountIndex === -1) {
-        throw new Error(`Account with ID ${updatedAccount.id} not found.`);
+  console.log("Fetching accounts from Firebase RTDB:", accountsRefPath);
+  try {
+    const snapshot = await get(accountsRef);
+    if (snapshot.exists()) {
+      const accountsData = snapshot.val();
+      // Firebase returns an object; convert it to an array
+      return Object.entries(accountsData).map(([id, data]) => ({
+        id,
+        ...getDefaultAccountValues((data as Account).category || 'asset'), // Ensure defaults
+        ...(data as Omit<Account, 'id'>),
+      }));
     }
-
-    // Ensure default values are present if not provided in update
-    const accountWithDefaults: Account = {
-        ...getDefaultAccountValues(updatedAccount.category), // Use category from updated account
-        ...currentAccounts[accountIndex], // Get existing values including placeholders
-        ...updatedAccount, // Apply updates
-    };
-
-    const updatedAccounts = [...currentAccounts];
-    updatedAccounts[accountIndex] = accountWithDefaults;
-
-    localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
-
-    console.log("Account updated (simulated):", accountWithDefaults);
-    return accountWithDefaults;
+    return []; // No accounts found
+  } catch (error) {
+    console.error("Error fetching accounts from Firebase:", error);
+    throw error;
+  }
 }
 
+export async function addAccount(accountData: NewAccountData): Promise<Account> {
+  const currentUser = auth.currentUser;
+  const accountsRefPath = getAccountsRefPath(currentUser);
+  const accountsRef = ref(database, accountsRefPath);
+  const newAccountRef = push(accountsRef); // Generates a unique ID
 
-/**
- * Simulates deleting an account by ID from localStorage.
- * @param accountId - The ID of the account to delete.
- * @returns A promise resolving when the deletion is complete.
- */
+  if (!newAccountRef.key) {
+    throw new Error("Failed to generate a new account ID.");
+  }
+
+  const newAccountWithDefaults: Omit<Account, 'id'> = {
+      ...getDefaultAccountValues(accountData.category),
+      ...accountData,
+  };
+
+  const newAccountWithId: Account = {
+    id: newAccountRef.key,
+    ...newAccountWithDefaults,
+  };
+
+  console.log("Adding account to Firebase RTDB:", newAccountWithId);
+  try {
+    await set(newAccountRef, newAccountWithDefaults); // Save data without the id field itself
+    return newAccountWithId;
+  } catch (error) {
+    console.error("Error adding account to Firebase:", error);
+    throw error;
+  }
+}
+
+export async function updateAccount(updatedAccountData: Account): Promise<Account> {
+  const currentUser = auth.currentUser;
+  if (!updatedAccountData.id) throw new Error("Account ID is required for update.");
+  const accountRefPath = getSingleAccountRefPath(currentUser, updatedAccountData.id);
+  const accountRef = ref(database, accountRefPath);
+
+  // Fetch existing to merge, or create if it doesn't exist (though update usually implies existence)
+  const snapshot = await get(accountRef);
+  let dataToSet: Omit<Account, 'id'>;
+
+  if (snapshot.exists()) {
+      const existingData = snapshot.val() as Omit<Account, 'id'>;
+      dataToSet = {
+          ...getDefaultAccountValues(updatedAccountData.category || existingData.category || 'asset'),
+          ...existingData,
+          ...updatedAccountData, // Apply updates
+      };
+      delete (dataToSet as any).id; // Remove id from the object to be saved
+  } else {
+      // If for some reason it doesn't exist, treat as adding it with this ID
+      dataToSet = {
+          ...getDefaultAccountValues(updatedAccountData.category || 'asset'),
+          ...updatedAccountData,
+      };
+      delete (dataToSet as any).id;
+  }
+
+
+  console.log("Updating account in Firebase RTDB:", updatedAccountData.id, dataToSet);
+  try {
+    await set(accountRef, dataToSet); // Using set to overwrite with new data
+    return updatedAccountData; // Return the full account object passed in
+  } catch (error) {
+    console.error("Error updating account in Firebase:", error);
+    throw error;
+  }
+}
+
 export async function deleteAccount(accountId: string): Promise<void> {
-    console.log("Simulating deleting account:", accountId);
-    await new Promise(resolve => setTimeout(resolve, 300));
+  const currentUser = auth.currentUser;
+  const accountRefPath = getSingleAccountRefPath(currentUser, accountId);
+  const accountRef = ref(database, accountRefPath);
 
-    const currentAccounts = await getAccounts();
-    const updatedAccounts = currentAccounts.filter(acc => acc.id !== accountId);
-    localStorage.setItem('userAccounts', JSON.stringify(updatedAccounts));
-
-    console.log("Account deleted (simulated):", accountId);
-    return;
+  console.log("Deleting account from Firebase RTDB:", accountRefPath);
+  try {
+    await remove(accountRef);
+    // Also delete associated transactions for this account
+    const transactionsBasePath = `users/${currentUser?.uid}/transactions/${accountId}`;
+    const transactionsForAccountRef = ref(database, transactionsBasePath);
+    await remove(transactionsForAccountRef);
+    console.log(`Also deleted transactions for account ${accountId} at ${transactionsBasePath}`);
+  } catch (error) {
+    console.error("Error deleting account from Firebase:", error);
+    throw error;
+  }
 }
-
-// Export updateAccount explicitly if needed elsewhere, though it's already exported.
-// export { updateAccount };

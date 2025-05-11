@@ -1,81 +1,76 @@
-'use client'; // This module interacts with localStorage, so it must be client-side
+'use client';
 
+import { database, auth } from '@/lib/firebase';
+import { ref, set, get } from 'firebase/database';
+import type { User } from 'firebase/auth';
 import { supportedCurrencies } from './currency';
 
 export interface UserPreferences {
   preferredCurrency: string;
-  // Add other preferences here later, e.g., theme, date format
 }
 
-const PREFERENCES_STORAGE_KEY = 'userPreferences';
-
-// Default preferences
 const defaultPreferences: UserPreferences = {
-  preferredCurrency: 'BRL', // Default to Brazilian Real
+  preferredCurrency: 'BRL',
 };
 
-/**
- * Retrieves user preferences from localStorage.
- * Returns default preferences if none are found or if stored data is invalid.
- *
- * @returns The user's preferences object.
- */
-export function getUserPreferences(): UserPreferences {
-  if (typeof window === 'undefined') {
-    // Return default if on server-side (shouldn't happen with 'use client')
+function getPreferencesRefPath(currentUser: User | null) {
+  if (!currentUser?.uid) throw new Error("User not authenticated to access preferences.");
+  return `users/${currentUser.uid}/preferences`;
+}
+
+export async function getUserPreferences(): Promise<UserPreferences> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    // For client components that might call this before auth is fully resolved,
+    // return default or handle appropriately.
+    // For server components, this function shouldn't be called without user context.
+    console.warn("getUserPreferences called without authenticated user, returning default client-side.");
     return defaultPreferences;
   }
+  const preferencesRefPath = getPreferencesRefPath(currentUser);
+  const preferencesRef = ref(database, preferencesRefPath);
+
   try {
-    const storedPrefs = localStorage.getItem(PREFERENCES_STORAGE_KEY);
-    if (storedPrefs) {
-      const parsedPrefs = JSON.parse(storedPrefs) as Partial<UserPreferences>;
-      // Validate and merge with defaults
+    const snapshot = await get(preferencesRef);
+    if (snapshot.exists()) {
+      const prefs = snapshot.val() as Partial<UserPreferences>;
       return {
-        preferredCurrency: supportedCurrencies.includes(parsedPrefs.preferredCurrency?.toUpperCase() ?? '')
-          ? parsedPrefs.preferredCurrency!.toUpperCase()
+        preferredCurrency: supportedCurrencies.includes(prefs.preferredCurrency?.toUpperCase() ?? '')
+          ? prefs.preferredCurrency!.toUpperCase()
           : defaultPreferences.preferredCurrency,
-        // Merge other potential future preferences here
       };
     }
+    // If no prefs in DB, save and return defaults
+    await set(preferencesRef, defaultPreferences);
+    return defaultPreferences;
   } catch (error) {
-    console.error("Failed to retrieve or parse user preferences:", error);
+    console.error("Failed to retrieve user preferences from Firebase:", error);
+    return defaultPreferences; // Fallback to defaults on error
   }
-  // Return default preferences if not found or on error
-  return defaultPreferences;
 }
 
-/**
- * Saves user preferences to localStorage.
- *
- * @param preferences The preferences object to save.
- */
-export function saveUserPreferences(preferences: UserPreferences): void {
-   if (typeof window === 'undefined') {
-    console.warn("Cannot save preferences on the server.");
-    return;
-  }
+export async function saveUserPreferences(preferences: UserPreferences): Promise<void> {
+  const currentUser = auth.currentUser;
+  const preferencesRefPath = getPreferencesRefPath(currentUser);
+  const preferencesRef = ref(database, preferencesRefPath);
+
+  const prefsToSave: UserPreferences = {
+    ...preferences,
+    preferredCurrency: supportedCurrencies.includes(preferences.preferredCurrency.toUpperCase())
+        ? preferences.preferredCurrency.toUpperCase()
+        : defaultPreferences.preferredCurrency,
+  };
+
   try {
-     // Ensure currency code is uppercase and valid before saving
-    const prefsToSave: UserPreferences = {
-        ...preferences,
-        preferredCurrency: supportedCurrencies.includes(preferences.preferredCurrency.toUpperCase())
-            ? preferences.preferredCurrency.toUpperCase()
-            : defaultPreferences.preferredCurrency,
-    };
-    localStorage.setItem(PREFERENCES_STORAGE_KEY, JSON.stringify(prefsToSave));
+    await set(preferencesRef, prefsToSave);
   } catch (error) {
-    console.error("Failed to save user preferences:", error);
+    console.error("Failed to save user preferences to Firebase:", error);
+    throw error;
   }
 }
 
-/**
- * Updates specific user preferences in localStorage.
- * Merges the provided updates with existing preferences.
- *
- * @param updates Partial preferences object with the fields to update.
- */
-export function updateUserPreferences(updates: Partial<UserPreferences>): void {
-  const currentPrefs = getUserPreferences();
+export async function updateUserPreferences(updates: Partial<UserPreferences>): Promise<void> {
+  const currentPrefs = await getUserPreferences(); // This now fetches from Firebase
   const newPrefs = { ...currentPrefs, ...updates };
-  saveUserPreferences(newPrefs);
+  await saveUserPreferences(newPrefs); // This now saves to Firebase
 }

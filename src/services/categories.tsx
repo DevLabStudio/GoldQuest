@@ -1,19 +1,16 @@
+'use client';
 
-'use client'; // This module interacts with localStorage
+import React from 'react';
+import { database, auth } from '@/lib/firebase';
+import { ref, set, get, push, remove } from 'firebase/database';
+import type { User } from 'firebase/auth';
 
-import React from 'react'; // Import React for JSX types
-
-// Simple category type for now
 export interface Category {
-  id: string; // Use ID for reliable updates/deletes
+  id: string;
   name: string;
-  // Future: icon?: string; color?: string;
 }
 
-const CATEGORIES_STORAGE_KEY = 'userCategories';
-
-// --- Category Styling (Keep this mapping static for now for consistent display across app) ---
-// This maps known category names (lowercase) to styles. It doesn't need to be stored in localStorage yet.
+// --- Category Styling (Keep this mapping static) ---
 export const categoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
   groceries: { icon: () => <span className="mr-1">🛒</span>, color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
   rent: { icon: () => <span className="mr-1">🏠</span>, color: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
@@ -25,137 +22,134 @@ export const categoryStyles: { [key: string]: { icon: React.ElementType, color: 
   investment: { icon: () => <span className="mr-1">📈</span>, color: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700' },
   default: { icon: () => <span className="mr-1">❓</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
   uncategorized: { icon: () => <span className="mr-1">🏷️</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
+  transfer: { icon: () => <ArrowLeftRight className="mr-1 h-4 w-4" />, color: 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600' }, // Added Transfer
 };
+import { ArrowLeftRight } from 'lucide-react'; // Import icon for Transfer
 
-// Function to get style based on category name
 export const getCategoryStyle = (categoryName: string | undefined | null) => {
     const lowerCategory = categoryName?.toLowerCase() || 'uncategorized';
     return categoryStyles[lowerCategory] || categoryStyles.default;
+};
+
+const defaultCategoriesFirebase: Omit<Category, 'id'>[] = Object.keys(categoryStyles)
+    .filter(name => name !== 'default' && name !== 'uncategorized') // Exclude 'uncategorized' from defaults
+    .map(name => ({ name }));
+
+
+function getCategoriesRefPath(currentUser: User | null) {
+  if (!currentUser?.uid) throw new Error("User not authenticated to access categories.");
+  return `users/${currentUser.uid}/categories`;
 }
 
-// Default categories to initialize with
-const defaultCategories: Category[] = Object.keys(categoryStyles)
-    .filter(name => name !== 'default')
-    .map(name => ({ id: `cat-${name}`, name }));
+function getSingleCategoryRefPath(currentUser: User | null, categoryId: string) {
+  if (!currentUser?.uid) throw new Error("User not authenticated to access category.");
+  return `users/${currentUser.uid}/categories/${categoryId}`;
+}
 
-/**
- * Retrieves categories from localStorage. Initializes with defaults if none exist.
- * @returns A promise resolving to an array of Category objects.
- */
 export async function getCategories(): Promise<Category[]> {
-  if (typeof window === 'undefined') {
-    return [...defaultCategories]; // Return default on server
-  }
-  await new Promise(resolve => setTimeout(resolve, 100)); // Simulate async
+  const currentUser = auth.currentUser;
+  const categoriesRefPath = getCategoriesRefPath(currentUser);
+  const categoriesRef = ref(database, categoriesRefPath);
+
   try {
-    const stored = localStorage.getItem(CATEGORIES_STORAGE_KEY);
-    if (stored) {
-      // Basic validation: ensure it's an array
-      const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed)) {
-        // Ensure all items have id and name
-         return parsed.filter(cat => cat && typeof cat.id === 'string' && typeof cat.name === 'string');
+    const snapshot = await get(categoriesRef);
+    if (snapshot.exists()) {
+      const categoriesData = snapshot.val();
+      return Object.entries(categoriesData).map(([id, data]) => ({
+        id,
+        ...(data as Omit<Category, 'id'>),
+      }));
+    } else {
+      // Initialize with default categories if none exist for the user
+      console.log("No categories found for user, initializing with defaults...");
+      const initialCategories: { [key: string]: Omit<Category, 'id'> } = {};
+      const createdCategories: Category[] = [];
+
+      for (const catData of defaultCategoriesFirebase) {
+        const newCatRef = push(categoriesRef); // Generate unique ID
+        if (newCatRef.key) {
+          initialCategories[newCatRef.key] = catData;
+          createdCategories.push({ id: newCatRef.key, ...catData });
+        }
       }
+      if (Object.keys(initialCategories).length > 0) {
+        await set(categoriesRef, initialCategories);
+      }
+      return createdCategories;
     }
   } catch (error) {
-    console.error("Failed to retrieve or parse categories:", error);
+    console.error("Error fetching categories from Firebase:", error);
+    throw error;
   }
-  // If no stored data or error, set and return defaults
-  localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(defaultCategories));
-  return [...defaultCategories];
 }
 
-/**
- * Saves the entire list of categories to localStorage.
- * @param categories The array of categories to save.
- * @returns A promise that resolves when saving is complete.
- */
-async function saveCategories(categories: Category[]): Promise<void> {
-   if (typeof window === 'undefined') return;
-   await new Promise(resolve => setTimeout(resolve, 50)); // Simulate async
-   try {
-     localStorage.setItem(CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
-   } catch (error) {
-     console.error("Failed to save categories:", error);
-     throw error; // Re-throw to indicate failure
-   }
-}
-
-/**
- * Adds a new category. If category name already exists (case-insensitive), returns the existing category.
- * @param categoryName The name of the category to add.
- * @returns A promise resolving to the newly created or existing Category object.
- */
 export async function addCategory(categoryName: string): Promise<Category> {
+  const currentUser = auth.currentUser;
+  const categoriesRefPath = getCategoriesRefPath(currentUser);
+  const categoriesRef = ref(database, categoriesRefPath);
+
   if (!categoryName || typeof categoryName !== 'string' || categoryName.trim().length === 0) {
-      throw new Error("Category name cannot be empty.");
+    throw new Error("Category name cannot be empty.");
   }
-  const currentCategories = await getCategories();
   const normalizedName = categoryName.trim();
 
-  // Check for duplicates (case-insensitive)
+  // Check for duplicates (case-insensitive) - Firebase queries would be better for larger scale
+  const currentCategories = await getCategories();
   const existingCategory = currentCategories.find(cat => cat.name.toLowerCase() === normalizedName.toLowerCase());
   if (existingCategory) {
      console.log(`Category "${normalizedName}" already exists. Returning existing.`);
-     return existingCategory; // Return the existing category if found
-    // throw new Error(`Category "${normalizedName}" already exists.`);
+     return existingCategory;
   }
 
-  const newCategory: Category = {
-    // Generate a more robust ID maybe? For now, use name + timestamp
-    id: `cat-${normalizedName.toLowerCase().replace(/\s+/g, '-')}-${Date.now()}`,
-    name: normalizedName,
-  };
+  const newCategoryRef = push(categoriesRef);
+  if (!newCategoryRef.key) {
+    throw new Error("Failed to generate a new category ID.");
+  }
+  const newCategoryData: Omit<Category, 'id'> = { name: normalizedName };
 
-  const updatedCategories = [...currentCategories, newCategory];
-  await saveCategories(updatedCategories);
-  return newCategory;
+  try {
+    await set(newCategoryRef, newCategoryData);
+    return { id: newCategoryRef.key, ...newCategoryData };
+  } catch (error) {
+    console.error("Error adding category to Firebase:", error);
+    throw error;
+  }
 }
 
-/**
- * Updates an existing category's name.
- * @param categoryId The ID of the category to update.
- * @param newName The new name for the category.
- * @returns A promise resolving to the updated Category object.
- */
 export async function updateCategory(categoryId: string, newName: string): Promise<Category> {
-   if (!newName || typeof newName !== 'string' || newName.trim().length === 0) {
-      throw new Error("New category name cannot be empty.");
+  const currentUser = auth.currentUser;
+  const categoryRefPath = getSingleCategoryRefPath(currentUser, categoryId);
+  const categoryRef = ref(database, categoryRefPath);
+
+  if (!newName || typeof newName !== 'string' || newName.trim().length === 0) {
+    throw new Error("New category name cannot be empty.");
   }
-  const currentCategories = await getCategories();
   const normalizedNewName = newName.trim();
-  const index = currentCategories.findIndex(cat => cat.id === categoryId);
 
-  if (index === -1) {
-    throw new Error(`Category with ID ${categoryId} not found.`);
-  }
-
-  // Check if the new name causes a duplicate (excluding the category being edited)
+  // Check for name collision
+  const currentCategories = await getCategories();
   if (currentCategories.some(cat => cat.id !== categoryId && cat.name.toLowerCase() === normalizedNewName.toLowerCase())) {
       throw new Error(`Another category named "${normalizedNewName}" already exists.`);
   }
 
-  const updatedCategory = { ...currentCategories[index], name: normalizedNewName };
-  currentCategories[index] = updatedCategory;
-
-  await saveCategories(currentCategories);
-  return updatedCategory;
+  const updatedCategoryData: Omit<Category, 'id'> = { name: normalizedNewName };
+  try {
+    await set(categoryRef, updatedCategoryData); // Overwrites the data at this specific category ID
+    return { id: categoryId, ...updatedCategoryData };
+  } catch (error) {
+    console.error("Error updating category in Firebase:", error);
+    throw error;
+  }
 }
 
-/**
- * Deletes a category by its ID.
- * @param categoryId The ID of the category to delete.
- * @returns A promise resolving when deletion is complete.
- */
 export async function deleteCategory(categoryId: string): Promise<void> {
-  const currentCategories = await getCategories();
-  const updatedCategories = currentCategories.filter(cat => cat.id !== categoryId);
-
-  if (updatedCategories.length === currentCategories.length) {
-      console.warn(`Category with ID ${categoryId} not found for deletion.`);
-      // Optionally throw an error here if needed
-      // throw new Error(`Category with ID ${categoryId} not found.`);
+  const currentUser = auth.currentUser;
+  const categoryRefPath = getSingleCategoryRefPath(currentUser, categoryId);
+  const categoryRef = ref(database, categoryRefPath);
+  try {
+    await remove(categoryRef);
+  } catch (error) {
+    console.error("Error deleting category from Firebase:", error);
+    throw error;
   }
-
-  await saveCategories(updatedCategories);
 }
