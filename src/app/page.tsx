@@ -15,9 +15,10 @@ import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getUserPreferences } from '@/lib/preferences';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns } from 'date-fns';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns, isSameDay } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
+import { useDateRange } from '@/contexts/DateRangeContext';
 
 
 const assetsData = [
@@ -35,6 +36,7 @@ export default function DashboardPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
   const { toast } = useToast();
+  const { selectedDateRange } = useDateRange();
 
   useEffect(() => {
     let isMounted = true;
@@ -101,20 +103,20 @@ export default function DashboardPage() {
     }, 0);
   }, [accounts, preferredCurrency, isLoading]);
 
-  const currentMonthTransactions = useMemo(() => {
+  const periodTransactions = useMemo(() => {
     if (isLoading) return [];
-    const now = new Date();
-    const monthStart = startOfMonth(now);
-    const monthEnd = endOfMonth(now);
     return allTransactions.filter(tx => {
-      const txDate = new Date(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      return isWithinInterval(txDate, { start: monthStart, end: monthEnd });
+      const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+      // If no date range selected, include all transactions
+      if (!selectedDateRange.from || !selectedDateRange.to) return true;
+      return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
-  }, [allTransactions, isLoading]);
+  }, [allTransactions, isLoading, selectedDateRange]);
+
 
   const monthlyIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
-    return currentMonthTransactions.reduce((sum, tx) => {
+    return periodTransactions.reduce((sum, tx) => {
       if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers from income
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
@@ -123,11 +125,11 @@ export default function DashboardPage() {
       }
       return sum;
     }, 0);
-  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
 
   const monthlyExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
-    return currentMonthTransactions.reduce((sum, tx) => {
+    return periodTransactions.reduce((sum, tx) => {
       if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers from expenses
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
@@ -136,14 +138,14 @@ export default function DashboardPage() {
       }
       return sum;
     }, 0);
-  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
 
 
   const spendingsBreakdownDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !categories.length || !allTransactions.length) return [];
+    if (isLoading || typeof window === 'undefined' || !categories.length || !periodTransactions.length) return [];
     const expenseCategoryTotals: { [key: string]: number } = {};
 
-    currentMonthTransactions.forEach(tx => {
+    periodTransactions.forEach(tx => {
       if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
@@ -170,15 +172,15 @@ export default function DashboardPage() {
       })
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 3);
-  }, [currentMonthTransactions, accounts, categories, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, categories, preferredCurrency, isLoading]);
 
   const incomeSourceDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !allTransactions.length) return [];
+    if (isLoading || typeof window === 'undefined' || !periodTransactions.length) return [];
     const incomeCategoryTotals: { [key: string]: number } = {};
     const chartColors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
     let colorIndex = 0;
 
-    currentMonthTransactions.forEach(tx => {
+    periodTransactions.forEach(tx => {
       if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
@@ -196,7 +198,7 @@ export default function DashboardPage() {
         fill: chartColors[colorIndex++ % chartColors.length],
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [currentMonthTransactions, accounts, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
 
 
   const monthlyIncomeExpensesDataActual = useMemo(() => {
@@ -235,6 +237,16 @@ export default function DashboardPage() {
     }));
   }, [allTransactions, accounts, preferredCurrency, isLoading]);
 
+  const dateRangeLabel = useMemo(() => {
+    if (selectedDateRange.from && selectedDateRange.to) {
+        if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
+            return format(selectedDateRange.from, 'MMM d, yyyy');
+        }
+        return `${format(selectedDateRange.from, 'MMM d')} - ${format(selectedDateRange.to, 'MMM d, yyyy')}`;
+    }
+    return 'All Time';
+  }, [selectedDateRange]);
+
 
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0) {
     return (
@@ -262,7 +274,7 @@ export default function DashboardPage() {
         <div className="xl:col-span-2">
           <TotalNetWorthCard amount={totalNetWorth} currency={getCurrencySymbol(preferredCurrency)} />
         </div>
-         <SpendingsBreakdown title="Top Spendings" data={spendingsBreakdownDataActual} currency={preferredCurrency} />
+         <SpendingsBreakdown title={`Top Spendings (${dateRangeLabel})`} data={spendingsBreakdownDataActual} currency={preferredCurrency} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
@@ -270,10 +282,10 @@ export default function DashboardPage() {
           {isLoading || incomeSourceDataActual.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground h-full">
                  <CardHeader>
-                    <CardTitle>Income Source</CardTitle>
+                    <CardTitle>Income Source ({dateRangeLabel})</CardTitle>
                   </CardHeader>
                   <CardContent className="h-[250px] pb-0 flex items-center justify-center">
-                    {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income data for this month.</p>}
+                    {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income data for this period.</p>}
                   </CardContent>
             </Card>
           ) : (
@@ -286,7 +298,7 @@ export default function DashboardPage() {
          {isLoading || monthlyIncomeExpensesDataActual.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground">
                 <CardHeader className="flex flex-row items-start justify-between pb-4">
-                    <div><CardTitle>Income & Expenses</CardTitle></div>
+                    <div><CardTitle>Income & Expenses (Last 12 Months)</CardTitle></div>
                 </CardHeader>
                 <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
                      {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income/expense data available.</p>}

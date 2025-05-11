@@ -24,7 +24,8 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
         <Card className="shadow-lg bg-card text-card-foreground">
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
-                    <CardTitle>Income & Expenses</CardTitle>
+                    <CardTitle>Income & Expenses (Last 12 Months)</CardTitle>
+                    <CardDescription>No income/expense data for the selected period.</CardDescription>
                 </div>
             </CardHeader>
             <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
@@ -45,14 +46,16 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
     },
   } satisfies ChartConfig;
 
-  const maxIncome = Math.max(...data.map(d => d.income));
-  const maxExpenses = Math.max(...data.map(d => d.expenses));
+  const maxIncome = Math.max(...data.map(d => d.income), 0); // Ensure non-negative
+  const maxExpenses = Math.max(...data.map(d => d.expenses), 0); // Ensure non-negative
+
 
   return (
     <Card className="shadow-lg bg-card text-card-foreground">
       <CardHeader className="flex flex-row items-start justify-between pb-4">
         <div>
-            <CardTitle>Income & Expenses</CardTitle>
+            <CardTitle>Income & Expenses (Last 12 Months)</CardTitle>
+            <CardDescription>Overview of income and expenses for the past year.</CardDescription>
         </div>
         <div className="text-right">
             <p className="text-xs text-muted-foreground">Max Income</p>

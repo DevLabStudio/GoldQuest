@@ -3,6 +3,7 @@
 
 import type { FC, ReactNode } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { formatCurrency as formatCurrencyUtil, getCurrencySymbol } from '@/lib/currency';
 
 interface SpendingItem {
   name: string;
@@ -28,15 +29,12 @@ const SpendingsBreakdown: FC<SpendingsBreakdownProps> = ({ title, data, currency
           {data.map((item) => {
             let formattedAmount;
             try {
-                formattedAmount = new Intl.NumberFormat(undefined, { // Use user's default locale
-                  style: 'currency',
-                  currency: currency, // Directly use the ISO currency code
-                  minimumFractionDigits: 0,
-                  maximumFractionDigits: 0,
-                }).format(item.amount);
+                // Format amount with the explicit currency symbol
+                formattedAmount = formatCurrencyUtil(item.amount, currency, currency, false);
+
             } catch (error) {
                 console.error("Error formatting currency in SpendingsBreakdown:", error);
-                formattedAmount = `${currency} ${item.amount.toFixed(0)}`; // Fallback
+                formattedAmount = `${getCurrencySymbol(currency)} ${item.amount.toFixed(0)}`; // Fallback with symbol
             }
 
 
@@ -59,3 +57,4 @@ const SpendingsBreakdown: FC<SpendingsBreakdownProps> = ({ title, data, currency
 };
 
 export default SpendingsBreakdown;
+

@@ -176,7 +176,7 @@ export default function DashboardPage() {
       if (tx.amount > 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(tx.amount, account.currency, preferredCurrency);
+          return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
         }
       }
       return sum;
@@ -189,7 +189,7 @@ export default function DashboardPage() {
       if (tx.amount < 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
         if (account) {
-          return sum + convertCurrency(Math.abs(tx.amount), account.currency, preferredCurrency);
+          return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
         }
       }
       return sum;
@@ -242,6 +242,16 @@ export default function DashboardPage() {
     return data;
   }, [accounts, preferredCurrency, isLoading]);
 
+  const dateRangeLabel = useMemo(() => {
+    if (selectedDateRange.from && selectedDateRange.to) {
+        if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
+            return format(selectedDateRange.from, 'MMM d, yyyy');
+        }
+        return `${format(selectedDateRange.from, 'MMM d')} - ${format(selectedDateRange.to, 'MMM d, yyyy')}`;
+    }
+    return 'All Time';
+  }, [selectedDateRange]);
+
 
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0) {
     return (
@@ -283,7 +293,7 @@ export default function DashboardPage() {
               <div>
                 <CardTitle className="text-xl">Financial Summary</CardTitle>
                 <CardDescription>
-                  Overview for the selected period. Last updated: {formatLastUpdated(lastUpdated)}
+                  Overview for {dateRangeLabel}. Last updated: {formatLastUpdated(lastUpdated)}
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2 mt-2 sm:mt-0">
@@ -334,7 +344,7 @@ export default function DashboardPage() {
             icon={<Wallet className="text-primary" />}
           />
           <KpiCard
-            title={`Income (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
+            title={`Income (${dateRangeLabel})`}
             value={formatCurrency(periodIncome, preferredCurrency, preferredCurrency, false)}
             tooltip={`Total income received in the selected period.`}
             icon={<TrendingUp className="text-green-500" />} 
@@ -342,7 +352,7 @@ export default function DashboardPage() {
             href="/revenue"
           />
           <KpiCard
-            title={`Expenses (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
+            title={`Expenses (${dateRangeLabel})`}
             value={formatCurrency(periodExpenses, preferredCurrency, preferredCurrency, false)}
             tooltip={`Total expenses in the selected period.`}
             icon={<TrendingDown className="text-red-500" />} 
@@ -364,7 +374,7 @@ export default function DashboardPage() {
             icon={<Scale className="text-primary" />}
           />
           <KpiCard
-            title={`Savings Rate (${selectedDateRange.from && selectedDateRange.to ? format(selectedDateRange.from, 'MMM d') + ' - ' + format(selectedDateRange.to, 'MMM d, yyyy') : 'All Time'})`}
+            title={`Savings Rate (${dateRangeLabel})`}
             value={`${(savingsRate * 100).toFixed(1)}%`}
             tooltip="Percentage of your income you are saving in the selected period."
             isPercentage={true}
@@ -397,7 +407,7 @@ export default function DashboardPage() {
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Cash Flow (Selected Period)</CardTitle>
+              <CardTitle>Cash Flow ({dateRangeLabel})</CardTitle>
               <CardDescription>Compare income and expenses over the selected period.</CardDescription>
             </CardHeader>
             <CardContent className="h-[300px] sm:h-[350px] flex items-center justify-center">
