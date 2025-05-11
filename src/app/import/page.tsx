@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -11,19 +12,20 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { addTransaction, type Transaction, clearAllSessionTransactions } from '@/services/transactions'; // Will be Firebase
-import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync'; // Will be Firebase
-import { getCategories, addCategory, type Category } from '@/services/categories'; // Will be Firebase
-import { getTags, addTag, type Tag, getTagStyle } from '@/services/tags'; // Will be Firebase
+import { addTransaction, type Transaction, clearAllSessionTransactions } from '@/services/transactions';
+import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync';
+import { getCategories, addCategory, type Category } from '@/services/categories';
+import { getTags, addTag, type Tag, getTagStyle } from '@/services/tags';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { format, parseISO, isValid } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
 import { AlertCircle, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useAuthContext } from '@/contexts/AuthContext'; // For user ID
+import { useAuthContext } from '@/contexts/AuthContext';
+import Link from 'next/link';
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -157,7 +159,7 @@ const parseDate = (dateStr: string | undefined): string => {
 };
 
 export default function ImportDataPage() {
-  const { user, isLoadingAuth } = useAuthContext(); // Get user for RTDB paths
+  const { user, isLoadingAuth } = useAuthContext();
   const [file, setFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [rawData, setRawData] = useState<CsvRecord[]>([]);
@@ -165,9 +167,9 @@ export default function ImportDataPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [accounts, setAccounts] = useState<Account[]>([]); // Will be fetched from RTDB
-  const [categories, setCategories] = useState<Category[]>([]); // Will be fetched from RTDB
-  const [tags, setTags] = useState<Tag[]>([]); // Will be fetched from RTDB
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
   const [accountPreviewData, setAccountPreviewData] = useState<AccountPreview[]>([]);
   const [finalAccountMapForImport, setFinalAccountMapForImport] = useState<{ [key: string]: string }>({});
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
@@ -177,14 +179,13 @@ export default function ImportDataPage() {
 
 
   useEffect(() => {
-    if (isLoadingAuth || !user) return; // Wait for auth and user
+    if (isLoadingAuth || !user) return;
 
     let isMounted = true;
     const fetchData = async () => {
         if (isMounted) setIsLoading(true);
         if (isMounted) setError(null);
         try {
-            // These will now fetch from Firebase via the updated service functions
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
                 getAccounts(),
                 getCategories(),
@@ -209,7 +210,7 @@ export default function ImportDataPage() {
 
     fetchData();
     return () => { isMounted = false; };
-  }, [toast, user, isLoadingAuth]); // Depend on user and isLoadingAuth
+  }, [toast, user, isLoadingAuth]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -307,10 +308,24 @@ export default function ImportDataPage() {
         setColumnMappings(confirmedMappings);
         setFinalAccountMapForImport({});
 
-        const requiredFields: AppField[] = ['date', 'amount', 'currency_code', 'transaction_type', 'source_name', 'destination_name'];
-        const missingFieldLabels = requiredFields
+        const requiredAppFields: AppField[] = ['date', 'amount', 'currency_code', 'transaction_type'];
+        let missingFieldLabels = requiredAppFields
             .filter(field => !confirmedMappings[field])
             .map(field => APP_FIELDS_VALUES.find(val => val === field) || field);
+        
+        // Check source/destination based on transaction_type logic in previewAccountChanges
+        // For now, ensure 'source_name' and 'destination_name' are mapped if 'transaction_type' suggests a transfer or involves distinct source/dest
+        if (rawData.some(r => r[confirmedMappings.transaction_type!]?.toLowerCase() === 'transfer')) {
+            if (!confirmedMappings.source_name) missingFieldLabels.push('source_name');
+            if (!confirmedMappings.destination_name) missingFieldLabels.push('destination_name');
+        } else if (rawData.some(r => r[confirmedMappings.transaction_type!]?.toLowerCase() === 'withdrawal')) {
+             if (!confirmedMappings.source_name) missingFieldLabels.push('source_name');
+        } else if (rawData.some(r => r[confirmedMappings.transaction_type!]?.toLowerCase() === 'deposit')) {
+            if (!confirmedMappings.destination_name) missingFieldLabels.push('destination_name');
+        }
+
+
+        missingFieldLabels = [...new Set(missingFieldLabels)]; // Remove duplicates
 
         if (missingFieldLabels.length > 0) {
             setError(`Missing required column mappings for Firefly III import: ${missingFieldLabels.join(', ')}. Please map these fields.`);
@@ -318,7 +333,6 @@ export default function ImportDataPage() {
             setIsMappingDialogOpen(true);
             return;
         }
-        // Ensure accounts are up-to-date before previewing
         const currentAccounts = await getAccounts();
         setAccounts(currentAccounts);
 
@@ -328,15 +342,15 @@ export default function ImportDataPage() {
 
 
         const mapped: MappedTransaction[] = rawData.map((record, index) => {
-          const rowNumber = index + 2; // 1-based index for rows, +1 for header
-          const dateCol = confirmedMappings.date;
-          const amountCol = confirmedMappings.amount;
-          const currencyCol = confirmedMappings.currency_code;
+          const rowNumber = index + 2;
+          const dateCol = confirmedMappings.date!;
+          const amountCol = confirmedMappings.amount!;
+          const currencyCol = confirmedMappings.currency_code!;
           const descCol = confirmedMappings.description;
           const categoryCol = confirmedMappings.category;
           const tagsCol = confirmedMappings.tags;
           const notesCol = confirmedMappings.notes;
-          const typeCol = confirmedMappings.transaction_type;
+          const typeCol = confirmedMappings.transaction_type!;
           const sourceNameCol = confirmedMappings.source_name;
           const destNameCol = confirmedMappings.destination_name;
           const foreignAmountCol = confirmedMappings.foreign_amount;
@@ -344,30 +358,38 @@ export default function ImportDataPage() {
 
 
           try {
-              const csvTypeRaw = record[typeCol!];
+              const csvTypeRaw = record[typeCol];
               const csvType = csvTypeRaw?.trim().toLowerCase();
 
-              const dateValue = record[dateCol!];
-              const amountValue = record[amountCol!];
-              const currencyValue = record[currencyCol!];
+              const dateValue = record[dateCol];
+              const amountValue = record[amountCol];
+              const currencyValue = record[currencyCol];
               const foreignAmountValue = foreignAmountCol ? record[foreignAmountCol] : undefined;
               const foreignCurrencyValue = foreignCurrencyCol ? record[foreignCurrencyCol] : undefined;
 
 
-              const descriptionValue = record[descCol!] || '';
-              const categoryValue = record[categoryCol!] || 'Uncategorized';
-              const tagsValue = record[tagsCol!] || '';
-              const notesValue = record[notesCol!] || '';
+              const descriptionValue = descCol ? record[descCol] || '' : '';
+              const categoryValue = categoryCol ? record[categoryCol] || 'Uncategorized' : 'Uncategorized';
+              const tagsValue = tagsCol ? record[tagsCol] || '' : '';
+              const notesValue = notesCol ? record[notesCol] || '' : '';
 
-              const rawSourceName = record[sourceNameCol!]?.trim();
-              const rawDestName = record[destNameCol!]?.trim();
+              const rawSourceName = sourceNameCol ? record[sourceNameCol]?.trim() : undefined;
+              const rawDestName = destNameCol ? record[destNameCol]?.trim() : undefined;
 
               if (!dateValue) throw new Error(`Row ${rowNumber}: Missing mapped 'Date' data.`);
               if (amountValue === undefined || amountValue.trim() === '') throw new Error(`Row ${rowNumber}: Missing or empty 'Amount' data.`);
               if (!currencyValue || currencyValue.trim() === '') throw new Error(`Row ${rowNumber}: Missing or empty 'Currency Code' data.`);
               if (!csvType) throw new Error(`Row ${rowNumber}: Missing or empty 'Transaction Type' (Firefly 'type') data.`);
-              if (!rawSourceName && csvType !== 'opening balance' && csvType !== 'deposit') throw new Error(`Row ${rowNumber}: Missing 'Source Name' for type ${csvType}.`);
-              if (!rawDestName && csvType !== 'opening balance' && csvType !== 'withdrawal') throw new Error(`Row ${rowNumber}: Missing 'Destination Name' for type ${csvType}.`);
+              
+              if (csvType === 'withdrawal' || csvType === 'transfer') {
+                if (!rawSourceName) throw new Error(`Row ${rowNumber}: Missing 'Source Name' for type '${csvType}'.`);
+              }
+              if (csvType === 'deposit' || csvType === 'transfer') {
+                 if (!rawDestName) throw new Error(`Row ${rowNumber}: Missing 'Destination Name' for type '${csvType}'.`);
+              }
+              if (csvType === 'transfer' && rawSourceName === rawDestName) {
+                  throw new Error(`Row ${rowNumber}: Transfer source and destination accounts are the same ('${rawSourceName}').`);
+              }
 
 
               const parsedAmount = parseAmount(amountValue);
@@ -407,7 +429,7 @@ export default function ImportDataPage() {
             } catch (rowError: any) {
                 console.error(`Error processing row ${index + 2} with mappings:`, confirmedMappings, `and record:`, record, `Error:`, rowError);
                  return {
-                    date: parseDate(record[dateCol!]),
+                    date: parseDate(record[dateCol]),
                     amount: 0,
                     currency: record[currencyCol!]?.trim().toUpperCase() || 'N/A',
                     description: `Error Processing Row ${index + 2}`,
@@ -495,8 +517,8 @@ export default function ImportDataPage() {
         const accountMap = new Map<string, { name: string; currency: string; initialBalance?: number; category: 'asset' | 'crypto' }>();
 
         const typeCol = mappingsArg.transaction_type!;
-        const sourceNameCol = mappingsArg.source_name!;
-        const destNameCol = mappingsArg.destination_name!;
+        const sourceNameCol = mappingsArg.source_name;
+        const destNameCol = mappingsArg.destination_name;
         const amountCol = mappingsArg.amount!;
         const currencyCol = mappingsArg.currency_code!;
         const descCol = mappingsArg.description;
@@ -511,8 +533,8 @@ export default function ImportDataPage() {
 
             if (csvType === 'opening balance') {
                 let accountNameForOpening: string | undefined;
-                const rawSourceName = record[sourceNameCol!]?.trim();
-                const rawDestName = record[destNameCol!]?.trim();
+                const rawSourceName = sourceNameCol ? record[sourceNameCol]?.trim() : undefined;
+                const rawDestName = destNameCol ? record[destNameCol]?.trim() : undefined;
                 const rawDescription = descCol ? record[descCol]?.trim() : undefined;
 
                 const parseNameFromDescriptiveString = (text: string | undefined): string | undefined => {
@@ -552,7 +574,7 @@ export default function ImportDataPage() {
                     accountMap.set(normalizedName, {
                         name: accountNameForOpening,
                         currency: recordCurrency,
-                        initialBalance: recordAmount, // Ensure this is the actual numerical balance
+                        initialBalance: recordAmount,
                         category: existingDetailsInMap ? existingDetailsInMap.category : category,
                     });
                 } else if (csvType === 'opening balance') {
@@ -560,8 +582,8 @@ export default function ImportDataPage() {
                 }
 
             } else if (csvType === 'withdrawal' || csvType === 'deposit' || csvType === 'transfer') {
-                const sourceName = record[sourceNameCol!]?.trim();
-                const destName = record[destNameCol!]?.trim();
+                const sourceName = sourceNameCol ? record[sourceNameCol]?.trim() : undefined;
+                const destName = destNameCol ? record[destNameCol]?.trim() : undefined;
                 const sourceType = sourceTypeCol ? record[sourceTypeCol]?.trim().toLowerCase() : undefined;
                 const destType = destTypeCol ? record[destTypeCol]?.trim().toLowerCase() : undefined;
 
@@ -584,7 +606,7 @@ export default function ImportDataPage() {
                              accountMap.set(normalizedName, {
                                 name: accNameToConsider,
                                 currency: existingAppAccount?.currency || recordCurrency,
-                                initialBalance: existingAppAccount?.balance, // Keep existing balance unless an "opening balance" row specifies otherwise
+                                initialBalance: existingAppAccount?.balance,
                                 category: existingAppAccount?.category || category,
                             });
                         } else {
@@ -602,7 +624,7 @@ export default function ImportDataPage() {
         isPreviewOnly: boolean = false
     ): Promise<{ success: boolean; map: { [key: string]: string }, updatedAccountsList: Account[] }> => {
         let success = true;
-        let currentAppAccounts = [...accounts]; // Use state accounts
+        let currentAppAccounts = [...accounts];
         const workingMap = currentAppAccounts.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
              return map;
@@ -645,7 +667,7 @@ export default function ImportDataPage() {
 
 
                     if (needsUpdate) {
-                        const savedUpdatedAccount = await updateAccount(updatedAccountData); // This now saves to Firebase
+                        const savedUpdatedAccount = await updateAccount(updatedAccountData);
                         accountsProcessedCount++;
                         const idx = currentAppAccounts.findIndex(a => a.id === savedUpdatedAccount.id);
                         if (idx !== -1) currentAppAccounts[idx] = savedUpdatedAccount;
@@ -663,7 +685,7 @@ export default function ImportDataPage() {
                         lastActivity: new Date().toISOString(),
                         balanceDifference: 0,
                     };
-                    const createdAccount = await addAccount(newAccountData); // This now saves to Firebase
+                    const createdAccount = await addAccount(newAccountData);
                     workingMap[normalizedName] = createdAccount.id;
                     currentAppAccounts.push(createdAccount);
                     accountsProcessedCount++;
@@ -677,7 +699,7 @@ export default function ImportDataPage() {
 
         if (accountsProcessedCount > 0 && !isPreviewOnly) {
             toast({ title: "Accounts Processed", description: `Created or updated ${accountsProcessedCount} accounts.` });
-             const finalFetchedAccounts = await getAccounts(); // Refetch from Firebase
+             const finalFetchedAccounts = await getAccounts();
              setAccounts(finalFetchedAccounts);
              const finalMap = finalFetchedAccounts.reduce((map, acc) => {
                  map[acc.name.toLowerCase().trim()] = acc.id;
@@ -690,11 +712,11 @@ export default function ImportDataPage() {
 
 
    const addMissingCategoriesAndTags = async (transactionsToProcess: MappedTransaction[]): Promise<boolean> => {
-      const currentCategoriesList = await getCategories(); // Firebase
+      const currentCategoriesList = await getCategories();
       const existingCategoryNames = new Set(currentCategoriesList.map(cat => cat.name.toLowerCase()));
       const categoriesToAdd = new Set<string>();
 
-      const currentTagsList = await getTags(); // Firebase
+      const currentTagsList = await getTags();
       const existingTagNames = new Set(currentTagsList.map(tag => tag.name.toLowerCase()));
       const tagsToAdd = new Set<string>();
 
@@ -723,7 +745,7 @@ export default function ImportDataPage() {
           let categoriesAddedCount = 0;
           const addCatPromises = Array.from(categoriesToAdd).map(async (catName) => {
               try {
-                  await addCategory(catName); // Firebase
+                  await addCategory(catName);
                   categoriesAddedCount++;
               } catch (err: any) {
                   if (!err.message?.includes('already exists')) {
@@ -744,7 +766,7 @@ export default function ImportDataPage() {
             let tagsAddedCount = 0;
             const addTagPromises = Array.from(tagsToAdd).map(async (tagName) => {
                 try {
-                    await addTag(tagName); // Firebase
+                    await addTag(tagName);
                     tagsAddedCount++;
                 } catch (err: any) {
                      if (!err.message?.includes('already exists')) {
@@ -784,15 +806,15 @@ export default function ImportDataPage() {
       let finalMapForTxImport: { [key: string]: string };
       let latestAccountsList: Account[];
       try {
-        const accountMapResult = await createOrUpdateAccountsAndGetMap(false); // false = not preview
+        const accountMapResult = await createOrUpdateAccountsAndGetMap(false);
         if (!accountMapResult.success) {
             setError("Error finalizing accounts before import. Some accounts might not have been created/updated correctly. Import aborted.");
             setIsLoading(false);
             return;
         }
         finalMapForTxImport = accountMapResult.map;
-        latestAccountsList = accountMapResult.updatedAccountsList; // This is the list from Firebase
-        setAccounts(latestAccountsList); // Update local state with latest from DB
+        latestAccountsList = accountMapResult.updatedAccountsList;
+        setAccounts(latestAccountsList);
         setFinalAccountMapForImport(finalMapForTxImport);
       } catch (finalAccountMapError) {
           console.error("Error finalizing account mapping before import.", finalAccountMapError);
@@ -808,8 +830,8 @@ export default function ImportDataPage() {
          setIsLoading(false);
          return;
       }
-      const currentCategoriesList = await getCategories(); // Refetch
-      const currentTagsList = await getTags(); // Refetch
+      const currentCategoriesList = await getCategories();
+      const currentTagsList = await getTags();
 
       const totalToImport = recordsToImport.length;
       let importedCount = 0;
@@ -880,14 +902,14 @@ export default function ImportDataPage() {
                   accountId: destAccountId, date: item.date, amount: destLegAmount,
                   transactionCurrency: destLegCurrency,
                   description: item.description, category: 'Transfer', tags: transactionTags,
-                  originalMappedTx: { ...item, description: `From ${sourceAccount.name}: ${item.description}` }, // Modify description for clarity on receiving end
+                  originalMappedTx: { ...item, description: `From ${sourceAccount.name}: ${item.description}` }, 
               });
 
           } else if (item.csvTransactionType === 'withdrawal' || item.csvTransactionType === 'deposit') {
               let accountNameForTx: string | undefined;
               if (item.csvTransactionType === 'withdrawal') {
                   accountNameForTx = item.csvRawSourceName;
-              } else { // deposit
+              } else { 
                   accountNameForTx = item.csvRawDestinationName;
               }
 
@@ -939,7 +961,7 @@ export default function ImportDataPage() {
       for (const payload of transactionPayloads) {
           const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === payload.originalMappedTx.originalRecord && d.description === payload.originalMappedTx.description && d.amount === payload.originalMappedTx.amount);
           try {
-              await addTransaction(payload); // Firebase
+              await addTransaction(payload);
               if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'success', errorMessage: undefined };
               importedCount++;
           } catch (err: any) {
@@ -984,11 +1006,8 @@ export default function ImportDataPage() {
         }
         setIsClearing(true);
         try {
-            // This will clear user-specific data in Firebase for accounts, categories, tags, transactions.
-            await clearAllSessionTransactions(); // This function needs to be adapted for Firebase to delete user's data.
-                                            // It should now delete from /users/{userId}/accounts, /users/{userId}/categories etc.
+            await clearAllSessionTransactions(); 
 
-            // Reset local state
             setAccounts([]);
             setCategories([]);
             setTags([]);
@@ -1005,7 +1024,7 @@ export default function ImportDataPage() {
             if (fileInput) fileInput.value = '';
 
             toast({ title: "Data Cleared", description: "All user data (accounts, categories, tags, transactions) has been removed from the database for your account." });
-            window.dispatchEvent(new Event('storage')); // Notify other components
+            window.dispatchEvent(new Event('storage'));
         } catch (err) {
             console.error("Failed to clear data:", err);
             toast({ title: "Error", description: "Could not clear stored data.", variant: "destructive" });
@@ -1338,3 +1357,4 @@ export default function ImportDataPage() {
     </div>
   );
 }
+
