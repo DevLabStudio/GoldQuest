@@ -9,9 +9,12 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
 import { Chrome } from "lucide-react"; // For Google icon
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from 'lucide-react';
+
 
 export default function LoginPage() {
-  const { signIn, signInWithGoogle } = useAuthContext(); // Get Firebase methods
+  const { signIn, signInWithGoogle, isFirebaseActive, firebaseError } = useAuthContext(); // Get Firebase methods and status
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -21,6 +24,10 @@ export default function LoginPage() {
 
   const handleLogin = async (e: FormEvent) => {
     e.preventDefault();
+    if (!isFirebaseActive) {
+      setError(firebaseError || "Login service is currently unavailable. Please try again later.");
+      return;
+    }
     setError('');
     setIsLoading(true);
     if (!email || !password) {
@@ -40,6 +47,10 @@ export default function LoginPage() {
   };
 
   const handleGoogleLogin = async () => {
+    if (!isFirebaseActive) {
+      setError(firebaseError || "Google login service is currently unavailable. Please try again later.");
+      return;
+    }
     setError('');
     setIsGoogleLoading(true);
     try {
@@ -62,6 +73,15 @@ export default function LoginPage() {
         </CardHeader>
         <form onSubmit={handleLogin}>
           <CardContent className="space-y-4">
+            {firebaseError && !isFirebaseActive && (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Service Unavailable</AlertTitle>
+                <AlertDescription>
+                  {firebaseError} Please ensure your Firebase environment variables are correctly set.
+                </AlertDescription>
+              </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -71,7 +91,7 @@ export default function LoginPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                disabled={isLoading || isGoogleLoading}
+                disabled={isLoading || isGoogleLoading || !isFirebaseActive}
               />
             </div>
             <div className="space-y-2">
@@ -83,16 +103,16 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                disabled={isLoading || isGoogleLoading}
+                disabled={isLoading || isGoogleLoading || !isFirebaseActive}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-3">
-            <Button type="submit" className="w-full" disabled={isLoading || isGoogleLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading || isGoogleLoading || !isFirebaseActive}>
               {isLoading ? 'Logging In...' : 'Login'}
             </Button>
-            <Button variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={isLoading || isGoogleLoading}>
+            <Button variant="outline" className="w-full" onClick={handleGoogleLogin} disabled={isLoading || isGoogleLoading || !isFirebaseActive}>
               <Chrome className="mr-2 h-4 w-4" />
               {isGoogleLoading ? 'Connecting...' : 'Login with Google'}
             </Button>
@@ -105,3 +125,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

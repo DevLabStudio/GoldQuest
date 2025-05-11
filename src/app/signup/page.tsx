@@ -8,9 +8,11 @@ import { useAuthContext } from "@/contexts/AuthContext";
 import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from "next/link";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { AlertCircle } from 'lucide-react';
 
 export default function SignupPage() {
-  const { signUp } = useAuthContext();
+  const { signUp, isFirebaseActive, firebaseError } = useAuthContext();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -19,6 +21,10 @@ export default function SignupPage() {
 
   const handleSignup = async (e: FormEvent) => {
     e.preventDefault();
+    if (!isFirebaseActive) {
+      setError(firebaseError || "Signup service is currently unavailable. Please try again later.");
+      return;
+    }
     setError('');
     setIsLoading(true);
     if (!email || !password) {
@@ -46,6 +52,15 @@ export default function SignupPage() {
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4">
+            {firebaseError && !isFirebaseActive && (
+                <Alert variant="destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <AlertTitle>Service Unavailable</AlertTitle>
+                    <AlertDescription>
+                      {firebaseError} Please ensure your Firebase environment variables are correctly set.
+                    </AlertDescription>
+                </Alert>
+            )}
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input
@@ -55,7 +70,7 @@ export default function SignupPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
-                disabled={isLoading}
+                disabled={isLoading || !isFirebaseActive}
               />
             </div>
             <div className="space-y-2">
@@ -67,13 +82,13 @@ export default function SignupPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                disabled={isLoading}
+                disabled={isLoading || !isFirebaseActive}
               />
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
-            <Button type="submit" className="w-full" disabled={isLoading}>
+            <Button type="submit" className="w-full" disabled={isLoading || !isFirebaseActive}>
               {isLoading ? 'Signing Up...' : 'Sign Up'}
             </Button>
             <Link href="/login" className="text-sm text-muted-foreground hover:text-primary">
