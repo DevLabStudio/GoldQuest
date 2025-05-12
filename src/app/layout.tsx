@@ -13,7 +13,7 @@ const oxanium = Oxanium({
 });
 
 export const metadata: Metadata = {
-  title: 'The Golden Game',
+  title: 'GoldQuest',
   description: 'Simple personal finance management',
 };
 

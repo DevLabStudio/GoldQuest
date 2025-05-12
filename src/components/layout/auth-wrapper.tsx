@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -18,7 +19,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { PiggyBank as PiggyBankIconLucide, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag as TagIcon, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal } from 'lucide-react';
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -27,6 +28,7 @@ import { DateRangeProvider } from '@/contexts/DateRangeContext';
 import GlobalHeader from './GlobalHeader';
 import { Button } from '@/components/ui/button';
 
+// New GoldQuest Logo
 const LogoIcon = () => (
   <svg
     width="24"
@@ -36,16 +38,25 @@ const LogoIcon = () => (
     xmlns="http://www.w3.org/2000/svg"
     className="mr-2 text-primary"
   >
-    <path d="M50 10 L75 25 L75 75 L50 90 L25 75 L25 25 Z" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
-    <path d="M25 25 L75 75 M75 25 L25 75 M50 10 L50 90 M25 50 L75 50" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
-    <path d="M25 25 L50 50 L75 25 L50 10 Z" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
-    <path d="M25 25 L25 75 L50 90 L75 75 L75 25 M50 50 L25 75 M50 50 L75 75" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+    {/* Thin grid lines */}
+    <path d="M25 43.3013L50 28.8675L75 43.3013" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+    <path d="M25 56.6987L50 71.1325L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+    <path d="M50 28.8675L50 71.1325" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+    <path d="M25 43.3013L25 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+    <path d="M75 43.3013L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+    <path d="M25 43.3013L50 56.6987L75 43.3013" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+    <path d="M25 56.6987L50 43.3013L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
+
+    {/* Thick "G" shape lines */}
+    <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+
+    {/* Circles at vertices */}
     <circle cx="50" cy="10" r="5" fill="currentColor"/>
-    <circle cx="75" cy="25" r="5" fill="currentColor"/>
-    <circle cx="75" cy="75" r="5" fill="currentColor"/>
-    <circle cx="50" cy="90" r="5" fill="currentColor"/>
-    <circle cx="25" cy="75" r="5" fill="currentColor"/>
     <circle cx="25" cy="25" r="5" fill="currentColor"/>
+    <circle cx="75" cy="25" r="5" fill="currentColor"/>
+    <circle cx="25" cy="75" r="5" fill="currentColor"/>
+    <circle cx="50" cy="90" r="5" fill="currentColor"/>
+    <circle cx="75" cy="75" r="5" fill="currentColor"/>
     <circle cx="50" cy="50" r="5" fill="currentColor"/>
   </svg>
 );
@@ -60,6 +71,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
+  const [isFinancialControlOpen, setIsFinancialControlOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [loadingDivClassName, setLoadingDivClassName] = useState("flex items-center justify-center min-h-screen");
 
@@ -99,6 +111,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   useEffect(() => {
     if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+        setIsFinancialControlOpen(pathname.startsWith('/financial-control'));
     }
   }, [pathname, isClient]);
 
@@ -126,7 +139,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  const isFinancialControlActive = isClient && pathname === '/financial-control';
+  const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control'; // Updated for single page
   const isOrganizationActive = isClient && pathname === '/organization';
 
 
@@ -163,28 +176,26 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <SidebarHeader className="items-center justify-between">
                 <div className="flex items-center">
                 <LogoIcon />
-                <span className="text-lg font-semibold text-primary">The Golden Game</span>
+                <span className="text-lg font-semibold text-primary">GoldQuest</span>
                 </div>
                 <SidebarTrigger className="md:hidden" />
             </SidebarHeader>
             <SidebarContent>
                 <SidebarMenu>
                 <SidebarGroup>
-                    {/* Dashboard in its own group for spacing */}
                     <SidebarMenuItem>
                         <Link href="/" passHref>
                         <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
-                            <PiggyBankIconLucide />
+                            <PieChart />
                             <span>Dashboard</span>
                         </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-                 <SidebarGroup>
-                    <SidebarGroupLabel>Menu</SidebarGroupLabel>
+                <SidebarGroup>
                     <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
-                            <SidebarMenuButton tooltip="Financial Control" isActive={isFinancialControlActive}>
+                            <SidebarMenuButton tooltip="Financial Control" isActive={isAnyFinancialControlRouteActive}>
                                 <SlidersHorizontal />
                                 <span>Financial Control</span>
                             </SidebarMenuButton>
@@ -243,7 +254,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                                 </SidebarMenuButton>
                             </Link>
                         </SidebarMenuItem>
-                            <SidebarMenuItem className="ml-4">
+                         <SidebarMenuItem className="ml-4">
                              <Link href="/transfers" passHref>
                                  <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
                                      <ArrowLeftRight />
@@ -322,13 +333,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
-  // This part should ideally not be reached if the logic above is correct for handling all states.
-  // However, to satisfy React's requirement for a return in all paths:
-  if (isClient && (pathname === '/login' || pathname === '/signup')) {
-    return <>{children}</>; // Allow login/signup pages to render without full layout if Firebase isn't active but path is correct
-  }
-
-  // Fallback for any other unhandled case during initial load or if Firebase is completely broken
-  // and not caught by isFirebaseActive logic for login/signup.
   return <div className={loadingDivClassName}>Preparing application...</div>;
 }
+
