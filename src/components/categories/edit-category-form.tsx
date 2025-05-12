@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -63,10 +62,10 @@ const EditCategoryForm: FC<EditCategoryFormProps> = ({ category, onCategoryUpdat
             <FormItem>
               <FormLabel>Icon (Optional)</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., 🛒 or Home" {...field} />
+                <Input placeholder="e.g., 🛒, 🏠, 💡 (Type or paste an emoji)" {...field} />
               </FormControl>
               <FormDescription>
-                Enter a short icon or emoji (e.g., 💰, 🚗). Leave blank to use default.
+                Enter a single emoji character (e.g., 💰, 🚗). Leave blank to use default Lucide icon.
               </FormDescription>
               <FormMessage />
             </FormItem>

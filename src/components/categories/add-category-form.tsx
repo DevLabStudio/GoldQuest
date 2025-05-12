@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -62,10 +61,10 @@ const AddCategoryForm: FC<AddCategoryFormProps> = ({ onCategoryAdded, isLoading 
             <FormItem>
               <FormLabel>Icon (Optional)</FormLabel>
               <FormControl>
-                <Input placeholder="e.g., 🛒 or Home" {...field} />
+                <Input placeholder="e.g., 🛒, 🏠, 💡 (Type or paste an emoji)" {...field} />
               </FormControl>
               <FormDescription>
-                Enter a short icon or emoji (e.g., 💰, 🚗).
+                Enter a single emoji character (e.g., 💰, 🚗).
               </FormDescription>
               <FormMessage />
             </FormItem>

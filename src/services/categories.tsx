@@ -4,72 +4,67 @@ import React from 'react';
 import { database, auth } from '@/lib/firebase';
 import { ref, set, get, push, remove } from 'firebase/database';
 import type { User } from 'firebase/auth';
-import { ArrowLeftRight, Tag as TagIcon, ShoppingCart, Home, Lightbulb, Car, Utensils, Briefcase, TrendingUp, HelpCircle, Settings } from 'lucide-react'; // Added more icons
+// Removed the very long lucide-react import causing parsing issues.
+// Fallback to HelpCircle or user-defined icons is already in place.
+import { HelpCircle } from 'lucide-react';
 
 export interface Category {
   id: string;
   name: string;
-  icon?: string; // Optional: User-defined icon (e.g., emoji or Lucide icon name)
+  icon?: string; // User-defined icon (emoji or short string)
 }
 
-// --- Category Styling (Keep this mapping static or as fallback) ---
-export const categoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
-  groceries: { icon: ShoppingCart, color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
-  rent: { icon: Home, color: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
-  utilities: { icon: Lightbulb, color: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700' },
-  transportation: { icon: Car, color: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700' },
-  food: { icon: Utensils, color: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700' },
-  income: { icon: Briefcase, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' }, // Changed icon from 💰
-  salary: { icon: Briefcase, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
-  investment: { icon: TrendingUp, color: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700' },
-  default: { icon: HelpCircle, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-  uncategorized: { icon: TagIcon, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600' },
-  transfer: { icon: ArrowLeftRight, color: 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600' },
-  'opening balance': { icon: Settings, color: 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-900/30 dark:text-cyan-300 dark:border-cyan-700' },
+// This maps known category names (lowercase) to styles.
+// It's used if no user-defined icon is present for a category.
+// Colors are Tailwind classes.
+const predefinedCategoryStyles: { [key: string]: { icon: React.ElementType, color: string } } = {
+  groceries: { icon: () => <span className="mr-1">🛒</span>, color: 'bg-green-100 text-green-800 border-green-300 dark:bg-green-900/30 dark:text-green-300 dark:border-green-700' },
+  rent: { icon: () => <span className="mr-1">🏠</span>, color: 'bg-blue-100 text-blue-800 border-blue-300 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-700' },
+  utilities: { icon: () => <span className="mr-1">💡</span>, color: 'bg-yellow-100 text-yellow-800 border-yellow-300 dark:bg-yellow-900/30 dark:text-yellow-300 dark:border-yellow-700' },
+  transportation: { icon: () => <span className="mr-1">🚗</span>, color: 'bg-purple-100 text-purple-800 border-purple-300 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-700' },
+  food: { icon: () => <span className="mr-1">🍔</span>, color: 'bg-red-100 text-red-800 border-red-300 dark:bg-red-900/30 dark:text-red-300 dark:border-red-700' },
+  entertainment: { icon: () => <span className="mr-1">🎬</span>, color: 'bg-pink-100 text-pink-800 border-pink-300 dark:bg-pink-900/30 dark:text-pink-300 dark:border-pink-700' },
+  health: { icon: () => <span className="mr-1">❤️</span>, color: 'bg-red-200 text-red-900 border-red-400 dark:bg-red-800/30 dark:text-red-400 dark:border-red-600' },
+  education: { icon: () => <span className="mr-1">📚</span>, color: 'bg-indigo-100 text-indigo-800 border-indigo-300 dark:bg-indigo-900/30 dark:text-indigo-300 dark:border-indigo-700' },
+  shopping: { icon: () => <span className="mr-1">🛍️</span>, color: 'bg-teal-100 text-teal-800 border-teal-300 dark:bg-teal-900/30 dark:text-teal-300 dark:border-teal-700' },
+  salary: { icon: () => <span className="mr-1">💰</span>, color: 'bg-emerald-100 text-emerald-800 border-emerald-300 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-700'},
+  investment: { icon: () => <span className="mr-1">📈</span>, color: 'bg-sky-100 text-sky-800 border-sky-300 dark:bg-sky-900/30 dark:text-sky-300 dark:border-sky-700'},
+  transfer: { icon: () => <span className="mr-1">🔄</span>, color: 'bg-gray-100 text-gray-800 border-gray-300 dark:bg-gray-700/30 dark:text-gray-300 dark:border-gray-600'},
+  'opening balance': { icon: () => <span className="mr-1">🏦</span>, color: 'bg-slate-100 text-slate-800 border-slate-300 dark:bg-slate-700/30 dark:text-slate-300 dark:border-slate-600'},
+  uncategorized: { icon: HelpCircle, color: 'bg-stone-100 text-stone-800 border-stone-300 dark:bg-stone-700/30 dark:text-stone-300 dark:border-stone-600' },
+  // Add more predefined categories as needed
 };
 
 
-export const getCategoryStyle = (categoryNameOrObject: string | Category | undefined | null) => {
-    let categoryName: string;
-    let categoryIconString: string | undefined;
+export const getCategoryStyle = (category: Category | string | undefined | null): { icon: React.ElementType, color: string } => {
+  const categoryName = typeof category === 'string' ? category : category?.name;
+  const categoryIconProp = typeof category === 'object' && category?.icon ? category.icon : undefined;
 
-    if (typeof categoryNameOrObject === 'string' || categoryNameOrObject === null || categoryNameOrObject === undefined) {
-        categoryName = categoryNameOrObject || 'uncategorized';
-    } else {
-        categoryName = categoryNameOrObject.name || 'uncategorized';
-        categoryIconString = categoryNameOrObject.icon;
-    }
+  if (categoryIconProp) {
+    // User-defined icon (emoji or short text)
+    const IconComponent = () => <span className="mr-1">{categoryIconProp}</span>;
+    const style = predefinedCategoryStyles[categoryName?.toLowerCase() || 'uncategorized'] || predefinedCategoryStyles.uncategorized;
+    return { icon: IconComponent, color: style.color };
+  }
 
-    const lowerCategory = categoryName.toLowerCase();
-    const baseStyle = categoryStyles[lowerCategory] || categoryStyles.default;
-
-    if (categoryIconString) { // User-defined icon (emoji) takes precedence
-        // For Lucide icons, we'd need a map string to component, for emojis just render
-        const isEmoji = /\p{Emoji}/u.test(categoryIconString);
-        if (isEmoji) {
-            return {
-                icon: () => <span className="mr-1 text-base">{categoryIconString}</span>, // Ensure emojis are visible
-                color: baseStyle.color,
-            };
-        }
-        // Potentially handle Lucide icon names here if stored as string
-        // For now, if not emoji, and it's user-defined, let's assume it's an emoji or simple char
-         return {
-            icon: () => <span className="mr-1 text-base">{categoryIconString}</span>,
-            color: baseStyle.color,
-        };
-    }
-    return baseStyle;
+  const normalizedName = categoryName?.toLowerCase() || 'uncategorized';
+  return predefinedCategoryStyles[normalizedName] || predefinedCategoryStyles.uncategorized;
 };
 
 
-const defaultCategoriesFirebase: Omit<Category, 'id'>[] = Object.entries(categoryStyles)
-    .filter(([name]) => name !== 'default' && name !== 'uncategorized')
-    .map(([name, style]) => ({
-        name: name.charAt(0).toUpperCase() + name.slice(1), // Capitalize default names
-        // Default icons can be derived from the style map or left undefined initially
-        // icon: (we can decide later if default Lucide names should be stored here)
-    }));
+const defaultCategoriesFirebase: Omit<Category, 'id'>[] = [
+    { name: 'Groceries', icon: '🛒' },
+    { name: 'Rent', icon: '🏠' },
+    { name: 'Utilities', icon: '💡' },
+    { name: 'Transportation', icon: '🚗' },
+    { name: 'Food', icon: '🍔' },
+    { name: 'Entertainment', icon: '🎬' },
+    { name: 'Salary', icon: '💰' },
+    { name: 'Investment', icon: '📈' },
+    { name: 'Transfer', icon: '🔄' },
+    { name: 'Opening Balance', icon: '🏦'},
+    { name: 'Uncategorized', icon: '❓' }
+];
 
 
 function getCategoriesRefPath(currentUser: User | null) {
@@ -81,6 +76,7 @@ function getSingleCategoryRefPath(currentUser: User | null, categoryId: string) 
   if (!currentUser?.uid) throw new Error("User not authenticated to access category.");
   return `users/${currentUser.uid}/categories/${categoryId}`;
 }
+
 
 export async function getCategories(): Promise<Category[]> {
   const currentUser = auth.currentUser;
@@ -94,23 +90,24 @@ export async function getCategories(): Promise<Category[]> {
       return Object.entries(categoriesData).map(([id, data]) => ({
         id,
         ...(data as Omit<Category, 'id'>),
-      }));
+      })).sort((a,b) => a.name.localeCompare(b.name));
     } else {
+      // Initialize with default categories if none exist for the user
       console.log("No categories found for user, initializing with defaults...");
       const initialCategories: { [key: string]: Omit<Category, 'id'> } = {};
       const createdCategories: Category[] = [];
 
       for (const catData of defaultCategoriesFirebase) {
-        const newCatRef = push(categoriesRef);
-        if (newCatRef.key) {
-          initialCategories[newCatRef.key] = catData;
-          createdCategories.push({ id: newCatRef.key, ...catData });
+        const newCategoryRef = push(categoriesRef); // Create a new ref for each default category
+        if (newCategoryRef.key) {
+          initialCategories[newCategoryRef.key] = catData; // Use the new key
+          createdCategories.push({ id: newCategoryRef.key, ...catData });
         }
       }
       if (Object.keys(initialCategories).length > 0) {
-        await set(categoriesRef, initialCategories);
+         await set(categoriesRef, initialCategories); // Set the whole object of default categories
       }
-      return createdCategories;
+      return createdCategories.sort((a,b) => a.name.localeCompare(b.name));
     }
   } catch (error) {
     console.error("Error fetching categories from Firebase:", error);
@@ -124,26 +121,23 @@ export async function addCategory(categoryName: string, icon?: string): Promise<
   const categoriesRef = ref(database, categoriesRefPath);
 
   if (!categoryName || typeof categoryName !== 'string' || categoryName.trim().length === 0) {
-    throw new Error("Category name cannot be empty.");
+      throw new Error("Category name cannot be empty.");
   }
   const normalizedName = categoryName.trim();
 
+  // Check if category already exists (case-insensitive)
   const currentCategories = await getCategories();
   const existingCategory = currentCategories.find(cat => cat.name.toLowerCase() === normalizedName.toLowerCase());
   if (existingCategory) {
-     console.log(`Category "${normalizedName}" already exists. Returning existing.`);
-     return existingCategory;
+      console.log(`Category "${normalizedName}" already exists. Returning existing.`);
+      return existingCategory;
   }
 
-  const newCategoryRef = push(categoriesRef);
+  const newCategoryRef = push(categoriesRef); // Generates a unique ID
   if (!newCategoryRef.key) {
     throw new Error("Failed to generate a new category ID.");
   }
-  const newCategoryData: Omit<Category, 'id'> = { name: normalizedName };
-  if (icon && icon.trim() !== '') {
-    newCategoryData.icon = icon.trim();
-  }
-
+  const newCategoryData: Omit<Category, 'id'> = { name: normalizedName, icon: icon || undefined };
 
   try {
     await set(newCategoryRef, newCategoryData);
@@ -160,53 +154,29 @@ export async function updateCategory(categoryId: string, newName: string, newIco
   const categoryRef = ref(database, categoryRefPath);
 
   if (!newName || typeof newName !== 'string' || newName.trim().length === 0) {
-    throw new Error("New category name cannot be empty.");
+      throw new Error("New category name cannot be empty.");
   }
   const normalizedNewName = newName.trim();
 
+  // Check for name collision (case-insensitive, excluding the current category being updated)
   const currentCategories = await getCategories();
   if (currentCategories.some(cat => cat.id !== categoryId && cat.name.toLowerCase() === normalizedNewName.toLowerCase())) {
       throw new Error(`Another category named "${normalizedNewName}" already exists.`);
   }
 
-  const updatedCategoryData: Omit<Category, 'id'> = { name: normalizedNewName };
-  if (newIcon && newIcon.trim() !== '') {
-    updatedCategoryData.icon = newIcon.trim();
-  } else if (newIcon === '') { // If empty string is passed, explicitly remove the icon
-    // For Firebase, to remove a field, you can set it to null or update only specific fields.
-    // Here, we'll construct the object to ensure 'icon' is not present if newIcon is empty.
-    // Or, more simply, just don't include icon in updatedCategoryData if newIcon is empty.
-    // The approach below sets icon to undefined which will remove it if it exists
-    // but this behavior might depend on firebase SDK version.
-    // A safer way is to fetch the existing category, modify, then set.
-    // However, for simplicity, if newIcon is empty, we don't add it to updatedCategoryData.
-    // If you want to explicitly delete an icon field, a specific update({icon: null}) might be needed.
+  const updatedCategoryData: Partial<Omit<Category, 'id'>> = { name: normalizedNewName };
+  if (newIcon !== undefined) { // Allow setting icon to empty string or a new value
+    updatedCategoryData.icon = newIcon || undefined; // Store empty string as undefined if that's preferred
   }
 
-
   try {
-    // To explicitly remove the icon field if newIcon is an empty string
-    const updates: Partial<Category> = { name: normalizedNewName };
-    if (newIcon !== undefined) { // Allow setting empty string to clear, or a new icon
-        updates.icon = newIcon.trim() === '' ? undefined : newIcon.trim(); // Store undefined to remove from Firebase
+    await set(categoryRef, updatedCategoryData);
+    // Fetch the updated category to ensure we return the full, correct object.
+    const snapshot = await get(categoryRef);
+    if (snapshot.exists()) {
+        return { id: categoryId, ...(snapshot.val() as Omit<Category, 'id'>) };
     }
-    await set(categoryRef, updates); // Using set will replace the node; use update for partial updates
-
-    // Or, for more precise control, fetch and then set:
-    // const snapshot = await get(categoryRef);
-    // if (snapshot.exists()) {
-    //   const existingData = snapshot.val();
-    //   const dataToSave: Omit<Category, 'id'> = { ...existingData, name: normalizedNewName };
-    //   if (newIcon !== undefined) {
-    //     dataToSave.icon = newIcon.trim() === '' ? undefined : newIcon.trim();
-    //   }
-    //   await set(categoryRef, dataToSave);
-    //   return { id: categoryId, ...dataToSave };
-    // } else {
-    //   throw new Error("Category not found for update.");
-    // }
-    return { id: categoryId, name: normalizedNewName, icon: updates.icon };
-
+    throw new Error("Failed to fetch updated category after update.");
   } catch (error) {
     console.error("Error updating category in Firebase:", error);
     throw error;
