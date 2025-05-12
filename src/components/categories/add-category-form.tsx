@@ -7,6 +7,10 @@ import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import Picker, { type EmojiClickData, Theme as EmojiTheme, SuggestionMode } from 'emoji-picker-react';
+import { Smile } from 'lucide-react';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Category name cannot be empty").max(50, "Category name too long"),
@@ -21,6 +25,7 @@ interface AddCategoryFormProps {
 }
 
 const AddCategoryForm: FC<AddCategoryFormProps> = ({ onCategoryAdded, isLoading }) => {
+  const { theme } = useAuthContext(); // Get theme from AuthContext
   const form = useForm<AddCategoryFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -33,6 +38,12 @@ const AddCategoryForm: FC<AddCategoryFormProps> = ({ onCategoryAdded, isLoading 
     await onCategoryAdded(values.name, values.icon);
     form.reset();
   }
+
+  const onEmojiClick = (emojiData: EmojiClickData, event: MouseEvent) => {
+    form.setValue('icon', emojiData.emoji);
+  };
+  
+  const emojiPickerTheme = theme === 'dark' ? EmojiTheme.DARK : EmojiTheme.LIGHT;
 
   return (
     <Form {...form}>
@@ -60,11 +71,34 @@ const AddCategoryForm: FC<AddCategoryFormProps> = ({ onCategoryAdded, isLoading 
           render={({ field }) => (
             <FormItem>
               <FormLabel>Icon (Optional)</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., 🛒, 🏠, 💡 (Type or paste an emoji)" {...field} />
-              </FormControl>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Selected Emoji"
+                  value={field.value || ""}
+                  readOnly
+                  className="flex-grow"
+                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="icon" type="button">
+                      <Smile className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 border-0">
+                    <Picker
+                        onEmojiClick={onEmojiClick}
+                        theme={emojiPickerTheme}
+                        autoFocusSearch={false}
+                        lazyLoadEmojis={true}
+                        suggestedEmojisMode={SuggestionMode.RECENT}
+                        searchPlaceHolder="Search emoji"
+                        previewConfig={{showPreview: false}}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <FormDescription>
-                Enter a single emoji character (e.g., 💰, 🚗).
+                Click the smiley face to select an emoji.
               </FormDescription>
               <FormMessage />
             </FormItem>

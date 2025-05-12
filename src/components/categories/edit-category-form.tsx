@@ -8,6 +8,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
 import type { Category } from '@/services/categories';
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import Picker, { type EmojiClickData, Theme as EmojiTheme, SuggestionMode } from 'emoji-picker-react';
+import { Smile } from 'lucide-react';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Category name cannot be empty").max(50, "Category name too long"),
@@ -23,16 +27,28 @@ interface EditCategoryFormProps {
 }
 
 const EditCategoryForm: FC<EditCategoryFormProps> = ({ category, onCategoryUpdated, isLoading }) => {
+  const { theme } = useAuthContext(); // Get theme from AuthContext
   const form = useForm<EditCategoryFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      name: category.name,
-      icon: category.icon || "",
+      name: category?.name || "",
+      icon: category?.icon || "",
     },
   });
 
   async function onSubmit(values: EditCategoryFormData) {
+    if (!category) return;
     await onCategoryUpdated(category.id, values.name, values.icon);
+  }
+
+  const onEmojiClick = (emojiData: EmojiClickData, event: MouseEvent) => {
+    form.setValue('icon', emojiData.emoji);
+  };
+
+  const emojiPickerTheme = theme === 'dark' ? EmojiTheme.DARK : EmojiTheme.LIGHT;
+
+  if (!category) {
+      return <p className="text-destructive">Error: Category data is not available.</p>;
   }
 
   return (
@@ -61,11 +77,34 @@ const EditCategoryForm: FC<EditCategoryFormProps> = ({ category, onCategoryUpdat
           render={({ field }) => (
             <FormItem>
               <FormLabel>Icon (Optional)</FormLabel>
-              <FormControl>
-                <Input placeholder="e.g., 🛒, 🏠, 💡 (Type or paste an emoji)" {...field} />
-              </FormControl>
+              <div className="flex items-center gap-2">
+                <Input
+                  placeholder="Selected Emoji"
+                  value={field.value || ""}
+                  readOnly
+                  className="flex-grow"
+                />
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button variant="outline" size="icon" type="button">
+                      <Smile className="h-4 w-4" />
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0 border-0">
+                     <Picker
+                        onEmojiClick={onEmojiClick}
+                        theme={emojiPickerTheme}
+                        autoFocusSearch={false}
+                        lazyLoadEmojis={true}
+                        suggestedEmojisMode={SuggestionMode.RECENT}
+                        searchPlaceHolder="Search emoji"
+                        previewConfig={{showPreview: false}}
+                    />
+                  </PopoverContent>
+                </Popover>
+              </div>
               <FormDescription>
-                Enter a single emoji character (e.g., 💰, 🚗). Leave blank to use default Lucide icon.
+                Click the smiley face to select an emoji. Leave blank to use default Lucide icon.
               </FormDescription>
               <FormMessage />
             </FormItem>
