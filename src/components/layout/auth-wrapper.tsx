@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
@@ -62,7 +61,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
-  const [isOrganizationOpen, setIsOrganizationOpen] = useState(false);
+  // const [isOrganizationOpen, setIsOrganizationOpen] = useState(false); // No longer needed as a dropdown
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -102,7 +101,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   useEffect(() => {
     if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-        setIsOrganizationOpen(pathname.startsWith('/groups') || pathname.startsWith('/categories') || pathname.startsWith('/tags'));
+        // setIsOrganizationOpen(pathname.startsWith('/organization')); // Updated: Not a dropdown anymore
     }
   }, [pathname, isClient]);
 
@@ -130,11 +129,25 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  const isAnyOrganizationRouteActive = isClient && (pathname.startsWith('/groups') || pathname.startsWith('/categories') || pathname.startsWith('/tags'));
+  // const isAnyOrganizationRouteActive = isClient && (pathname.startsWith('/organization')); // Updated: single page
 
 
   if (!isClient || isLoadingAuth) {
-    return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Loading authentication...</div>;
+    return (
+      <html lang="en">
+        <head>
+            <meta name="description" content="Simple personal finance management" />
+        </head>
+        <body
+        className={cn(
+            'font-sans antialiased', // Simplified during loading
+            'min-h-screen flex flex-col'
+          )}
+        >
+          <div className="flex items-center justify-center min-h-screen">Loading authentication...</div>
+        </body>
+      </html>
+    );
   }
 
   if (!isAuthenticated && isFirebaseActive) {
@@ -253,54 +266,14 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                     </SidebarMenuItem>
                 </SidebarGroup>
                 <SidebarGroup>
-                    {/* <SidebarGroupLabel>Organization</SidebarGroupLabel> */}
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            tooltip="Organization Management"
-                            onClick={() => setIsOrganizationOpen(!isOrganizationOpen)}
-                            className="justify-between"
-                            isActive={isAnyOrganizationRouteActive}
-                        >
-                             <div className="flex items-center gap-2">
+                        <Link href="/organization" passHref>
+                            <SidebarMenuButton tooltip="Manage Organization" isActive={isActive('/organization')}>
                                 <Network />
                                 <span>Organization</span>
-                            </div>
-                            <ChevronDown
-                                className={cn(
-                                    "h-4 w-4 transition-transform duration-200",
-                                    isOrganizationOpen && "rotate-180"
-                                )}
-                            />
-                        </SidebarMenuButton>
+                            </SidebarMenuButton>
+                        </Link>
                     </SidebarMenuItem>
-                    {isOrganizationOpen && (
-                        <>
-                            <SidebarMenuItem className="ml-4">
-                                <Link href="/groups" passHref>
-                                    <SidebarMenuButton tooltip="Manage Groups" size="sm" isActive={isActive('/groups')}>
-                                        <Users />
-                                        <span>Groups</span>
-                                    </SidebarMenuButton>
-                                </Link>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem className="ml-4">
-                                <Link href="/categories" passHref>
-                                    <SidebarMenuButton tooltip="Manage Categories" size="sm" isActive={isActive('/categories')}>
-                                        <ListTree />
-                                        <span>Categories</span>
-                                    </SidebarMenuButton>
-                                </Link>
-                            </SidebarMenuItem>
-                            <SidebarMenuItem className="ml-4">
-                                <Link href="/tags" passHref>
-                                    <SidebarMenuButton tooltip="Manage Tags" size="sm" isActive={isActive('/tags')}>
-                                        <Tag />
-                                        <span>Tags</span>
-                                    </SidebarMenuButton>
-                                </Link>
-                            </SidebarMenuItem>
-                        </>
-                    )}
                 </SidebarGroup>
                 <SidebarGroup>
                     <SidebarGroupLabel>Settings</SidebarGroupLabel>
@@ -355,4 +328,3 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   return <>{children}</>;
 }
-
