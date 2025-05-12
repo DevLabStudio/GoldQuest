@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -61,7 +62,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
-  // const [isOrganizationOpen, setIsOrganizationOpen] = useState(false); // No longer needed as a dropdown
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -101,7 +101,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   useEffect(() => {
     if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-        // setIsOrganizationOpen(pathname.startsWith('/organization')); // Updated: Not a dropdown anymore
     }
   }, [pathname, isClient]);
 
@@ -129,24 +128,12 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  // const isAnyOrganizationRouteActive = isClient && (pathname.startsWith('/organization')); // Updated: single page
+  const isOrganizationActive = isClient && pathname === '/organization';
 
 
   if (!isClient || isLoadingAuth) {
     return (
-      <html lang="en">
-        <head>
-            <meta name="description" content="Simple personal finance management" />
-        </head>
-        <body
-        className={cn(
-            'font-sans antialiased', // Simplified during loading
-            'min-h-screen flex flex-col'
-          )}
-        >
-          <div className="flex items-center justify-center min-h-screen">Loading authentication...</div>
-        </body>
-      </html>
+      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Loading authentication...</div>
     );
   }
 
@@ -266,9 +253,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                     </SidebarMenuItem>
                 </SidebarGroup>
                 <SidebarGroup>
-                    <SidebarMenuItem>
+                     <SidebarMenuItem>
                         <Link href="/organization" passHref>
-                            <SidebarMenuButton tooltip="Manage Organization" isActive={isActive('/organization')}>
+                            <SidebarMenuButton tooltip="Manage Organization" isActive={isOrganizationActive}>
                                 <Network />
                                 <span>Organization</span>
                             </SidebarMenuButton>
@@ -322,9 +309,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         </DateRangeProvider>
     );
   }
-   if (!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
-      return <LoginPage />;
-   }
-
+   // Fallback for when Firebase is not active and user is on login/signup, or if somehow other conditions not met
   return <>{children}</>;
 }
+
