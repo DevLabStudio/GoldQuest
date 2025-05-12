@@ -1,10 +1,12 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
+import Link from 'next/link'; // Import Link
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users } from 'lucide-react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from '@/components/ui/dialog';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye } from 'lucide-react'; // Import Eye icon
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import AddSubscriptionForm, { type AddSubscriptionFormData } from '@/components/subscriptions/add-subscription-form';
@@ -14,11 +16,11 @@ import { getCategories, type Category } from '@/services/categories';
 import { getAccounts, type Account } from '@/services/account-sync';
 import { getGroups, type Group } from '@/services/groups';
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format, parseISO, isSameMonth, isSameYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Separator } from '@/components/ui/separator'; // Import Separator
+import { Separator } from '@/components/ui/separator';
 
 export default function SubscriptionsPage() {
   const [isAddSubscriptionDialogOpen, setIsAddSubscriptionDialogOpen] = useState(false);
@@ -70,11 +72,18 @@ export default function SubscriptionsPage() {
         await updateSubscription({
             ...editingSubscription,
             ...payload,
+            groupId: data.groupId === "__NONE_GROUP__" ? null : data.groupId,
+            accountId: data.accountId === "__NONE_ACCOUNT__" ? undefined : data.accountId,
             lastPaidMonth: editingSubscription.lastPaidMonth
         });
         toast({ title: "Success", description: "Subscription updated successfully." });
       } else {
-        await saveSubscription({ ...payload, lastPaidMonth: null });
+        await saveSubscription({ 
+            ...payload, 
+            groupId: data.groupId === "__NONE_GROUP__" ? null : data.groupId,
+            accountId: data.accountId === "__NONE_ACCOUNT__" ? undefined : data.accountId,
+            lastPaidMonth: null 
+        });
         toast({ title: "Success", description: "Subscription added successfully." });
       }
       setIsAddSubscriptionDialogOpen(false);
@@ -135,10 +144,24 @@ export default function SubscriptionsPage() {
   const incomeSubscriptionsByGroup = useMemo(() => groupSubscriptionsByType('income'), [subscriptions]);
   const expenseSubscriptionsByGroup = useMemo(() => groupSubscriptionsByType('expense'), [subscriptions]);
 
+  const calculateMonthlyEquivalent = (amount: number, currency: string, frequency: SubscriptionFrequency): number => {
+    const amountInPreferredCurrency = convertCurrency(amount, currency, preferredCurrency);
+    switch (frequency) {
+      case 'daily': return amountInPreferredCurrency * 30; // Approximation
+      case 'weekly': return amountInPreferredCurrency * 4;  // Approximation
+      case 'bi-weekly': return amountInPreferredCurrency * 2; // Approximation
+      case 'monthly': return amountInPreferredCurrency;
+      case 'quarterly': return amountInPreferredCurrency / 3;
+      case 'semi-annually': return amountInPreferredCurrency / 6;
+      case 'annually': return amountInPreferredCurrency / 12;
+      default: return 0;
+    }
+  };
+
+
   const renderSubscriptionCard = (subscription: Subscription) => {
     const currentMonthStr = format(new Date(), 'yyyy-MM');
     const isPaidThisMonth = subscription.lastPaidMonth === currentMonthStr;
-    const groupName = subscription.groupId ? groups.find(g => g.id === subscription.groupId)?.name : null;
 
     return (
     <Card key={subscription.id} className="mb-4 shadow-sm">
@@ -178,7 +201,7 @@ export default function SubscriptionsPage() {
   )};
 
   const renderGroupedSubscriptions = (groupedData: Record<string, Subscription[]>, type: 'income' | 'expense') => {
-    const groupOrder = ['no-group', ...groups.map(g => g.id)]; // Ensure 'no-group' is first or last if needed
+    const groupOrder = ['no-group', ...groups.map(g => g.id)]; 
 
     return groupOrder.map(groupId => {
       const subsInGroup = groupedData[groupId];
@@ -187,17 +210,34 @@ export default function SubscriptionsPage() {
       const group = groups.find(g => g.id === groupId);
       const groupName = group ? group.name : "Not Grouped";
 
+      const totalMonthlyForGroup = subsInGroup.reduce((sum, sub) => {
+        return sum + calculateMonthlyEquivalent(sub.amount, sub.currency, sub.frequency);
+      }, 0);
+
       return (
         <div key={`${type}-${groupId}`} className="mb-6">
-          <div className="flex items-center mb-2">
-            {group && <Users className="h-4 w-4 mr-2 text-muted-foreground" />}
-            <h3 className="text-lg font-semibold">{groupName}</h3>
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center">
+              {group && <Users className="h-4 w-4 mr-2 text-muted-foreground" />}
+              <h3 className="text-lg font-semibold">{groupName}</h3>
+              {group && (
+                <Link href={`/groups/${group.id}`} passHref legacyBehavior>
+                   <Button variant="ghost" size="sm" className="h-7 px-2 ml-2 flex items-center gap-1 text-primary hover:text-primary/80">
+                     <Eye className="h-3.5 w-3.5" />
+                     <span className="text-xs">Details</span>
+                   </Button>
+                </Link>
+              )}
+            </div>
+            <span className={`text-sm font-semibold ${type === 'income' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              Monthly: {formatCurrency(totalMonthlyForGroup, preferredCurrency, preferredCurrency, false)}
+            </span>
           </div>
           <Separator className="mb-4" />
           {subsInGroup.map(renderSubscriptionCard)}
         </div>
       );
-    }).filter(Boolean); // Remove null entries if a group had no subs
+    }).filter(Boolean); 
   };
 
 
