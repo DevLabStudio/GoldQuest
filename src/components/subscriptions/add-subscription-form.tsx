@@ -35,6 +35,7 @@ const formSchema = z.object({
   nextPaymentDate: z.date({ required_error: "Next payment date is required" }),
   notes: z.string().max(200, "Notes too long").optional(),
   tags: z.array(z.string()).optional(),
+  description: z.string().max(200, "Description too long").optional(), // Added description field
 });
 
 export type AddSubscriptionFormData = z.infer<typeof formSchema>;
@@ -65,13 +66,19 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
   const form = useForm<AddSubscriptionFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
-        ...initialData,
+        name: initialData.name || "",
+        type: initialData.type || 'expense',
+        amount: initialData.amount || undefined,
+        currency: initialData.currency || 'BRL',
+        category: initialData.category || undefined,
+        accountId: initialData.accountId || undefined,
+        groupId: initialData.groupId || undefined,
         startDate: initialData.startDate ? (typeof initialData.startDate === 'string' ? parseISO(initialData.startDate) : initialData.startDate) : new Date(),
         nextPaymentDate: initialData.nextPaymentDate ? (typeof initialData.nextPaymentDate === 'string' ? parseISO(initialData.nextPaymentDate) : initialData.nextPaymentDate) : new Date(),
+        frequency: initialData.frequency || 'monthly',
+        notes: initialData.notes || "",
+        description: initialData.description || "",
         tags: initialData.tags || [],
-        currency: initialData.currency || 'BRL',
-        accountId: initialData.accountId || undefined,
-        groupId: initialData.groupId || undefined, // Initialize groupId
     } : {
       name: "",
       type: 'expense',
@@ -79,11 +86,12 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
       currency: "BRL",
       category: undefined,
       accountId: undefined,
-      groupId: undefined, // Default groupId
+      groupId: undefined,
       startDate: new Date(),
       frequency: 'monthly',
       nextPaymentDate: new Date(),
       notes: "",
+      description: "",
       tags: [],
     },
   });
@@ -94,7 +102,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
     const submissionData = {
       ...data,
       accountId: data.accountId === "__NONE_ACCOUNT__" ? undefined : data.accountId,
-      groupId: data.groupId === "__NONE_GROUP__" ? undefined : data.groupId, // Handle "None" for group
+      groupId: data.groupId === "__NONE_GROUP__" ? undefined : data.groupId, 
     };
     await passedOnSubmit(submissionData);
   };
@@ -139,6 +147,20 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
             )}
             />
         </div>
+        
+        <FormField
+            control={form.control}
+            name="description"
+            render={({ field }) => (
+                <FormItem>
+                <FormLabel>Description (Optional)</FormLabel>
+                <FormControl>
+                    <Input placeholder="Subscription description" {...field} value={field.value || ''} />
+                </FormControl>
+                <FormMessage />
+                </FormItem>
+            )}
+        />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
@@ -350,7 +372,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                 <FormItem>
                 <FormLabel>Notes (Optional)</FormLabel>
                 <FormControl>
-                    <Input placeholder="Any additional notes" {...field} />
+                    <Input placeholder="Any additional notes" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
                 </FormItem>
