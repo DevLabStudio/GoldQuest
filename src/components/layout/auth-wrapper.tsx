@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
@@ -19,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { PiggyBank as PiggyBankIconLucide, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon } from 'lucide-react';
+import { PiggyBank as PiggyBankIconLucide, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag as TagIcon, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -40,8 +39,7 @@ const LogoIcon = () => (
     <path d="M50 10 L75 25 L75 75 L50 90 L25 75 L25 25 Z" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
     <path d="M25 25 L75 75 M75 25 L25 75 M50 10 L50 90 M25 50 L75 50" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
     <path d="M25 25 L50 50 L75 25 L50 10 Z" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
-    <path d="M25 25 L25 75 L50 90 L75 75 L75 25 M50 50 L25 75 M50 50 L75 75" stroke="currentColor" strokeWidth="1" fill="none" opacity="0.5"/>
-    <path d="M75 25 A 30 30 0 0 0 25 25 L 25 75 L 50 90 L 75 75 V 50 H 50 V 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+    <path d="M25 25 L25 75 L50 90 L75 75 L75 25 M50 50 L25 75 M50 50 L75 75" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
     <circle cx="50" cy="10" r="5" fill="currentColor"/>
     <circle cx="75" cy="25" r="5" fill="currentColor"/>
     <circle cx="75" cy="75" r="5" fill="currentColor"/>
@@ -191,7 +189,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             isActive={isAnyFinancialControlRouteActive}
                         >
                             <div className="flex items-center gap-2">
-                            <Settings /> 
+                            <SlidersHorizontal /> 
                             <span>Financial Control</span>
                             </div>
                             <ChevronDown
@@ -284,13 +282,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             </Link>
                         </SidebarMenuItem>
                             <SidebarMenuItem className="ml-4">
-                            <Link href="/transfers" passHref>
-                                <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
-                                    <ArrowLeftRight />
-                                    <span>Transfers</span>
-                                </SidebarMenuButton>
-                            </Link>
-                        </SidebarMenuItem>
+                             <Link href="/transfers" passHref>
+                                 <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
+                                     <ArrowLeftRight />
+                                     <span>Transfers</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
                         </>
                     )}
                     <SidebarMenuItem>
@@ -362,4 +360,3 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   return <>{children}</>;
 }
-
