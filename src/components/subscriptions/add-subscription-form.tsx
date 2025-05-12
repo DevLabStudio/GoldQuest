@@ -52,7 +52,13 @@ const parseTagsInput = (input: string | undefined): string[] => {
 };
 
 
-const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({ onSubmit, isLoading, categories, accounts, initialData }) => {
+const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({ 
+    onSubmit: passedOnSubmit, 
+    isLoading, 
+    categories, 
+    accounts, 
+    initialData 
+}) => {
   const form = useForm<AddSubscriptionFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
@@ -61,6 +67,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({ onSubmit, isLoading
         nextPaymentDate: initialData.nextPaymentDate ? (typeof initialData.nextPaymentDate === 'string' ? parseISO(initialData.nextPaymentDate) : initialData.nextPaymentDate) : new Date(),
         tags: initialData.tags || [],
         currency: initialData.currency || 'BRL',
+        accountId: initialData.accountId || undefined,
     } : {
       name: "",
       type: 'expense',
@@ -78,9 +85,18 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({ onSubmit, isLoading
 
   const selectedCurrency = form.watch('currency');
 
+  const handleFormSubmit = async (data: AddSubscriptionFormData) => {
+    const submissionData = {
+      ...data,
+      accountId: data.accountId === "__NONE_ACCOUNT__" ? undefined : data.accountId,
+    };
+    await passedOnSubmit(submissionData);
+  };
+
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
             control={form.control}
@@ -189,14 +205,17 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({ onSubmit, isLoading
                 render={({ field }) => (
                 <FormItem>
                     <FormLabel>Associated Account (Optional)</FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value || ""}>
+                    <Select 
+                        onValueChange={field.onChange} 
+                        value={field.value || ""} // Use field.value, default to "" for placeholder
+                    >
                     <FormControl>
                         <SelectTrigger>
                         <SelectValue placeholder="Select an account" />
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="__NONE_ACCOUNT__">None</SelectItem>
                         {accounts.map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
                             {acc.name} ({getCurrencySymbol(acc.currency)})
@@ -334,3 +353,4 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({ onSubmit, isLoading
 };
 
 export default AddSubscriptionForm;
+
