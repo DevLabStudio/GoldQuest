@@ -8,7 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users, Tag as TagIconLucide } from 'lucide-react'; // Renamed Tag to TagIconLucide
+import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users, Tag as TagIconLucide, Eye } from 'lucide-react'; 
 import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories";
 import AddCategoryForm from '@/components/categories/add-category-form';
 import EditCategoryForm from '@/components/categories/edit-category-form';
@@ -276,6 +276,11 @@ export default function OrganizationPage() {
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
+                        <Link href={`/groups/${group.id}`} passHref>
+                           <Button variant="ghost" size="sm" className="h-7 px-2">
+                             <Eye className="mr-1 h-4 w-4" /> View Details
+                           </Button>
+                        </Link>
                         <div
                           role="button"
                           tabIndex={0}
@@ -321,7 +326,7 @@ export default function OrganizationPage() {
                             const { icon: CategoryIcon, color } = getCategoryStyle(category);
                             return (
                               <Badge key={catId} variant="outline" className={`flex items-center gap-1 ${color} border`}>
-                                <CategoryIcon className="h-4 w-4" /> <span className="capitalize">{category.name}</span>
+                                <CategoryIcon /> <span className="capitalize">{category.name}</span>
                               </Badge>
                             );
                           })}
@@ -455,13 +460,13 @@ export default function OrganizationPage() {
               {tags.map((tag) => {
                 const { icon: TagIconStyledComponent, color } = getTagStyle(tag.name);
                 return (
-                  <div key={tag.id} className="group relative">
-                    <Badge variant="outline" className={`justify-between py-1 px-2.5 text-sm ${color} border items-center`}>
+                  <Link key={tag.id} href={`/tags/${tag.id}`} passHref className="group relative">
+                    <Badge variant="outline" className={`justify-between py-1 px-2.5 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`}>
                       <div className="flex items-center gap-1 overflow-hidden mr-8">
                         <TagIconStyledComponent /> <span className="truncate">{tag.name}</span>
                       </div>
                       <div className="absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => openEditTagDialog(tag)}><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button>
+                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); openEditTagDialog(tag);}}><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button>
                         <AlertDialog
                             open={selectedTag?.id === tag.id && !isEditTagDialogOpen && !isDeletingTag}
                             onOpenChange={(isOpen) => {
@@ -469,7 +474,7 @@ export default function OrganizationPage() {
                             }}
                         >
                             <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => openDeleteTagDialog(tag)}>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); openDeleteTagDialog(tag);}}>
                                     <Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span>
                                 </Button>
                             </AlertDialogTrigger>
@@ -480,7 +485,7 @@ export default function OrganizationPage() {
                         </AlertDialog>
                       </div>
                     </Badge>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
