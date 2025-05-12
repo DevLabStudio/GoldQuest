@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users } from 'lucide-react';
@@ -19,6 +19,7 @@ import ManageGroupCategoriesDialog from '@/components/organization/manage-group-
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { cn } from '@/lib/utils';
 
 
 export default function OrganizationPage() {
@@ -274,15 +275,27 @@ export default function OrganizationPage() {
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
+                        <div
+                          role="button"
+                          tabIndex={0}
+                          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 cursor-pointer flex items-center")}
+                          onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}}
+                        >
                           <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
-                        </Button>
+                        </div>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
+                             <div
+                                role="button"
+                                tabIndex={0}
+                                className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer flex items-center justify-center")}
+                                onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openDeleteGroupDialog(group); }}}
+                              >
                                 <Trash2 className="h-4 w-4" />
                                 <span className="sr-only">Delete Group</span>
-                             </Button>
+                             </div>
                           </AlertDialogTrigger>
                            {selectedGroupForDeletion?.id === group.id && (
                               <AlertDialogContent>
