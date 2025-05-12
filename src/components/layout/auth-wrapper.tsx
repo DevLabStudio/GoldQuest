@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { ReactNode } from 'react';
@@ -171,7 +170,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <SidebarContent>
                 <SidebarMenu>
                 <SidebarGroup>
-                    <SidebarGroupLabel>Menu</SidebarGroupLabel>
+                    {/* Dashboard in its own group for spacing */}
                     <SidebarMenuItem>
                         <Link href="/" passHref>
                         <SidebarMenuButton tooltip="Dashboard Overview" isActive={isActive('/')}>
@@ -180,6 +179,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
+                </SidebarGroup>
+                <SidebarGroup>
+                    <SidebarGroupLabel>Menu</SidebarGroupLabel>
                     <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
                             <SidebarMenuButton tooltip="Financial Control" isActive={isFinancialControlActive}>
@@ -318,5 +320,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
-  return <>{children}</>;
+  // This part should ideally not be reached if the logic above is correct for handling all states.
+  // However, to satisfy React's requirement for a return in all paths:
+  if (isClient && (pathname === '/login' || pathname === '/signup')) {
+    return <>{children}</>; // Allow login/signup pages to render without full layout if Firebase isn't active but path is correct
+  }
+
+  // Fallback for any other unhandled case during initial load or if Firebase is completely broken
+  // and not caught by isFirebaseActive logic for login/signup.
+  return <div className={loadingDivClassName}>Preparing application...</div>;
 }
