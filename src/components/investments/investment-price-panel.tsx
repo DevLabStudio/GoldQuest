@@ -6,16 +6,16 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { TrendingUp, TrendingDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatCurrency } from '@/lib/currency';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
 
 interface PriceData {
   name: string;
   code: string; 
-  price: number | null; // Price can be null while loading
+  price: number | null;
   change: string; 
   icon: ReactNode;
   against: string; 
-  isLoading?: boolean; // Optional loading flag for individual items
+  isLoading?: boolean;
 }
 
 interface InvestmentPricePanelProps {
@@ -27,14 +27,27 @@ const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
     return (
       <div>
         <h2 className="text-2xl font-semibold mb-4">Market Prices</h2>
-        <p className="text-muted-foreground">Price data is currently unavailable or still loading.</p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[...Array(3)].map((_, i) => ( // Show skeletons if prices array is empty during initial load
+            <Card key={`skeleton-price-${i}`} className="shadow-lg">
+              <CardHeader className="pb-2">
+                <Skeleton className="h-5 w-2/3" />
+              </CardHeader>
+              <CardContent>
+                <Skeleton className="h-7 w-1/2 mb-1" />
+                <Skeleton className="h-4 w-1/3" />
+              </CardContent>
+            </Card>
+          ))}
+        </div>
       </div>
     );
   }
+
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Market Prices</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"> {/* Adjusted to 3 columns for BRL, USD, EUR, BTC */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"> {/* Adjusted for 4 items potentially */}
         {prices.map((item) => (
           <Card key={`${item.code}-${item.against}`} className="shadow-lg hover:shadow-primary/20 transition-shadow duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -47,35 +60,36 @@ const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
             </CardHeader>
             <CardContent>
               {item.isLoading ? (
-                <div className="flex flex-col items-start justify-center h-[44px]"> {/* Approx height of text */}
+                <div className="flex flex-col items-start justify-center h-[44px]">
                   <Skeleton className="h-7 w-24 mb-1" />
                   <Skeleton className="h-4 w-16" />
                 </div>
               ) : item.price === null && item.change === "Error" ? (
                 <div className="flex flex-col items-start justify-center h-[44px]">
-                    <div className="text-2xl font-bold text-destructive/80">Error</div>
-                    <p className="text-xs text-destructive/70">Could not load price.</p>
+                    <div className="text-xl font-bold text-destructive/80">Error</div>
+                    <p className="text-xs text-destructive/70 truncate" title="Could not load price.">Could not load.</p>
                 </div>
               ) : item.price === null ? (
                 <div className="flex flex-col items-start justify-center h-[44px]">
-                    <div className="text-2xl font-bold text-muted-foreground">N/A</div>
+                    <div className="text-xl font-bold text-muted-foreground">N/A</div>
                     <p className="text-xs text-muted-foreground">Price unavailable.</p>
                 </div>
               ) : (
                 <>
                   <div className="text-2xl font-bold">
-                    {formatCurrency(item.price, item.against, item.against, false)} 
+                    {formatCurrency(item.price, item.code, item.against, false)} 
                   </div>
                   <p
                     className={cn(
                       "text-xs text-muted-foreground flex items-center",
                       item.change === "Loading..." ? "text-blue-500 dark:text-blue-400" :
                       item.change === "Error" ? "text-destructive dark:text-destructive/80" :
+                      item.change === "N/A" ? "text-muted-foreground" :
                       item.change.startsWith('+') ? 'text-green-500 dark:text-green-400' : 
                       item.change.startsWith('-') ? 'text-red-500 dark:text-red-400' : ''
                     )}
                   >
-                    {item.change === "Loading..." || item.change === "Error" ? null : 
+                    {item.change === "Loading..." || item.change === "Error" || item.change === "N/A" ? null : 
                      (item.change.startsWith('+') ? <TrendingUp className="h-4 w-4 mr-1" /> : 
                       item.change.startsWith('-') ? <TrendingDown className="h-4 w-4 mr-1" /> : null)}
                     {item.change}

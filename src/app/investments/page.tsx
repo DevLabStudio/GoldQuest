@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import InvestmentPricePanel from "@/components/investments/investment-price-panel";
-import { AreaChart, DollarSign, Euro, Bitcoin as BitcoinIcon } from "lucide-react"; // Removed PoundSterling
+import { AreaChart, DollarSign, Euro, Bitcoin as BitcoinIcon } from "lucide-react";
 import { getUserPreferences } from '@/lib/preferences';
 import { convertCurrency, getCurrencySymbol, supportedCurrencies as allAppSupportedCurrencies } from '@/lib/currency';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -27,114 +27,135 @@ const currencyNames: { [key: string]: string } = {
   BTC: "Bitcoin",
 };
 
-const displayAssetCodes = ["BRL", "USD", "EUR", "BTC"]; // Removed GBP
+const displayAssetCodes = ["BRL", "USD", "EUR", "BTC"];
 
 
 export default function InvestmentsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const [isLoading, setIsLoading] = useState(true);
   const [bitcoinPrice, setBitcoinPrice] = useState<number | null>(null);
-  const [isBitcoinPriceLoading, setIsBitcoinPriceLoading] = useState(false);
+  const [isBitcoinPriceLoading, setIsBitcoinPriceLoading] = useState(true); // Start as true
   const [bitcoinPriceError, setBitcoinPriceError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPrefs = async () => {
-      setIsLoading(true);
+      setIsLoading(true); // General loading for preferences
       if (typeof window !== 'undefined') {
         try {
           const prefs = await getUserPreferences();
           setPreferredCurrency(prefs.preferredCurrency.toUpperCase());
         } catch (error) {
           console.error("Failed to fetch user preferences:", error);
+          // Keep default preferredCurrency if error
         }
       }
-      setIsLoading(false);
+      setIsLoading(false); // Preferences loading finished
     };
     fetchPrefs();
   }, []);
 
   useEffect(() => {
     const fetchBitcoinPrice = async () => {
-        if (!preferredCurrency || typeof window === 'undefined') return;
+        if (!preferredCurrency || typeof window === 'undefined') {
+             setIsBitcoinPriceLoading(false);
+             return;
+        }
 
         setIsBitcoinPriceLoading(true);
         setBitcoinPriceError(null);
-        setBitcoinPrice(null); 
+        setBitcoinPrice(null);
 
         const preferredCurrencyLower = preferredCurrency.toLowerCase();
+        // Common currencies supported by CoinGecko for `vs_currencies`
+        const directlySupportedVsCurrencies = ['usd', 'eur', 'brl', 'gbp', 'jpy', 'cad', 'aud', 'chf']; 
         let targetCoingeckoCurrency = preferredCurrencyLower;
-        const supportedCoingeckoVsCurrencies = ['usd', 'eur', 'brl', 'gbp']; 
 
-        if (!supportedCoingeckoVsCurrencies.includes(preferredCurrencyLower)) {
-            console.warn(`Preferred currency ${preferredCurrency} not directly supported by Coingecko for BTC price. Fetching in USD and converting.`);
-            targetCoingeckoCurrency = 'usd';
+        if (!directlySupportedVsCurrencies.includes(preferredCurrencyLower)) {
+            console.warn(`Preferred currency ${preferredCurrency} might not be directly supported by Coingecko for BTC price. Fetching in USD and will convert.`);
+            targetCoingeckoCurrency = 'usd'; // Fallback to USD
         }
 
         try {
             const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=${targetCoingeckoCurrency}`);
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`Coingecko API request failed: ${response.status} ${response.statusText} - ${errorData?.error || 'Unknown error'}`);
+                const errorData = await response.json().catch(() => ({ error: "Unknown API error structure" }));
+                throw new Error(`Coingecko API request failed: ${response.status} ${response.statusText} - ${errorData?.error || 'Details unavailable'}`);
             }
             const data = await response.json();
+
             if (data.bitcoin && data.bitcoin[targetCoingeckoCurrency]) {
-                let price = data.bitcoin[targetCoingeckoCurrency];
-                if (targetCoingeckoCurrency !== preferredCurrencyLower) {
-                    price = convertCurrency(price, targetCoingeckoCurrency.toUpperCase(), preferredCurrency);
+                let priceInTargetCoinGeckoCurrency = data.bitcoin[targetCoingeckoCurrency];
+                if (targetCoingeckoCurrency.toUpperCase() !== preferredCurrency.toUpperCase()) {
+                    // Convert if we fetched in a fallback currency (e.g., USD)
+                    const convertedPrice = convertCurrency(priceInTargetCoinGeckoCurrency, targetCoingeckoCurrency.toUpperCase(), preferredCurrency);
+                    setBitcoinPrice(convertedPrice);
+                } else {
+                    setBitcoinPrice(priceInTargetCoinGeckoCurrency);
                 }
-                setBitcoinPrice(price);
             } else {
-                throw new Error("Bitcoin price not found in Coingecko response for the target currency.");
+                throw new Error(`Bitcoin price not found in Coingecko response for the target currency '${targetCoingeckoCurrency}'.`);
             }
         } catch (err: any) {
             console.error("Failed to fetch Bitcoin price:", err);
             setBitcoinPriceError(err.message || "Could not load Bitcoin price.");
-            setBitcoinPrice(convertCurrency(1, "BTC", preferredCurrency)); // Fallback
+            // Attempt a fallback conversion if error occurs during API fetch
+            setBitcoinPrice(convertCurrency(1, "BTC", preferredCurrency)); 
         } finally {
             setIsBitcoinPriceLoading(false);
         }
     };
 
-    if (preferredCurrency) { // Only fetch if preferredCurrency is set
+    if (preferredCurrency && !isLoading) { // Only fetch if preferredCurrency is set and initial prefs loading is done
         fetchBitcoinPrice();
     }
-  }, [preferredCurrency]);
+  }, [preferredCurrency, isLoading]); // Re-fetch if preferredCurrency or general isLoading state changes
 
 
   const dynamicPriceData = useMemo(() => {
-    if (isLoading) return [];
+    // isLoading here refers to the general page loading (preferences)
+    if (isLoading) return displayAssetCodes.map(code => ({
+        name: currencyNames[code] || code,
+        code: code,
+        price: null,
+        change: "Loading...",
+        icon: currencyIcons[code] || <DollarSign className="h-6 w-6" />,
+        against: preferredCurrency,
+        isLoading: true,
+    }));
+
 
     return displayAssetCodes.map(assetCode => {
-      let priceInPreferredCurrency;
-      let displayChange = "+0.00%";
-      let isAssetLoading = false;
+      let priceInPreferredCurrency: number | null = null;
+      let displayChange = "+0.00%"; // Default change
+      let isAssetSpecificLoading = false;
 
       if (assetCode === "BTC") {
+          isAssetSpecificLoading = isBitcoinPriceLoading;
           if (isBitcoinPriceLoading) {
-              isAssetLoading = true;
-              priceInPreferredCurrency = 0; // Placeholder
               displayChange = "Loading...";
           } else if (bitcoinPriceError) {
-              priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); // Fallback
+              priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); // Show fallback converted price
               displayChange = "Error";
           } else if (bitcoinPrice !== null) {
               priceInPreferredCurrency = bitcoinPrice;
-              // Fetching 24h change from Coingecko requires a different endpoint or more complex logic.
-              // For simplicity, we'll use a static placeholder or could calculate if previous day's price was stored.
-              displayChange = "+0.00%"; // Placeholder for BTC dynamic change
+              // Note: CoinGecko simple price doesn't provide 24h change.
+              // A more complex API call or storing previous day's price would be needed for dynamic change.
+              displayChange = "N/A"; // Or fetch if you have a source for 24h change
           } else {
+              // This case might occur if fetchBitcoinPrice hasn't completed yet or failed silently before error state set
               priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); // Fallback
+              displayChange = "N/A";
           }
       } else if (assetCode === preferredCurrency) {
           priceInPreferredCurrency = 1.00;
       } else {
           priceInPreferredCurrency = convertCurrency(1, assetCode, preferredCurrency);
+           // Example static changes for non-BTC, non-preferred assets
+          if(assetCode === "USD") displayChange = "-0.05%";
+          if(assetCode === "EUR") displayChange = "+0.02%";
+          if(assetCode === "BRL") displayChange = "-0.01%"; // Example if BRL is not preferred
       }
       
-      // Static changes for non-BTC assets
-      if(assetCode === "USD") displayChange = "-0.15%";
-      if(assetCode === "EUR") displayChange = "+0.10%";
-
       return {
         name: currencyNames[assetCode] || assetCode,
         code: assetCode,
@@ -142,7 +163,7 @@ export default function InvestmentsPage() {
         change: displayChange, 
         icon: currencyIcons[assetCode] || <DollarSign className="h-6 w-6" />,
         against: preferredCurrency,
-        isLoading: isAssetLoading,
+        isLoading: isAssetSpecificLoading,
       };
     }).filter(item => 
         allAppSupportedCurrencies.includes(item.code) && 
@@ -151,11 +172,11 @@ export default function InvestmentsPage() {
 
   }, [preferredCurrency, isLoading, bitcoinPrice, isBitcoinPriceLoading, bitcoinPriceError]);
 
-  if (isLoading && !preferredCurrency) { // Adjusted loading condition
+  if (isLoading && !preferredCurrency) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 space-y-8">
         <Skeleton className="h-8 w-1/3 mb-4" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6"> {/* Adjusted grid for 3 items */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-32 w-full" />)}
         </div>
         <Card>
@@ -198,3 +219,4 @@ export default function InvestmentsPage() {
     </div>
   );
 }
+
