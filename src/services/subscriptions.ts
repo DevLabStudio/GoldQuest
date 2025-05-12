@@ -15,7 +15,7 @@ export interface Subscription {
   type: SubscriptionType;
   category: string;
   accountId?: string; // Optional: Link to an account
-  groupId?: string; // Optional: Link to a group
+  groupId?: string | null; // Optional: Link to a group, can be null
   startDate: string; // ISO string: YYYY-MM-DD
   frequency: SubscriptionFrequency;
   nextPaymentDate: string; // ISO string: YYYY-MM-DD
@@ -56,8 +56,8 @@ export async function getSubscriptions(): Promise<Subscription[]> {
       return Object.entries(subscriptionsData).map(([id, data]) => ({
         id,
         ...(data as Omit<Subscription, 'id'>),
-        lastPaidMonth: (data as Subscription).lastPaidMonth || null, // Ensure lastPaidMonth exists
-        groupId: (data as Subscription).groupId || undefined, // Ensure groupId exists
+        lastPaidMonth: (data as Subscription).lastPaidMonth || null,
+        groupId: (data as Subscription).groupId || null, // Ensure groupId is null if not present
       }));
     }
     return [];
@@ -69,6 +69,9 @@ export async function getSubscriptions(): Promise<Subscription[]> {
 
 export async function addSubscription(subscriptionData: NewSubscriptionData): Promise<Subscription> {
   const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot add subscription.");
+  }
   const subscriptionsRefPath = getSubscriptionsRefPath(currentUser);
   const subscriptionsRef = ref(database, subscriptionsRefPath);
   const newSubscriptionRef = push(subscriptionsRef);
@@ -81,7 +84,7 @@ export async function addSubscription(subscriptionData: NewSubscriptionData): Pr
     ...subscriptionData,
     id: newSubscriptionRef.key,
     lastPaidMonth: subscriptionData.lastPaidMonth || null,
-    groupId: subscriptionData.groupId || undefined,
+    groupId: subscriptionData.groupId || null, // Set to null if undefined
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -101,21 +104,53 @@ export async function addSubscription(subscriptionData: NewSubscriptionData): Pr
 export async function updateSubscription(updatedSubscription: Subscription): Promise<Subscription> {
   const currentUser = auth.currentUser;
   const { id } = updatedSubscription;
+
+  if (!currentUser || !id) {
+      throw new Error("User not authenticated or subscription ID missing for update.");
+  }
   const subscriptionRefPath = getSingleSubscriptionRefPath(currentUser, id);
   const subscriptionRef = ref(database, subscriptionRefPath);
 
-  const dataToUpdate = {
-    ...updatedSubscription,
+  // Build the update object selectively to avoid sending undefined values
+  const dataToUpdate: Partial<Omit<Subscription, 'id' | 'createdAt'>> & { updatedAt: object } = {
+    name: updatedSubscription.name,
+    amount: updatedSubscription.amount,
+    currency: updatedSubscription.currency,
+    type: updatedSubscription.type,
+    category: updatedSubscription.category,
+    startDate: updatedSubscription.startDate,
+    frequency: updatedSubscription.frequency,
+    nextPaymentDate: updatedSubscription.nextPaymentDate,
+    tags: updatedSubscription.tags || [],
     lastPaidMonth: updatedSubscription.lastPaidMonth || null,
-    groupId: updatedSubscription.groupId || undefined,
     updatedAt: serverTimestamp(),
-  } as any;
-  delete dataToUpdate.id;
-  delete dataToUpdate.createdAt; // Don't update createdAt
+  };
+
+  if (updatedSubscription.accountId) {
+    dataToUpdate.accountId = updatedSubscription.accountId;
+  } else {
+    dataToUpdate.accountId = null; // Explicitly set to null if undefined/empty to remove from DB
+  }
+
+  // Set groupId to null if it's undefined or empty, otherwise use its value
+  dataToUpdate.groupId = updatedSubscription.groupId || null;
+  
+  if (updatedSubscription.notes) {
+    dataToUpdate.notes = updatedSubscription.notes;
+  } else {
+    dataToUpdate.notes = null; // Explicitly set to null if undefined/empty
+  }
 
   try {
     await update(subscriptionRef, dataToUpdate);
-    return updatedSubscription;
+    // Return a consistent object reflecting what was attempted to be saved
+    return {
+      ...updatedSubscription,
+      accountId: dataToUpdate.accountId || undefined, // Reflect actual saved value (undefined if null)
+      groupId: dataToUpdate.groupId, // Reflect actual saved value (null if it was not set)
+      notes: dataToUpdate.notes || undefined, // Reflect actual saved value
+      lastPaidMonth: dataToUpdate.lastPaidMonth,
+    };
   } catch (error) {
     console.error("Error updating subscription in Firebase:", error);
     throw error;
@@ -124,6 +159,9 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
 
 export async function deleteSubscription(subscriptionId: string): Promise<void> {
   const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot delete subscription.");
+  }
   const subscriptionRefPath = getSingleSubscriptionRefPath(currentUser, subscriptionId);
   const subscriptionRef = ref(database, subscriptionRefPath);
 
