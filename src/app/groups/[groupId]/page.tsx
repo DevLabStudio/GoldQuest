@@ -24,6 +24,7 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
+import GroupCategorySpendingChart from '@/components/groups/group-category-spending-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
 
@@ -142,6 +143,27 @@ export default function GroupDetailPage() {
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
   }, [transactions, isLoading, selectedDateRange]);
+
+  const groupCategorySpendingData = useMemo(() => {
+    if (isLoading || !group || filteredTransactions.length === 0) return [];
+
+    const categoryTotals: { [key: string]: number } = {};
+    const groupCategoryNames = group.categoryIds
+      .map(catId => allCategories.find(c => c.id === catId)?.name)
+      .filter(name => name !== undefined) as string[];
+
+    filteredTransactions.forEach(tx => {
+      if (tx.amount < 0 && tx.category && groupCategoryNames.includes(tx.category) && tx.category !== 'Transfer') {
+        const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
+        categoryTotals[tx.category] = (categoryTotals[tx.category] || 0) + convertedAmount;
+      }
+    });
+
+    return Object.entries(categoryTotals)
+      .map(([category, amount]) => ({ category: category.charAt(0).toUpperCase() + category.slice(1), amount }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [filteredTransactions, group, allCategories, preferredCurrency, isLoading]);
+
 
   const openEditDialog = (transaction: Transaction) => {
     setSelectedTransaction(transaction);
@@ -304,6 +326,7 @@ export default function GroupDetailPage() {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
+        <Skeleton className="h-64 w-full mb-8" />
         <div className="flex flex-col md:flex-row gap-8">
             <div className="flex-grow"><Skeleton className="h-96 w-full" /></div>
             <div className="w-full md:w-72 lg:w-80 flex-shrink-0"><Skeleton className="h-80 w-full" /></div>
@@ -359,6 +382,24 @@ export default function GroupDetailPage() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+       <Card className="mb-8">
+          <CardHeader>
+              <CardTitle>Spending by Category in "{group.name}"</CardTitle>
+              <CardDescription>Spending breakdown for categories in this group for {dateRangeLabel} ({preferredCurrency}).</CardDescription>
+          </CardHeader>
+          <CardContent className="h-80">
+              {isLoading ? (
+                  <Skeleton className="h-full w-full" />
+              ) : groupCategorySpendingData.length > 0 ? (
+                  <GroupCategorySpendingChart data={groupCategorySpendingData} currency={preferredCurrency} />
+              ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                      No spending data for this group in the selected period.
+                  </div>
+              )}
+          </CardContent>
+      </Card>
 
       <div className="flex flex-col md:flex-row gap-8">
         <div className="flex-grow">
@@ -508,3 +549,4 @@ export default function GroupDetailPage() {
     </div>
   );
 }
+
