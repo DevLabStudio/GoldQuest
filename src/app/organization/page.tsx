@@ -1,11 +1,10 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogTrigger } from "@/components/ui/dialog"; // Removed unused Dialog components from here
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users } from 'lucide-react';
 import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories";
@@ -250,7 +249,13 @@ export default function OrganizationPage() {
                   <FolderPlus className="mr-2 h-4 w-4" /> Add New Group
                 </Button>
               </DialogTrigger>
-              <AddGroupForm onGroupAdded={handleAddGroup} isLoading={isLoadingGroups} />
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Group</DialogTitle>
+                  <DialogDescription>Enter a unique name for the new group.</DialogDescription>
+                </DialogHeader>
+                <AddGroupForm onGroupAdded={handleAddGroup} isLoading={isLoadingGroups} />
+              </DialogContent>
             </Dialog>
           </div>
           <CardDescription>Create and manage groups for budgeting or reporting purposes. Link categories to groups.</CardDescription>
@@ -343,7 +348,13 @@ export default function OrganizationPage() {
                   <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
                 </Button>
               </DialogTrigger>
-              <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoadingCategories} />
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Category</DialogTitle>
+                  <DialogDescription>Enter a unique name for the new category.</DialogDescription>
+                </DialogHeader>
+                <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoadingCategories} />
+              </DialogContent>
             </Dialog>
           </div>
           <CardDescription>View, add, edit, or delete your transaction categories.</CardDescription>
@@ -398,7 +409,13 @@ export default function OrganizationPage() {
                   <PlusCircle className="mr-2 h-4 w-4" /> Add New Tag
                 </Button>
               </DialogTrigger>
-              <AddTagForm onTagAdded={handleAddTag} isLoading={isLoadingTags} />
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Add New Tag</DialogTitle>
+                  <DialogDescription>Enter a unique name for the new tag.</DialogDescription>
+                </DialogHeader>
+                <AddTagForm onTagAdded={handleAddTag} isLoading={isLoadingTags} />
+              </DialogContent>
             </Dialog>
           </div>
           <CardDescription>View, add, edit, or delete your transaction tags.</CardDescription>
@@ -444,12 +461,36 @@ export default function OrganizationPage() {
 
       {/* Edit Category Dialog */}
         <Dialog open={isEditCategoryDialogOpen} onOpenChange={(open) => { setIsEditCategoryDialogOpen(open); if (!open) setSelectedCategory(null); }}>
-            <EditCategoryForm category={selectedCategory!} onCategoryUpdated={handleUpdateCategory} isLoading={isLoadingCategories} />
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edit Category</DialogTitle>
+                    <DialogDescription>Modify the name of your category.</DialogDescription>
+                </DialogHeader>
+                {selectedCategory && (
+                    <EditCategoryForm 
+                        category={selectedCategory} 
+                        onCategoryUpdated={handleUpdateCategory} 
+                        isLoading={isLoadingCategories} 
+                    />
+                )}
+            </DialogContent>
         </Dialog>
 
       {/* Edit Tag Dialog */}
         <Dialog open={isEditTagDialogOpen} onOpenChange={(open) => { setIsEditTagDialogOpen(open); if (!open) setSelectedTag(null); }}>
-            <EditTagForm tag={selectedTag!} onTagUpdated={handleUpdateTag} isLoading={isLoadingTags} />
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Edit Tag</DialogTitle>
+                    <DialogDescription>Modify the name of your tag.</DialogDescription>
+                </DialogHeader>
+                {selectedTag && (
+                    <EditTagForm 
+                        tag={selectedTag} 
+                        onTagUpdated={handleUpdateTag} 
+                        isLoading={isLoadingTags} 
+                    />
+                )}
+            </DialogContent>
         </Dialog>
     </div>
   );
