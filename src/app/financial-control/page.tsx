@@ -2,10 +2,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from '@/components/ui/button';
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye } from 'lucide-react'; // Import Eye icon
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -22,19 +22,21 @@ import { format, parseISO, isSameMonth, isSameYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 
-export default function SubscriptionsPage() {
+export default function FinancialControlPage() {
+  // States for Subscriptions
   const [isAddSubscriptionDialogOpen, setIsAddSubscriptionDialogOpen] = useState(false);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(true);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
 
-  const fetchData = async () => {
-    setIsLoading(true);
+  // --- Data Fetching for Subscriptions ---
+  const fetchSubscriptionData = async () => {
+    setIsLoadingSubscriptions(true);
     try {
       const prefs = await getUserPreferences();
       setPreferredCurrency(prefs.preferredCurrency);
@@ -52,14 +54,23 @@ export default function SubscriptionsPage() {
       console.error("Failed to fetch subscriptions data:", error);
       toast({ title: "Error", description: "Could not load subscriptions.", variant: "destructive" });
     } finally {
-      setIsLoading(false);
+      setIsLoadingSubscriptions(false);
     }
   };
 
   useEffect(() => {
-    fetchData();
+    fetchSubscriptionData();
+     // Listen to storage events to refetch data if other tabs modify it
+    const handleStorageChange = (event: StorageEvent) => {
+        if (event.key && ['userSubscriptions', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences'].includes(event.key)) {
+            fetchSubscriptionData();
+        }
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
   }, [toast]);
 
+  // --- Subscription Handlers ---
   const handleSubscriptionAdded = async (data: AddSubscriptionFormData) => {
     try {
       const payload = {
@@ -88,7 +99,7 @@ export default function SubscriptionsPage() {
       }
       setIsAddSubscriptionDialogOpen(false);
       setEditingSubscription(null);
-      fetchData();
+      fetchSubscriptionData();
     } catch (error: any) {
       console.error("Failed to save subscription:", error);
       toast({ title: "Error", description: `Could not save subscription: ${error.message}`, variant: "destructive" });
@@ -99,7 +110,7 @@ export default function SubscriptionsPage() {
     try {
       await deleteSubscription(subscriptionId);
       toast({ title: "Success", description: "Subscription deleted." });
-      fetchData();
+      fetchSubscriptionData();
     } catch (error: any) {
       console.error("Failed to delete subscription:", error);
       toast({ title: "Error", description: `Could not delete subscription: ${error.message}`, variant: "destructive" });
@@ -120,13 +131,13 @@ export default function SubscriptionsPage() {
     try {
       await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
-      fetchData();
+      fetchSubscriptionData();
     } catch (error: any) {
       console.error("Failed to update paid status:", error);
       toast({ title: "Error", description: "Could not update paid status.", variant: "destructive" });
     }
   };
-
+  
   const groupSubscriptionsByType = (type: 'income' | 'expense') => {
     const filteredSubs = subscriptions.filter(sub => sub.type === type);
     const grouped: Record<string, Subscription[]> = {};
@@ -147,9 +158,9 @@ export default function SubscriptionsPage() {
   const calculateMonthlyEquivalent = (amount: number, currency: string, frequency: SubscriptionFrequency): number => {
     const amountInPreferredCurrency = convertCurrency(amount, currency, preferredCurrency);
     switch (frequency) {
-      case 'daily': return amountInPreferredCurrency * 30; // Approximation
-      case 'weekly': return amountInPreferredCurrency * 4;  // Approximation
-      case 'bi-weekly': return amountInPreferredCurrency * 2; // Approximation
+      case 'daily': return amountInPreferredCurrency * 30;
+      case 'weekly': return amountInPreferredCurrency * 4;
+      case 'bi-weekly': return amountInPreferredCurrency * 2;
       case 'monthly': return amountInPreferredCurrency;
       case 'quarterly': return amountInPreferredCurrency / 3;
       case 'semi-annually': return amountInPreferredCurrency / 6;
@@ -185,7 +196,7 @@ export default function SubscriptionsPage() {
           <Checkbox
             id={`paid-${subscription.id}`}
             checked={isPaidThisMonth}
-            onCheckedChange={(checked) => handleTogglePaidStatus(subscription.id, !!checked)}
+            onCheckedChange={(checked) => handleTogglePaidStatus(subscription.id, !!checked)} // Ensure boolean
             aria-label={`Mark ${subscription.name} as paid for ${format(new Date(), 'MMMM yyyy')}`}
           />
           <Label htmlFor={`paid-${subscription.id}`} className="text-xs font-medium">
@@ -242,92 +253,129 @@ export default function SubscriptionsPage() {
 
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-3xl font-bold">Subscriptions</h1>
-        <Dialog open={isAddSubscriptionDialogOpen} onOpenChange={(isOpen) => {
-          setIsAddSubscriptionDialogOpen(isOpen);
-          if (!isOpen) setEditingSubscription(null);
-        }}>
-          <DialogTrigger asChild>
-            <Button>
-              <PlusCircle className="mr-2 h-4 w-4" /> Add Subscription
-            </Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-2xl">
-            <DialogHeader>
-              <DialogTitle>{editingSubscription ? 'Edit' : 'Add New'} Subscription</DialogTitle>
-              <DialogDescription>
-                {editingSubscription ? 'Update the details of your subscription.' : 'Enter the details of your new recurring income or expense.'}
-              </DialogDescription>
-            </DialogHeader>
-            <AddSubscriptionForm
-              onSubmit={handleSubscriptionAdded}
-              isLoading={isLoading}
-              categories={categories}
-              accounts={accounts}
-              groups={groups}
-              initialData={editingSubscription ? {
-                ...editingSubscription,
-                startDate: parseISO(editingSubscription.startDate),
-                nextPaymentDate: parseISO(editingSubscription.nextPaymentDate),
-              } : undefined}
-            />
-          </DialogContent>
-        </Dialog>
-      </div>
+    <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 space-y-8">
+      <h1 className="text-3xl font-bold">Financial Control</h1>
 
-      <div className="grid md:grid-cols-2 gap-8">
-        <Card className="bg-card">
-          <CardHeader>
-            <div className="flex items-center">
-              <ArrowUpCircle className="h-6 w-6 mr-2 text-green-500" />
-              <CardTitle>Income Subscriptions</CardTitle>
-            </div>
-            <CardDescription>
-              Recurring income sources.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-40 w-full" />
-            ) : Object.keys(incomeSubscriptionsByGroup).length > 0 && Object.values(incomeSubscriptionsByGroup).some(arr => arr.length > 0) ? (
-              renderGroupedSubscriptions(incomeSubscriptionsByGroup, 'income')
-            ) : (
-              <div className="text-center py-10">
-                <p className="text-muted-foreground">
-                  No recurring income added yet.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+      {/* Budgets Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Budgets</CardTitle>
+          <CardDescription>
+            Create and track your spending against budgets for different categories.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-10">
+            <p className="text-muted-foreground">
+              Budgets feature coming soon!
+            </p>
+          </div>
+        </CardContent>
+      </Card>
 
-        <Card className="bg-card">
-          <CardHeader>
-            <div className="flex items-center">
-              <ArrowDownCircle className="h-6 w-6 mr-2 text-red-500" />
-              <CardTitle>Expense Subscriptions</CardTitle>
+      {/* Subscriptions Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>Subscriptions</CardTitle>
+            <Dialog open={isAddSubscriptionDialogOpen} onOpenChange={(isOpen) => {
+                setIsAddSubscriptionDialogOpen(isOpen);
+                if (!isOpen) setEditingSubscription(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button>
+                  <PlusCircle className="mr-2 h-4 w-4" /> Add Subscription
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>{editingSubscription ? 'Edit' : 'Add New'} Subscription</DialogTitle>
+                  <DialogDescription>
+                    {editingSubscription ? 'Update the details of your subscription.' : 'Enter the details of your new recurring income or expense.'}
+                  </DialogDescription>
+                </DialogHeader>
+                <AddSubscriptionForm
+                  onSubmit={handleSubscriptionAdded}
+                  isLoading={isLoadingSubscriptions}
+                  categories={categories}
+                  accounts={accounts}
+                  groups={groups}
+                  initialData={editingSubscription ? {
+                    ...editingSubscription,
+                    startDate: parseISO(editingSubscription.startDate),
+                    nextPaymentDate: parseISO(editingSubscription.nextPaymentDate),
+                  } : undefined}
+                />
+              </DialogContent>
+            </Dialog>
+          </div>
+          <CardDescription>Manage your recurring income and expenses.</CardDescription>
+        </CardHeader>
+        <CardContent>
+            <div className="grid md:grid-cols-2 gap-8">
+                <Card className="bg-card/50">
+                    <CardHeader>
+                        <div className="flex items-center">
+                        <ArrowUpCircle className="h-6 w-6 mr-2 text-green-500" />
+                        <CardTitle>Income Subscriptions</CardTitle>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {isLoadingSubscriptions ? (
+                        <Skeleton className="h-40 w-full" />
+                        ) : Object.keys(incomeSubscriptionsByGroup).length > 0 && Object.values(incomeSubscriptionsByGroup).some(arr => arr.length > 0) ? (
+                        renderGroupedSubscriptions(incomeSubscriptionsByGroup, 'income')
+                        ) : (
+                        <div className="text-center py-10">
+                            <p className="text-muted-foreground">
+                            No recurring income added yet.
+                            </p>
+                        </div>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="bg-card/50">
+                    <CardHeader>
+                        <div className="flex items-center">
+                        <ArrowDownCircle className="h-6 w-6 mr-2 text-red-500" />
+                        <CardTitle>Expense Subscriptions</CardTitle>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        {isLoadingSubscriptions ? (
+                        <Skeleton className="h-40 w-full" />
+                        ) : Object.keys(expenseSubscriptionsByGroup).length > 0 && Object.values(expenseSubscriptionsByGroup).some(arr => arr.length > 0) ? (
+                        renderGroupedSubscriptions(expenseSubscriptionsByGroup, 'expense')
+                        ) : (
+                        <div className="text-center py-10">
+                            <p className="text-muted-foreground">
+                            No recurring expenses added yet.
+                            </p>
+                        </div>
+                        )}
+                    </CardContent>
+                </Card>
             </div>
-            <CardDescription>
-              Recurring expenses and bills.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            {isLoading ? (
-              <Skeleton className="h-40 w-full" />
-            ) : Object.keys(expenseSubscriptionsByGroup).length > 0 && Object.values(expenseSubscriptionsByGroup).some(arr => arr.length > 0) ? (
-              renderGroupedSubscriptions(expenseSubscriptionsByGroup, 'expense')
-            ) : (
-              <div className="text-center py-10">
-                <p className="text-muted-foreground">
-                  No recurring expenses added yet.
-                </p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+        </CardContent>
+      </Card>
+
+      {/* Piggy Banks Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Piggy Banks</CardTitle>
+          <CardDescription>
+            Set up and track progress towards your savings goals.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-10">
+            <p className="text-muted-foreground">
+              Piggy Banks feature coming soon!
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

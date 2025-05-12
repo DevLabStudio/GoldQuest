@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { ReactNode } from 'react';
@@ -56,11 +57,10 @@ interface AuthWrapperProps {
 }
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences, refreshUserPreferences } = useAuthContext();
+  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences } = useAuthContext();
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
-  const [isFinancialControlOpen, setIsFinancialControlOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [loadingDivClassName, setLoadingDivClassName] = useState("flex items-center justify-center min-h-screen");
 
@@ -100,7 +100,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   useEffect(() => {
     if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-        setIsFinancialControlOpen(pathname.startsWith('/budgets') || pathname.startsWith('/subscriptions') || pathname.startsWith('/piggy-banks'));
     }
   }, [pathname, isClient]);
 
@@ -128,7 +127,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  const isAnyFinancialControlRouteActive = isClient && (pathname.startsWith('/budgets') || pathname.startsWith('/subscriptions') || pathname.startsWith('/piggy-banks'));
+  const isFinancialControlActive = isClient && pathname === '/financial-control';
   const isOrganizationActive = isClient && pathname === '/organization';
 
 
@@ -182,52 +181,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                        <SidebarMenuButton
-                            tooltip="Financial Control"
-                            onClick={() => setIsFinancialControlOpen(!isFinancialControlOpen)}
-                            className="justify-between"
-                            isActive={isAnyFinancialControlRouteActive}
-                        >
-                            <div className="flex items-center gap-2">
-                            <SlidersHorizontal /> 
-                            <span>Financial Control</span>
-                            </div>
-                            <ChevronDown
-                                className={cn(
-                                    "h-4 w-4 transition-transform duration-200",
-                                    isFinancialControlOpen && "rotate-180"
-                                )}
-                            />
-                        </SidebarMenuButton>
+                        <Link href="/financial-control" passHref>
+                            <SidebarMenuButton tooltip="Financial Control" isActive={isFinancialControlActive}>
+                                <SlidersHorizontal />
+                                <span>Financial Control</span>
+                            </SidebarMenuButton>
+                        </Link>
                     </SidebarMenuItem>
-                    {isFinancialControlOpen && (
-                        <>
-                        <SidebarMenuItem className="ml-4">
-                            <Link href="/budgets" passHref>
-                                <SidebarMenuButton tooltip="Budgets" size="sm" isActive={isActive('/budgets')}>
-                                    <PieChart />
-                                    <span>Budgets</span>
-                                </SidebarMenuButton>
-                            </Link>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem className="ml-4">
-                            <Link href="/subscriptions" passHref>
-                                <SidebarMenuButton tooltip="Subscriptions" size="sm" isActive={isActive('/subscriptions')}>
-                                    <CalendarClock />
-                                    <span>Subscriptions</span>
-                                </SidebarMenuButton>
-                            </Link>
-                        </SidebarMenuItem>
-                        <SidebarMenuItem className="ml-4">
-                            <Link href="/piggy-banks" passHref>
-                                <SidebarMenuButton tooltip="Piggy Banks" size="sm" isActive={isActive('/piggy-banks')}>
-                                    <ArchiveIcon />
-                                    <span>Piggy Banks</span>
-                                </SidebarMenuButton>
-                            </Link>
-                        </SidebarMenuItem>
-                        </>
-                    )}
                      <SidebarMenuItem>
                         <Link href="/accounts" passHref>
                         <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
