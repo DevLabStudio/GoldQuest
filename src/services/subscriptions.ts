@@ -1,4 +1,3 @@
-
 'use client';
 
 import { database, auth } from '@/lib/firebase';
@@ -14,18 +13,22 @@ export interface Subscription {
   amount: number;
   currency: string;
   type: SubscriptionType;
-  category: string; 
+  category: string;
   accountId?: string; // Optional: Link to an account
+  groupId?: string; // Optional: Link to a group
   startDate: string; // ISO string: YYYY-MM-DD
   frequency: SubscriptionFrequency;
   nextPaymentDate: string; // ISO string: YYYY-MM-DD
   notes?: string;
   tags?: string[];
+  lastPaidMonth?: string | null; // YYYY-MM format, or null if not paid for the current cycle
   createdAt?: object; // For server timestamp
   updatedAt?: object; // For server timestamp
 }
 
-export type NewSubscriptionData = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt'>;
+export type NewSubscriptionData = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt' | 'lastPaidMonth'> & {
+    lastPaidMonth?: string | null;
+};
 
 function getSubscriptionsRefPath(currentUser: User | null) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access subscriptions.");
@@ -53,6 +56,8 @@ export async function getSubscriptions(): Promise<Subscription[]> {
       return Object.entries(subscriptionsData).map(([id, data]) => ({
         id,
         ...(data as Omit<Subscription, 'id'>),
+        lastPaidMonth: (data as Subscription).lastPaidMonth || null, // Ensure lastPaidMonth exists
+        groupId: (data as Subscription).groupId || undefined, // Ensure groupId exists
       }));
     }
     return [];
@@ -75,10 +80,12 @@ export async function addSubscription(subscriptionData: NewSubscriptionData): Pr
   const newSubscription: Subscription = {
     ...subscriptionData,
     id: newSubscriptionRef.key,
+    lastPaidMonth: subscriptionData.lastPaidMonth || null,
+    groupId: subscriptionData.groupId || undefined,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
-  
+
   const dataToSave = { ...newSubscription } as any;
   delete dataToSave.id; // Firebase key is the ID
 
@@ -99,6 +106,8 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
 
   const dataToUpdate = {
     ...updatedSubscription,
+    lastPaidMonth: updatedSubscription.lastPaidMonth || null,
+    groupId: updatedSubscription.groupId || undefined,
     updatedAt: serverTimestamp(),
   } as any;
   delete dataToUpdate.id;
