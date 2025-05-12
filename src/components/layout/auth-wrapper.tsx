@@ -19,7 +19,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users, LogOut } from 'lucide-react';
+import { PiggyBank, Landmark, Wallet, ArrowLeftRight, Settings, ListTree, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Tag, Users, LogOut, Network } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -62,6 +62,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
+  const [isOrganizationOpen, setIsOrganizationOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
 
   useEffect(() => {
@@ -84,11 +85,12 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
           } else {
               root.classList.remove('dark');
           }
+          root.style.colorScheme = currentTheme;
       };
 
-      applyTheme(); // Apply on initial load/theme change
+      applyTheme(); 
 
-      if (theme === 'system') {
+      if (theme === 'system' && typeof window !== 'undefined') {
           const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
           const handleChange = () => applyTheme();
           mediaQuery.addEventListener('change', handleChange);
@@ -100,6 +102,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   useEffect(() => {
     if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+        setIsOrganizationOpen(pathname.startsWith('/groups') || pathname.startsWith('/categories') || pathname.startsWith('/tags'));
     }
   }, [pathname, isClient]);
 
@@ -110,21 +113,15 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     }
 
     const firstLoginFlagKey = `hasLoggedInBefore-${user.uid}`;
-    const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
+    
+    if(typeof window !== 'undefined') {
+        const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
+        const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
 
-    // Also check if userPreferences are loaded and if a theme is set
-    // If preferences are not loaded yet, or no theme is explicitly set (it defaults to 'system'),
-    // this check ensures we don't redirect prematurely if the default theme is 'system'.
-    const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
-
-    if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
-      localStorage.setItem(firstLoginFlagKey, 'true');
-      router.push('/preferences');
-    } else if (hasLoggedInBefore && !preferencesLoadedAndThemeSet && userPreferences?.theme === 'system' && pathname !== '/preferences') {
-        // If they've logged in before, but no specific theme is set (still system default)
-        // and they are not on preferences page, consider a redirect if needed.
-        // This case might be too aggressive if system default is fine.
-        // For now, let's assume if they logged in before, they are okay with system default unless they change it.
+        if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
+          localStorage.setItem(firstLoginFlagKey, 'true');
+          router.push('/preferences');
+        }
     }
 
   }, [user, isLoadingAuth, router, pathname, isClient, isFirebaseActive, userPreferences]);
@@ -133,6 +130,8 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+  const isAnyOrganizationRouteActive = isClient && (pathname.startsWith('/groups') || pathname.startsWith('/categories') || pathname.startsWith('/tags'));
+
 
   if (!isClient || isLoadingAuth) {
     return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Loading authentication...</div>;
@@ -254,31 +253,54 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                     </SidebarMenuItem>
                 </SidebarGroup>
                 <SidebarGroup>
-                    <SidebarGroupLabel>Organization</SidebarGroupLabel>
+                    {/* <SidebarGroupLabel>Organization</SidebarGroupLabel> */}
                     <SidebarMenuItem>
-                        <Link href="/categories" passHref>
-                            <SidebarMenuButton tooltip="Manage Categories" isActive={isActive('/categories')}>
-                                <ListTree />
-                                <span>Categories</span>
-                            </SidebarMenuButton>
-                        </Link>
+                        <SidebarMenuButton
+                            tooltip="Organization Management"
+                            onClick={() => setIsOrganizationOpen(!isOrganizationOpen)}
+                            className="justify-between"
+                            isActive={isAnyOrganizationRouteActive}
+                        >
+                             <div className="flex items-center gap-2">
+                                <Network />
+                                <span>Organization</span>
+                            </div>
+                            <ChevronDown
+                                className={cn(
+                                    "h-4 w-4 transition-transform duration-200",
+                                    isOrganizationOpen && "rotate-180"
+                                )}
+                            />
+                        </SidebarMenuButton>
                     </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <Link href="/tags" passHref>
-                            <SidebarMenuButton tooltip="Manage Tags" isActive={isActive('/tags')}>
-                                <Tag />
-                                <span>Tags</span>
-                            </SidebarMenuButton>
-                        </Link>
-                    </SidebarMenuItem>
-                    <SidebarMenuItem>
-                        <Link href="/groups" passHref>
-                            <SidebarMenuButton tooltip="Manage Groups" isActive={isActive('/groups')}>
-                                <Users />
-                                <span>Groups</span>
-                            </SidebarMenuButton>
-                        </Link>
-                    </SidebarMenuItem>
+                    {isOrganizationOpen && (
+                        <>
+                            <SidebarMenuItem className="ml-4">
+                                <Link href="/groups" passHref>
+                                    <SidebarMenuButton tooltip="Manage Groups" size="sm" isActive={isActive('/groups')}>
+                                        <Users />
+                                        <span>Groups</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem className="ml-4">
+                                <Link href="/categories" passHref>
+                                    <SidebarMenuButton tooltip="Manage Categories" size="sm" isActive={isActive('/categories')}>
+                                        <ListTree />
+                                        <span>Categories</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem className="ml-4">
+                                <Link href="/tags" passHref>
+                                    <SidebarMenuButton tooltip="Manage Tags" size="sm" isActive={isActive('/tags')}>
+                                        <Tag />
+                                        <span>Tags</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
+                        </>
+                    )}
                 </SidebarGroup>
                 <SidebarGroup>
                     <SidebarGroupLabel>Settings</SidebarGroupLabel>
@@ -310,6 +332,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                 <div className="flex flex-col">
                     <span className="text-sm font-medium text-sidebar-foreground">{user?.displayName || user?.email || "User"}</span>
                     <Button variant="link" size="sm" onClick={signOut} className="p-0 h-auto text-xs text-muted-foreground hover:text-primary">
+                        <LogOut className="mr-1.5 h-3 w-3" />
                         Logout
                     </Button>
                 </div>
@@ -332,3 +355,4 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   return <>{children}</>;
 }
+
