@@ -1,20 +1,26 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogTrigger } from "@/components/ui/dialog"; // Removed unused Dialog components from here
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit, Trash2, ListTree, Tag as TagIcon } from 'lucide-react'; // Added ListTree and TagIcon
+import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users } from 'lucide-react';
 import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories";
 import AddCategoryForm from '@/components/categories/add-category-form';
 import EditCategoryForm from '@/components/categories/edit-category-form';
 import { getTags, addTag, updateTag, deleteTag, type Tag, getTagStyle } from "@/services/tags";
 import AddTagForm from '@/components/tags/add-tag-form';
 import EditTagForm from '@/components/tags/edit-tag-form';
+import { getGroups, addGroup, updateGroup, deleteGroup, type Group } from "@/services/groups";
+import AddGroupForm from '@/components/organization/add-group-form';
+import ManageGroupCategoriesDialog from '@/components/organization/manage-group-categories-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 
 export default function OrganizationPage() {
   // Categories State
@@ -35,91 +41,92 @@ export default function OrganizationPage() {
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
   const [tagError, setTagError] = useState<string | null>(null);
 
+  // Groups State
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [isLoadingGroups, setIsLoadingGroups] = useState(true);
+  const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
+  const [isManageGroupCategoriesDialogOpen, setIsManageGroupCategoriesDialogOpen] = useState(false);
+  const [selectedGroupForCategoryManagement, setSelectedGroupForCategoryManagement] = useState<Group | null>(null);
+  const [isDeletingGroup, setIsDeletingGroup] = useState(false);
+  const [selectedGroupForDeletion, setSelectedGroupForDeletion] = useState<Group | null>(null);
+  const [groupError, setGroupError] = useState<string | null>(null);
+
+
   const { toast } = useToast();
 
-  // Fetch Categories
+  const fetchData = async () => {
+    setIsLoadingCategories(true); setIsLoadingTags(true); setIsLoadingGroups(true);
+    setCategoryError(null); setTagError(null); setGroupError(null);
+    try {
+      const [fetchedCategories, fetchedTags, fetchedGroups] = await Promise.all([
+        getCategories(),
+        getTags(),
+        getGroups()
+      ]);
+      fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
+      setCategories(fetchedCategories);
+      fetchedTags.sort((a, b) => a.name.localeCompare(b.name));
+      setTags(fetchedTags);
+      fetchedGroups.sort((a, b) => a.name.localeCompare(b.name));
+      setGroups(fetchedGroups);
+    } catch (err) {
+      console.error("Failed to fetch organization data:", err);
+      const errorMsg = "Could not load organization data.";
+      setCategoryError(errorMsg); setTagError(errorMsg); setGroupError(errorMsg);
+      toast({ title: "Error", description: "Failed to load organization data.", variant: "destructive" });
+    } finally {
+      setIsLoadingCategories(false); setIsLoadingTags(false); setIsLoadingGroups(false);
+    }
+  };
+
   useEffect(() => {
     let isMounted = true;
-    const fetchCategoriesData = async () => {
-        if(isMounted) setIsLoadingCategories(true);
-        if(isMounted) setCategoryError(null);
-        try {
-            const fetchedCategories = await getCategories();
-            fetchedCategories.sort((a, b) => a.name.localeCompare(b.name));
-            if(isMounted) setCategories(fetchedCategories);
-        } catch (err) {
-            console.error("Failed to fetch categories:", err);
-            if(isMounted) setCategoryError("Could not load categories.");
-            if(isMounted) toast({ title: "Error", description: "Failed to load categories.", variant: "destructive" });
-        } finally {
-            if(isMounted) setIsLoadingCategories(false);
+    if (isMounted) fetchData();
+    
+    const handleStorageChange = (event: StorageEvent) => {
+        if (typeof window !== 'undefined' && ['userCategories', 'userTags', 'userGroups'].some(key => event.key === key) && isMounted) {
+            fetchData();
         }
     };
-    fetchCategoriesData();
-    const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.key === 'userCategories' && isMounted) fetchCategoriesData();
-    };
     if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
-    return () => { isMounted = false; if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange); };
+    
+    return () => { 
+        isMounted = false; 
+        if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
+    };
   }, [toast]);
 
-  // Fetch Tags
-  useEffect(() => {
-    let isMounted = true;
-    const fetchTagsData = async () => {
-        if(isMounted) setIsLoadingTags(true);
-        if(isMounted) setTagError(null);
-        try {
-            const fetchedTags = await getTags();
-            fetchedTags.sort((a, b) => a.name.localeCompare(b.name));
-            if(isMounted) setTags(fetchedTags);
-        } catch (err) {
-            console.error("Failed to fetch tags:", err);
-            if(isMounted) setTagError("Could not load tags.");
-            if(isMounted) toast({ title: "Error", description: "Failed to load tags.", variant: "destructive" });
-        } finally {
-            if(isMounted) setIsLoadingTags(false);
-        }
-    };
-    fetchTagsData();
-    const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.key === 'userTags' && isMounted) fetchTagsData();
-    };
-    if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
-    return () => { isMounted = false; if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange); };
-  }, [toast]);
 
   // Category Handlers
-  const localFetchCategories = async () => { /* ... as in categories/page.tsx ... */ };
   const handleAddCategory = async (categoryName: string) => {
     setIsLoadingCategories(true);
     try {
       await addCategory(categoryName);
-      const fetched = await getCategories(); fetched.sort((a,b) => a.name.localeCompare(b.name)); setCategories(fetched);
+      await fetchData(); // Refetch all data
       setIsAddCategoryDialogOpen(false);
       toast({ title: "Success", description: `Category "${categoryName}" added.` });
     } catch (err: any) {
       console.error("Failed to add category:", err);
-      toast({ title: "Error Adding Category", description: err.message || "Could not add the category.", variant: "destructive" });
+      toast({ title: "Error Adding Category", description: err.message || "Could not add category.", variant: "destructive" });
     } finally { setIsLoadingCategories(false); }
   };
   const handleUpdateCategory = async (categoryId: string, newName: string) => {
     setIsLoadingCategories(true);
     try {
       await updateCategory(categoryId, newName);
-      const fetched = await getCategories(); fetched.sort((a,b) => a.name.localeCompare(b.name)); setCategories(fetched);
+      await fetchData(); // Refetch all data
       setIsEditCategoryDialogOpen(false); setSelectedCategory(null);
       toast({ title: "Success", description: `Category updated to "${newName}".` });
     } catch (err: any) {
       console.error("Failed to update category:", err);
-      toast({ title: "Error Updating Category", description: err.message || "Could not update the category.", variant: "destructive" });
+      toast({ title: "Error Updating Category", description: err.message || "Could not update category.", variant: "destructive" });
     } finally { setIsLoadingCategories(false); }
   };
   const handleDeleteCategoryConfirm = async () => {
     if (!selectedCategory) return; setIsDeletingCategory(true);
     try {
       await deleteCategory(selectedCategory.id);
-      const fetched = await getCategories(); fetched.sort((a,b) => a.name.localeCompare(b.name)); setCategories(fetched);
+      await fetchData(); // Refetch all data
       toast({ title: "Category Deleted", description: `Category "${selectedCategory.name}" removed.` });
     } catch (err: any) {
       console.error("Failed to delete category:", err);
@@ -130,65 +137,200 @@ export default function OrganizationPage() {
   const openDeleteCategoryDialog = (category: Category) => { setSelectedCategory(category); };
 
   // Tag Handlers
-  const localFetchTags = async () => { /* ... as in tags/page.tsx ... */ };
   const handleAddTag = async (tagName: string) => {
     setIsLoadingTags(true);
     try {
       await addTag(tagName);
-      const fetched = await getTags(); fetched.sort((a,b) => a.name.localeCompare(b.name)); setTags(fetched);
+      await fetchData(); // Refetch all data
       setIsAddTagDialogOpen(false);
       toast({ title: "Success", description: `Tag "${tagName}" added.` });
     } catch (err: any) {
       console.error("Failed to add tag:", err);
-      toast({ title: "Error Adding Tag", description: err.message || "Could not add the tag.", variant: "destructive" });
+      toast({ title: "Error Adding Tag", description: err.message || "Could not add tag.", variant: "destructive" });
     } finally { setIsLoadingTags(false); }
   };
   const handleUpdateTag = async (tagId: string, newName: string) => {
     setIsLoadingTags(true);
     try {
       await updateTag(tagId, newName);
-      const fetched = await getTags(); fetched.sort((a,b) => a.name.localeCompare(b.name)); setTags(fetched);
+      await fetchData(); // Refetch all data
       setIsEditTagDialogOpen(false); setSelectedTag(null);
       toast({ title: "Success", description: `Tag updated to "${newName}".` });
     } catch (err: any) {
       console.error("Failed to update tag:", err);
-      toast({ title: "Error Updating Tag", description: err.message || "Could not update the tag.", variant: "destructive" });
+      toast({ title: "Error Updating Tag", description: err.message || "Could not update tag.", variant: "destructive" });
     } finally { setIsLoadingTags(false); }
   };
   const handleDeleteTagConfirm = async () => {
     if (!selectedTag) return; setIsDeletingTag(true);
     try {
       await deleteTag(selectedTag.id);
-      const fetched = await getTags(); fetched.sort((a,b) => a.name.localeCompare(b.name)); setTags(fetched);
+      await fetchData(); // Refetch all data
       toast({ title: "Tag Deleted", description: `Tag "${selectedTag.name}" removed.` });
     } catch (err: any) {
       console.error("Failed to delete tag:", err);
-      toast({ title: "Error Deleting Tag", description: err.message || "Could not delete the tag.", variant: "destructive" });
+      toast({ title: "Error Deleting Tag", description: err.message || "Could not delete tag.", variant: "destructive" });
     } finally { setIsDeletingTag(false); setSelectedTag(null); }
   };
   const openEditTagDialog = (tag: Tag) => { setSelectedTag(tag); setIsEditTagDialogOpen(true); };
   const openDeleteTagDialog = (tag: Tag) => { setSelectedTag(tag); };
 
+  // Group Handlers
+  const handleAddGroup = async (groupName: string) => {
+    setIsLoadingGroups(true);
+    try {
+      await addGroup(groupName);
+      await fetchData(); // Refetch all data
+      setIsAddGroupDialogOpen(false);
+      toast({ title: "Success", description: `Group "${groupName}" added.` });
+    } catch (err: any) {
+      console.error("Failed to add group:", err);
+      toast({ title: "Error Adding Group", description: err.message || "Could not add group.", variant: "destructive" });
+    } finally { setIsLoadingGroups(false); }
+  };
+
+  const handleSaveGroupCategories = async (groupId: string, selectedCategoryIds: string[]) => {
+    setIsLoadingGroups(true);
+    try {
+      const groupToUpdate = groups.find(g => g.id === groupId);
+      if (groupToUpdate) {
+        await updateGroup({ ...groupToUpdate, categoryIds: selectedCategoryIds });
+        await fetchData();
+        setIsManageGroupCategoriesDialogOpen(false);
+        setSelectedGroupForCategoryManagement(null);
+        toast({ title: "Success", description: "Categories in group updated." });
+      }
+    } catch (err: any) {
+      console.error("Failed to update group categories:", err);
+      toast({ title: "Error Updating Group", description: err.message || "Could not update group categories.", variant: "destructive" });
+    } finally {
+      setIsLoadingGroups(false);
+    }
+  };
+
+  const openManageGroupCategoriesDialog = (group: Group) => {
+    setSelectedGroupForCategoryManagement(group);
+    setIsManageGroupCategoriesDialogOpen(true);
+  };
+  
+  const handleDeleteGroupConfirm = async () => {
+    if (!selectedGroupForDeletion) return;
+    setIsDeletingGroup(true);
+    try {
+      await deleteGroup(selectedGroupForDeletion.id);
+      await fetchData(); // Refetch all data
+      toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
+    } catch (err: any)
+     {
+      console.error("Failed to delete group:", err);
+      toast({ title: "Error Deleting Group", description: err.message || "Could not delete group.", variant: "destructive" });
+    } finally {
+      setIsDeletingGroup(false);
+      setSelectedGroupForDeletion(null);
+    }
+  };
+
+  const openDeleteGroupDialog = (group: Group) => {
+    setSelectedGroupForDeletion(group);
+  };
+
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <h1 className="text-3xl font-bold mb-6">Organization</h1>
 
-      {/* Groups Section - Keeping placeholder for now */}
+      {/* Groups Section */}
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Transaction Groups</CardTitle>
-          <CardDescription>
-            Create and manage groups for budgeting or reporting purposes.
-          </CardDescription>
+          <div className="flex justify-between items-center">
+            <CardTitle>Transaction Groups</CardTitle>
+            <Dialog open={isAddGroupDialogOpen} onOpenChange={setIsAddGroupDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="default" size="sm">
+                  <FolderPlus className="mr-2 h-4 w-4" /> Add New Group
+                </Button>
+              </DialogTrigger>
+              <AddGroupForm onGroupAdded={handleAddGroup} isLoading={isLoadingGroups} />
+            </Dialog>
+          </div>
+          <CardDescription>Create and manage groups for budgeting or reporting purposes. Link categories to groups.</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-center py-10">
-            <p className="text-muted-foreground">
-              Transaction grouping feature coming soon!
-            </p>
-          </div>
+          {groupError && <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">{groupError}</div>}
+          {isLoadingGroups && groups.length === 0 ? (
+            <div className="space-y-4">
+              {[...Array(2)].map((_, i) => <Skeleton key={i} className="h-20 w-full" />)}
+            </div>
+          ) : groups.length > 0 ? (
+            <Accordion type="multiple" className="w-full">
+              {groups.map((group) => (
+                <AccordionItem value={group.id} key={group.id}>
+                  <AccordionTrigger>
+                    <div className="flex items-center justify-between w-full">
+                      <span className="font-medium">{group.name}</span>
+                      <div className="flex items-center gap-1">
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
+                          <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
+                        </Button>
+                        <AlertDialog>
+                          <AlertDialogTrigger asChild>
+                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
+                                <Trash2 className="h-4 w-4" />
+                                <span className="sr-only">Delete Group</span>
+                             </Button>
+                          </AlertDialogTrigger>
+                           {selectedGroupForDeletion?.id === group.id && (
+                              <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the group "{selectedGroupForDeletion.name}". Categories within it will not be deleted but unlinked.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedGroupForDeletion(null)} disabled={isDeletingGroup}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGroupConfirm} disabled={isDeletingGroup} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingGroup ? "Deleting..." : "Delete Group"}</AlertDialogAction></AlertDialogFooter>
+                              </AlertDialogContent>
+                           )}
+                        </AlertDialog>
+                      </div>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent>
+                    <div className="pl-4 pt-2 pb-2 text-sm text-muted-foreground">
+                      {group.categoryIds && group.categoryIds.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {group.categoryIds.map(catId => {
+                            const category = categories.find(c => c.id === catId);
+                            if (!category) return null;
+                            const { icon: CategoryIcon, color } = getCategoryStyle(category.name);
+                            return (
+                              <Badge key={catId} variant="outline" className={`flex items-center gap-1 ${color} border`}>
+                                <CategoryIcon /> <span className="capitalize">{category.name}</span>
+                              </Badge>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        "No categories linked to this group yet."
+                      )}
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          ) : (
+            <div className="text-center py-10"><p className="text-muted-foreground">No groups created yet.</p></div>
+          )}
         </CardContent>
       </Card>
+      {selectedGroupForCategoryManagement && (
+        <ManageGroupCategoriesDialog
+          group={selectedGroupForCategoryManagement}
+          allCategories={categories}
+          isOpen={isManageGroupCategoriesDialogOpen}
+          onOpenChange={(open) => {
+            setIsManageGroupCategoriesDialogOpen(open);
+            if (!open) setSelectedGroupForCategoryManagement(null);
+          }}
+          onSave={handleSaveGroupCategories}
+          isLoading={isLoadingGroups}
+        />
+      )}
+
 
       {/* Categories Section */}
       <Card className="mb-8">
@@ -201,10 +343,7 @@ export default function OrganizationPage() {
                   <PlusCircle className="mr-2 h-4 w-4" /> Add New Category
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-2xl">
-                <DialogHeader><DialogTitle>Add New Category</DialogTitle><DialogDescription>Enter details for the new category.</DialogDescription></DialogHeader>
-                <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoadingCategories} />
-              </DialogContent>
+              <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoadingCategories} />
             </Dialog>
           </div>
           <CardDescription>View, add, edit, or delete your transaction categories.</CardDescription>
@@ -216,7 +355,7 @@ export default function OrganizationPage() {
                {[...Array(10)].map((_, i) => <Skeleton key={i} className="h-10 w-full rounded-full" />)}
             </div>
           ) : categories.length > 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div className="flex flex-wrap gap-3">
               {categories.map((category) => {
                 const { icon: CategoryIcon, color } = getCategoryStyle(category.name);
                 return (
@@ -229,7 +368,7 @@ export default function OrganizationPage() {
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditCategoryDialog(category)}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
                           <AlertDialog>
                               <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => openDeleteCategoryDialog(category)}><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
-                              {selectedCategory?.id === category.id && (
+                              {selectedCategory?.id === category.id && !isEditCategoryDialogOpen && (
                                   <AlertDialogContent>
                                       <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedCategory.name}".</AlertDialogDescription></AlertDialogHeader>
                                       <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedCategory(null)} disabled={isDeletingCategory}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteCategoryConfirm} disabled={isDeletingCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingCategory ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
@@ -259,10 +398,7 @@ export default function OrganizationPage() {
                   <PlusCircle className="mr-2 h-4 w-4" /> Add New Tag
                 </Button>
               </DialogTrigger>
-              <DialogContent className="sm:max-w-2xl">
-                <DialogHeader><DialogTitle>Add New Tag</DialogTitle><DialogDescription>Enter the name for your new tag.</DialogDescription></DialogHeader>
-                <AddTagForm onTagAdded={handleAddTag} isLoading={isLoadingTags} />
-              </DialogContent>
+              <AddTagForm onTagAdded={handleAddTag} isLoading={isLoadingTags} />
             </Dialog>
           </div>
           <CardDescription>View, add, edit, or delete your transaction tags.</CardDescription>
@@ -270,8 +406,8 @@ export default function OrganizationPage() {
         <CardContent>
           {tagError && <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">{tagError}</div>}
           {isLoadingTags && tags.length === 0 ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
-              {[...Array(12)].map((_, i) => <Skeleton key={i} className="h-8 w-full rounded-full" />)}
+            <div className="flex flex-wrap gap-3">
+              {[...Array(12)].map((_, i) => <Skeleton key={i} className="h-8 w-24 rounded-full" />)}
             </div>
           ) : tags.length > 0 ? (
             <div className="flex flex-wrap gap-3">
@@ -287,7 +423,7 @@ export default function OrganizationPage() {
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => openEditTagDialog(tag)}><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button>
                         <AlertDialog>
                             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => openDeleteTagDialog(tag)}><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
-                            {selectedTag?.id === tag.id && (
+                            {selectedTag?.id === tag.id && !isEditTagDialogOpen && (
                                 <AlertDialogContent>
                                     <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the tag "{selectedTag.name}".</AlertDialogDescription></AlertDialogHeader>
                                     <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedTag(null)} disabled={isDeletingTag}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTagConfirm} disabled={isDeletingTag} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingTag ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
@@ -308,18 +444,12 @@ export default function OrganizationPage() {
 
       {/* Edit Category Dialog */}
         <Dialog open={isEditCategoryDialogOpen} onOpenChange={(open) => { setIsEditCategoryDialogOpen(open); if (!open) setSelectedCategory(null); }}>
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader><DialogTitle>Edit Category</DialogTitle><DialogDescription>Modify category name.</DialogDescription></DialogHeader>
-                {selectedCategory && <EditCategoryForm category={selectedCategory} onCategoryUpdated={handleUpdateCategory} isLoading={isLoadingCategories} />}
-            </DialogContent>
+            <EditCategoryForm category={selectedCategory!} onCategoryUpdated={handleUpdateCategory} isLoading={isLoadingCategories} />
         </Dialog>
 
       {/* Edit Tag Dialog */}
         <Dialog open={isEditTagDialogOpen} onOpenChange={(open) => { setIsEditTagDialogOpen(open); if (!open) setSelectedTag(null); }}>
-            <DialogContent className="sm:max-w-2xl">
-                <DialogHeader><DialogTitle>Edit Tag</DialogTitle><DialogDescription>Modify tag name.</DialogDescription></DialogHeader>
-                {selectedTag && <EditTagForm tag={selectedTag} onTagUpdated={handleUpdateTag} isLoading={isLoadingTags} />}
-            </DialogContent>
+            <EditTagForm tag={selectedTag!} onTagUpdated={handleUpdateTag} isLoading={isLoadingTags} />
         </Dialog>
     </div>
   );
