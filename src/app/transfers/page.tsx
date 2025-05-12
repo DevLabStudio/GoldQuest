@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -5,13 +6,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
-import { getCategories, Category } from '@/services/categories'; 
-import { getTags, Tag } from '@/services/tags'; 
+import { getCategories, Category } from '@/services/categories';
+import { getTags, Tag } from '@/services/tags';
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
-import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react'; 
+import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
+import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -20,7 +21,7 @@ import { useToast } from '@/hooks/use-toast';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 
 const INITIAL_TRANSACTION_LIMIT = 50;
 
@@ -42,7 +43,7 @@ export default function TransfersPage() {
   const [allTags, setAllTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
   const { selectedDateRange } = useDateRange();
 
@@ -68,7 +69,7 @@ export default function TransfersPage() {
       if (isMounted) setIsLoading(true);
       if (isMounted) setError(null);
       try {
-        const prefs = await getUserPreferences(); 
+        const prefs = await getUserPreferences();
         if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -84,7 +85,7 @@ export default function TransfersPage() {
 
 
         if (fetchedAccounts.length > 0) {
-            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); 
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
             const transactionsByAccount = await Promise.all(transactionPromises);
             const combinedTransactions = transactionsByAccount.flat();
             combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -121,19 +122,19 @@ export default function TransfersPage() {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, [toast]); 
+  }, [toast]);
 
     const localFetchData = async () => {
         if (typeof window === 'undefined') return;
         setIsLoading(true); setError(null);
         try {
-            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); 
+            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([getAccounts(), getCategories(), getTags()]);
             setAccounts(fetchedAccounts);
             setAllCategories(fetchedCategories);
             setAllTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); 
+                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
                 const combinedTxs = txsByAcc.flat();
                 combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -158,19 +159,19 @@ export default function TransfersPage() {
 
 
     potentialTransfers.forEach(txOut => {
-      if (txOut.amount < 0 && !processedIds.has(txOut.id)) { 
+      if (txOut.amount < 0 && !processedIds.has(txOut.id)) {
         const matchingIncoming = potentialTransfers.filter(txIn =>
-          txIn.amount === -txOut.amount && 
-          txIn.accountId !== txOut.accountId && 
+          txIn.amount === -txOut.amount &&
+          txIn.accountId !== txOut.accountId &&
           !processedIds.has(txIn.id) &&
           txIn.date === txOut.date &&
-          (txIn.description === txOut.description || 
+          (txIn.description === txOut.description ||
            (txIn.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer"))) &&
-          txIn.transactionCurrency === txOut.transactionCurrency 
+          txIn.transactionCurrency === txOut.transactionCurrency
         );
-        
+
         if (matchingIncoming.length > 0) {
-            const txIn = matchingIncoming[0]; 
+            const txIn = matchingIncoming[0];
             transfers.push({ from: txOut, to: txIn });
             processedIds.add(txOut.id);
             processedIds.add(txIn.id);
@@ -179,7 +180,7 @@ export default function TransfersPage() {
     });
 
     return transfers.sort((a, b) => new Date(b.from.date).getTime() - new Date(a.from.date).getTime());
-  }, [allTransactionsUnfiltered, isLoading, selectedDateRange]); 
+  }, [allTransactionsUnfiltered, isLoading, selectedDateRange]);
 
    const getAccountName = (accountId: string): string => {
         return accounts.find(acc => acc.id === accountId)?.name || 'Unknown Account';
@@ -222,18 +223,18 @@ export default function TransfersPage() {
         }
     };
 
-  const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => { 
+  const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => {
     try {
-      if ('id' in data && data.id && editingTransferPair) { 
+      if ('id' in data && data.id && editingTransferPair) {
         console.warn("handleTransactionAdded called in edit transfer context. This should ideally go to a specific transfer update handler or onTransferAdded.");
          toast({title: "Update Logic", description: "Transfer updates should be handled by onTransferAdded.", variant: "destructive"})
-      } else if (!('id' in data)) { 
+      } else if (!('id' in data)) {
         await addTransaction(data as Omit<Transaction, 'id'>);
         toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       }
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
-      setEditingTransferPair(null); 
+      setEditingTransferPair(null);
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
@@ -279,7 +280,7 @@ export default function TransfersPage() {
       toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
       await localFetchData();
       setIsAddTransactionDialogOpen(false);
-      setEditingTransferPair(null); 
+      setEditingTransferPair(null);
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -289,7 +290,7 @@ export default function TransfersPage() {
   };
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (accounts.length === 0 && type !== 'transfer') { 
+    if (accounts.length === 0 && type !== 'transfer') {
         toast({
             title: "No Accounts",
             description: "Please add an account first before adding transactions.",
@@ -303,9 +304,10 @@ export default function TransfersPage() {
             description: "You need at least two accounts to make a transfer.",
             variant: "destructive",
         });
+        return;
     }
     setTransactionTypeToAdd(type);
-    setEditingTransferPair(null); 
+    setEditingTransferPair(null);
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -456,7 +458,7 @@ export default function TransfersPage() {
                                                             <AlertDialogFooter>
                                                             <AlertDialogCancel onClick={() => setSelectedTransactionPair(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
                                                             <AlertDialogAction onClick={handleDeleteTransferConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                                {isDeleting Transfer..." : "Delete Transfer"}
+                                                                {isDeleting ? "Deleting Transfer..." : "Delete Transfer"}
                                                             </AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
@@ -485,7 +487,7 @@ export default function TransfersPage() {
             </div>
             <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
                 <MonthlySummarySidebar
-                    transactions={transferTransactionPairs.flatMap(p => [p.from, p.to])} 
+                    transactions={transferTransactionPairs.flatMap(p => [p.from, p.to])}
                     accounts={accounts}
                     preferredCurrency={preferredCurrency}
                     transactionType="transfer"
@@ -496,7 +498,7 @@ export default function TransfersPage() {
 
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
           setIsAddTransactionDialogOpen(open);
-          if (!open) setEditingTransferPair(null); 
+          if (!open) setEditingTransferPair(null);
       }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader>
@@ -513,7 +515,7 @@ export default function TransfersPage() {
               accounts={accounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleTransactionAdded} 
+              onTransactionAdded={handleTransactionAdded}
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}

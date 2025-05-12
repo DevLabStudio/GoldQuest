@@ -1,6 +1,8 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
+import Link from 'next/link'; // Import Link
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -383,15 +385,15 @@ export default function OrganizationPage() {
               {categories.map((category) => {
                 const { icon: CategoryIcon, color } = getCategoryStyle(category.name);
                 return (
-                  <div key={category.id} className="group relative">
-                     <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border items-center`}>
+                  <Link key={category.id} href={`/categories/${category.id}`} passHref className="group relative">
+                     <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`}>
                        <div className="flex items-center gap-1 overflow-hidden mr-8">
                          <CategoryIcon /> <span className="capitalize truncate">{category.name}</span>
                        </div>
                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={() => openEditCategoryDialog(category)}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
+                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); openEditCategoryDialog(category);}}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
                           <AlertDialog>
-                              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={() => openDeleteCategoryDialog(category)}><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
+                              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); openDeleteCategoryDialog(category);}}><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
                               {selectedCategory?.id === category.id && !isEditCategoryDialogOpen && (
                                   <AlertDialogContent>
                                       <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedCategory.name}".</AlertDialogDescription></AlertDialogHeader>
@@ -401,7 +403,7 @@ export default function OrganizationPage() {
                           </AlertDialog>
                        </div>
                      </Badge>
-                   </div>
+                   </Link>
                 );
               })}
             </div>
@@ -508,3 +510,4 @@ export default function OrganizationPage() {
     </div>
   );
 }
+
