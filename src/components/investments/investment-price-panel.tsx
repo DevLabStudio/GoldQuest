@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC, ReactNode } from 'react';
@@ -9,11 +8,11 @@ import { formatCurrency } from '@/lib/currency';
 
 interface PriceData {
   name: string;
-  code: string;
-  price: number;
+  code: string; // The code of the asset being priced (e.g., USD, EUR, BTC)
+  price: number; // The value of 1 unit of 'code' in terms of 'against' currency
   change: string; // e.g., "+0.05%" or "-0.15%"
   icon: ReactNode;
-  against: string; // The currency this price is against, e.g., BRL
+  against: string; // The currency this price is expressed in (user's preferredCurrency)
 }
 
 interface InvestmentPricePanelProps {
@@ -21,12 +20,20 @@ interface InvestmentPricePanelProps {
 }
 
 const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
+  if (!prices || prices.length === 0) {
+    return (
+      <div>
+        <h2 className="text-2xl font-semibold mb-4">Market Prices</h2>
+        <p className="text-muted-foreground">Price data is currently unavailable.</p>
+      </div>
+    );
+  }
   return (
     <div>
       <h2 className="text-2xl font-semibold mb-4">Market Prices</h2>
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
         {prices.map((item) => (
-          <Card key={item.code} className="shadow-lg hover:shadow-primary/20 transition-shadow duration-300">
+          <Card key={`${item.code}-${item.against}`} className="shadow-lg hover:shadow-primary/20 transition-shadow duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {item.name} ({item.code}/{item.against})
@@ -37,7 +44,8 @@ const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">
-                {formatCurrency(item.price, item.code, item.code, false)} 
+                {/* Format item.price using item.against as the currency for formatting, don't convert */}
+                {formatCurrency(item.price, item.against, item.against, false)} 
               </div>
               <p
                 className={cn(
