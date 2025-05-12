@@ -26,11 +26,11 @@ const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
   if (!prices || prices.length === 0) {
     return (
       <div>
-        <h2 className="text-2xl font-semibold mb-4">Market Prices</h2>
+        <h2 className="text-xl font-semibold mb-4">Market Prices</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
-          {[...Array(3)].map((_, i) => ( // Show skeletons if prices array is empty during initial load
+          {[...Array(3)].map((_, i) => ( 
             <Card key={`skeleton-price-${i}`} className="shadow-lg">
-              <CardHeader className="pb-2">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <Skeleton className="h-5 w-2/3" />
               </CardHeader>
               <CardContent>
@@ -46,8 +46,8 @@ const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
 
   return (
     <div>
-      <h2 className="text-2xl font-semibold mb-4">Market Prices</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6"> {/* Adjusted for 4 items potentially */}
+      <h2 className="text-xl font-semibold mb-4">Market Prices</h2>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
         {prices.map((item) => (
           <Card key={`${item.code}-${item.against}`} className="shadow-lg hover:shadow-primary/20 transition-shadow duration-300">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -105,3 +105,4 @@ const InvestmentPricePanel: FC<InvestmentPricePanelProps> = ({ prices }) => {
 };
 
 export default InvestmentPricePanel;
+

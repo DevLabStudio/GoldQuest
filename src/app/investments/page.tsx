@@ -34,22 +34,21 @@ export default function InvestmentsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const [isLoading, setIsLoading] = useState(true);
   const [bitcoinPrice, setBitcoinPrice] = useState<number | null>(null);
-  const [isBitcoinPriceLoading, setIsBitcoinPriceLoading] = useState(true); // Start as true
+  const [isBitcoinPriceLoading, setIsBitcoinPriceLoading] = useState(true);
   const [bitcoinPriceError, setBitcoinPriceError] = useState<string | null>(null);
 
   useEffect(() => {
     const fetchPrefs = async () => {
-      setIsLoading(true); // General loading for preferences
+      setIsLoading(true); 
       if (typeof window !== 'undefined') {
         try {
           const prefs = await getUserPreferences();
           setPreferredCurrency(prefs.preferredCurrency.toUpperCase());
         } catch (error) {
           console.error("Failed to fetch user preferences:", error);
-          // Keep default preferredCurrency if error
         }
       }
-      setIsLoading(false); // Preferences loading finished
+      setIsLoading(false); 
     };
     fetchPrefs();
   }, []);
@@ -66,13 +65,12 @@ export default function InvestmentsPage() {
         setBitcoinPrice(null);
 
         const preferredCurrencyLower = preferredCurrency.toLowerCase();
-        // Common currencies supported by CoinGecko for `vs_currencies`
         const directlySupportedVsCurrencies = ['usd', 'eur', 'brl', 'gbp', 'jpy', 'cad', 'aud', 'chf']; 
         let targetCoingeckoCurrency = preferredCurrencyLower;
 
         if (!directlySupportedVsCurrencies.includes(preferredCurrencyLower)) {
             console.warn(`Preferred currency ${preferredCurrency} might not be directly supported by Coingecko for BTC price. Fetching in USD and will convert.`);
-            targetCoingeckoCurrency = 'usd'; // Fallback to USD
+            targetCoingeckoCurrency = 'usd'; 
         }
 
         try {
@@ -86,7 +84,6 @@ export default function InvestmentsPage() {
             if (data.bitcoin && data.bitcoin[targetCoingeckoCurrency]) {
                 let priceInTargetCoinGeckoCurrency = data.bitcoin[targetCoingeckoCurrency];
                 if (targetCoingeckoCurrency.toUpperCase() !== preferredCurrency.toUpperCase()) {
-                    // Convert if we fetched in a fallback currency (e.g., USD)
                     const convertedPrice = convertCurrency(priceInTargetCoinGeckoCurrency, targetCoingeckoCurrency.toUpperCase(), preferredCurrency);
                     setBitcoinPrice(convertedPrice);
                 } else {
@@ -98,22 +95,23 @@ export default function InvestmentsPage() {
         } catch (err: any) {
             console.error("Failed to fetch Bitcoin price:", err);
             setBitcoinPriceError(err.message || "Could not load Bitcoin price.");
-            // Attempt a fallback conversion if error occurs during API fetch
             setBitcoinPrice(convertCurrency(1, "BTC", preferredCurrency)); 
         } finally {
             setIsBitcoinPriceLoading(false);
         }
     };
 
-    if (preferredCurrency && !isLoading) { // Only fetch if preferredCurrency is set and initial prefs loading is done
+    if (preferredCurrency && !isLoading) { 
         fetchBitcoinPrice();
     }
-  }, [preferredCurrency, isLoading]); // Re-fetch if preferredCurrency or general isLoading state changes
+  }, [preferredCurrency, isLoading]); 
 
 
   const dynamicPriceData = useMemo(() => {
-    // isLoading here refers to the general page loading (preferences)
-    if (isLoading) return displayAssetCodes.map(code => ({
+    const filteredAssetCodes = displayAssetCodes.filter(code => code !== preferredCurrency);
+
+    if (isLoading) { // General page loading (preferences still loading)
+      return filteredAssetCodes.map(code => ({
         name: currencyNames[code] || code,
         code: code,
         price: null,
@@ -121,12 +119,12 @@ export default function InvestmentsPage() {
         icon: currencyIcons[code] || <DollarSign className="h-6 w-6" />,
         against: preferredCurrency,
         isLoading: true,
-    }));
+      }));
+    }
 
-
-    return displayAssetCodes.map(assetCode => {
+    return filteredAssetCodes.map(assetCode => {
       let priceInPreferredCurrency: number | null = null;
-      let displayChange = "+0.00%"; // Default change
+      let displayChange = "+0.00%"; 
       let isAssetSpecificLoading = false;
 
       if (assetCode === "BTC") {
@@ -134,26 +132,20 @@ export default function InvestmentsPage() {
           if (isBitcoinPriceLoading) {
               displayChange = "Loading...";
           } else if (bitcoinPriceError) {
-              priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); // Show fallback converted price
+              priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); 
               displayChange = "Error";
           } else if (bitcoinPrice !== null) {
               priceInPreferredCurrency = bitcoinPrice;
-              // Note: CoinGecko simple price doesn't provide 24h change.
-              // A more complex API call or storing previous day's price would be needed for dynamic change.
-              displayChange = "N/A"; // Or fetch if you have a source for 24h change
+              displayChange = "N/A"; 
           } else {
-              // This case might occur if fetchBitcoinPrice hasn't completed yet or failed silently before error state set
-              priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); // Fallback
+              priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency); 
               displayChange = "N/A";
           }
-      } else if (assetCode === preferredCurrency) {
-          priceInPreferredCurrency = 1.00;
-      } else {
+      } else { // Handles BRL, USD, EUR if they are not the preferredCurrency
           priceInPreferredCurrency = convertCurrency(1, assetCode, preferredCurrency);
-           // Example static changes for non-BTC, non-preferred assets
           if(assetCode === "USD") displayChange = "-0.05%";
           if(assetCode === "EUR") displayChange = "+0.02%";
-          if(assetCode === "BRL") displayChange = "-0.01%"; // Example if BRL is not preferred
+          if(assetCode === "BRL") displayChange = "-0.01%";
       }
       
       return {
