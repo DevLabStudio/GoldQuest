@@ -276,10 +276,11 @@ export default function OrganizationPage() {
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
-                        <Link href={`/groups/${group.id}`} passHref>
-                           <Button variant="ghost" size="sm" className="h-7 px-2">
-                             <Eye className="mr-1 h-4 w-4" /> View Details
-                           </Button>
+                        <Link href={`/groups/${group.id}`} legacyBehavior passHref>
+                           <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 flex items-center gap-1")}>
+                             <Eye className="h-4 w-4" />
+                             <span>View Details</span>
+                           </a>
                         </Link>
                         <div
                           role="button"
@@ -392,8 +393,8 @@ export default function OrganizationPage() {
               {categories.map((category) => {
                 const { icon: CategoryIcon, color } = getCategoryStyle(category);
                 return (
-                  <Link key={category.id} href={`/categories/${category.id}`} passHref className="group relative">
-                     <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`}>
+                  <Link key={category.id} href={`/categories/${category.id}`} passHref legacyBehavior>
+                    <a className={cn("group relative", buttonVariants({variant: "outline"}), `w-full sm:w-auto justify-between py-2 px-3 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`)}>
                        <div className="flex items-center gap-1 overflow-hidden mr-8">
                          <CategoryIcon className="h-4 w-4" /> <span className="capitalize truncate">{category.name}</span>
                        </div>
@@ -416,7 +417,7 @@ export default function OrganizationPage() {
                               </AlertDialogContent>
                           </AlertDialog>
                        </div>
-                     </Badge>
+                     </a>
                    </Link>
                 );
               })}
@@ -460,8 +461,8 @@ export default function OrganizationPage() {
               {tags.map((tag) => {
                 const { icon: TagIconStyledComponent, color } = getTagStyle(tag.name);
                 return (
-                  <Link key={tag.id} href={`/tags/${tag.id}`} passHref className="group relative">
-                    <Badge variant="outline" className={`justify-between py-1 px-2.5 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`}>
+                  <Link key={tag.id} href={`/tags/${tag.id}`} passHref legacyBehavior>
+                    <a className={cn("group relative", buttonVariants({variant: "outline"}), `justify-between py-1 px-2.5 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`)}>
                       <div className="flex items-center gap-1 overflow-hidden mr-8">
                         <TagIconStyledComponent /> <span className="truncate">{tag.name}</span>
                       </div>
@@ -484,7 +485,7 @@ export default function OrganizationPage() {
                             </AlertDialogContent>
                         </AlertDialog>
                       </div>
-                    </Badge>
+                    </a>
                   </Link>
                 );
               })}
@@ -531,3 +532,4 @@ export default function OrganizationPage() {
     </div>
   );
 }
+
