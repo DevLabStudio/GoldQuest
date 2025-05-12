@@ -63,9 +63,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
+  const [loadingDivClassName, setLoadingDivClassName] = useState("flex items-center justify-center min-h-screen");
+
 
   useEffect(() => {
     setIsClient(true);
+    // After client has mounted, update className to include theme-dependent classes
+    setLoadingDivClassName("flex items-center justify-center min-h-screen bg-background text-foreground");
   }, []);
   
   useEffect(() => {
@@ -133,7 +137,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   if (!isClient || isLoadingAuth) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Loading authentication...</div>
+      <div className={loadingDivClassName}>Loading authentication...</div>
     );
   }
 
@@ -309,7 +313,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         </DateRangeProvider>
     );
   }
-   // Fallback for when Firebase is not active and user is on login/signup, or if somehow other conditions not met
+
   return <>{children}</>;
 }
-
