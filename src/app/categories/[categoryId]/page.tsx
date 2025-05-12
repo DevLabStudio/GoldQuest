@@ -4,9 +4,9 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getAccounts, type Account, updateAccount as updateAccountInDb } from "@/services/account-sync";
+import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, updateTransaction, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
-import { getCategories, getCategoryStyle, Category } from '@/services/categories';
+import { getCategories, getCategoryStyle, Category as CategoryType } from '@/services/categories';
 import { getTags, type Tag, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,9 +22,7 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
-import SpendingChart from '@/components/dashboard/spending-chart'; // Import SpendingChart
 import { useDateRange } from '@/contexts/DateRangeContext';
-import Link from 'next/link';
 
 const formatDate = (dateString: string): string => {
     try {
@@ -37,16 +35,16 @@ const formatDate = (dateString: string): string => {
     }
 };
 
-export default function AccountDetailPage() {
+export default function CategoryDetailPage() {
   const params = useParams();
   const router = useRouter();
-  const accountId = typeof params.accountId === 'string' ? params.accountId : undefined;
+  const categoryId = typeof params.categoryId === 'string' ? params.categoryId : undefined;
 
-  const [account, setAccount] = useState<Account | null>(null);
+  const [category, setCategory] = useState<CategoryType | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allCategories, setAllCategories] = useState<CategoryType[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [allAccounts, setAllAccounts] = useState<Account[]>([]); // For AddTransactionForm
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
@@ -60,11 +58,10 @@ export default function AccountDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
-
   const fetchData = async () => {
-    if (!accountId || typeof window === 'undefined') {
+    if (!categoryId || typeof window === 'undefined') {
         setIsLoading(false);
-        if(!accountId) setError("Account ID is missing.");
+        if(!categoryId) setError("Category ID is missing.");
         return;
     }
     setIsLoading(true);
@@ -73,31 +70,38 @@ export default function AccountDetailPage() {
         const prefs = await getUserPreferences();
         setPreferredCurrency(prefs.preferredCurrency);
 
-        const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
+        const [fetchedAppAccounts, fetchedAppCategories, fetchedAppTags] = await Promise.all([
             getAccounts(), 
             getCategories(),
             getTags()
         ]);
-        setAllAccounts(fetchedAccounts);
-        setAllCategories(fetchedCategories);
-        setAllTags(fetchedTags);
+        setAllAccounts(fetchedAppAccounts);
+        setAllCategories(fetchedAppCategories);
+        setAllTags(fetchedAppTags);
 
-        const targetAccount = fetchedAccounts.find(acc => acc.id === accountId);
-        if (!targetAccount) {
-            setError("Account not found.");
+        const targetCategory = fetchedAppCategories.find(cat => cat.id === categoryId);
+        if (!targetCategory) {
+            setError("Category not found.");
             setIsLoading(false);
             return;
         }
-        setAccount(targetAccount);
+        setCategory(targetCategory);
 
-        const fetchedTransactions = await getTransactions(accountId);
-        fetchedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-        setTransactions(fetchedTransactions);
+        if (fetchedAppAccounts.length > 0) {
+            const transactionPromises = fetchedAppAccounts.map(acc => getTransactions(acc.id));
+            const transactionsByAccount = await Promise.all(transactionPromises);
+            const combinedTransactions = transactionsByAccount.flat();
+            const categoryTransactions = combinedTransactions.filter(tx => tx.category === targetCategory.name);
+            categoryTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            setTransactions(categoryTransactions);
+        } else {
+            setTransactions([]);
+        }
 
     } catch (err) {
-        console.error(`Failed to fetch data for account ${accountId}:`, err);
-        setError("Could not load account data. Please try again later.");
-        toast({ title: "Error", description: "Failed to load account data.", variant: "destructive" });
+        console.error(`Failed to fetch data for category ${categoryId}:`, err);
+        setError("Could not load category data. Please try again later.");
+        toast({ title: "Error", description: "Failed to load category data.", variant: "destructive" });
     } finally {
         setIsLoading(false);
     }
@@ -105,12 +109,12 @@ export default function AccountDetailPage() {
 
   useEffect(() => {
     fetchData();
-  }, [accountId, toast]);
+  }, [categoryId, toast]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`].some(key => event.key?.includes(key))) {
-            console.log(`Storage changed for account ${accountId}, refetching data...`);
+        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key))) {
+            console.log(`Storage changed for category ${categoryId}, refetching data...`);
             fetchData();
         }
     };
@@ -124,7 +128,7 @@ export default function AccountDetailPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [accountId, fetchData]);
+  }, [categoryId, fetchData]);
 
 
   const filteredTransactions = useMemo(() => {
@@ -135,25 +139,6 @@ export default function AccountDetailPage() {
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
   }, [transactions, isLoading, selectedDateRange]);
-
-  const spendingData = useMemo(() => {
-      if (isLoading || !account || !filteredTransactions.length) return [];
-
-      const categoryTotals: { [key: string]: number } = {};
-
-      filteredTransactions.forEach(tx => {
-          if (tx.amount < 0 && tx.category !== 'Transfer') {
-              const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
-              const category = tx.category || 'Uncategorized';
-              categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
-          }
-      });
-
-      return Object.entries(categoryTotals)
-          .map(([category, amount]) => ({ category: category.charAt(0).toUpperCase() + category.slice(1), amount }))
-          .sort((a, b) => b.amount - a.amount);
-  }, [filteredTransactions, account, preferredCurrency, isLoading]);
-
 
   const openEditDialog = (transaction: Transaction) => {
     setSelectedTransaction(transaction);
@@ -209,7 +194,9 @@ export default function AccountDetailPage() {
 
   const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
     try {
-      await addTransaction({ ...data, accountId: accountId! });
+      // Ensure category is pre-filled if adding from this page and not a transfer
+      const dataWithCategory = (data.category === 'Transfer' || !category) ? data : { ...data, category: category.name };
+      await addTransaction(dataWithCategory);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       await fetchData();
       setIsAddTransactionDialogOpen(false);
@@ -260,16 +247,16 @@ export default function AccountDetailPage() {
   };
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (!account && type !== 'transfer') {
-        toast({ title: "Account Error", description: "Account details not loaded.", variant: "destructive" });
+    if (allAccounts.length === 0 && type !== 'transfer') {
+        toast({ title: "Account Error", description: "No accounts available to add transactions.", variant: "destructive" });
         return;
     }
-    if (type === 'transfer' && allAccounts.length < 2) {
+     if (type === 'transfer' && allAccounts.length < 2) {
         toast({ title: "Not Enough Accounts", description: "You need at least two accounts to make a transfer.", variant: "destructive" });
         return;
     }
     setTransactionTypeToAdd(type);
-    setClonedTransactionData(undefined); // Ensure cloned data is reset for a fresh "add"
+    setClonedTransactionData(undefined); 
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -320,11 +307,10 @@ export default function AccountDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !account) { // Added !account for initial loading state
+  if (isLoading && !category) { 
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
-        <Skeleton className="h-64 w-full mb-8" />
         <div className="flex flex-col md:flex-row gap-8">
             <div className="flex-grow">
                 <Skeleton className="h-96 w-full" />
@@ -340,8 +326,8 @@ export default function AccountDetailPage() {
   if (error) {
     return (
         <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
+            <Button variant="outline" onClick={() => router.push('/organization')} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Organization
             </Button>
             <div className="mb-4 p-4 bg-destructive/10 text-destructive border border-destructive rounded-md">
                 {error}
@@ -350,28 +336,30 @@ export default function AccountDetailPage() {
     );
   }
 
-  if (!account) {
+  if (!category) {
     return (
         <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-            <Button variant="outline" onClick={() => router.back()} className="mb-4">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
+            <Button variant="outline" onClick={() => router.push('/organization')} className="mb-4">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Organization
             </Button>
-            <p>Account not found.</p>
+            <p>Category not found.</p>
         </div>
     );
   }
+  
+  const { icon: CategoryIcon, color: categoryColor } = getCategoryStyle(category.name);
+
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
         <div>
-            <Button variant="ghost" size="sm" onClick={() => router.back()} className="mb-2 text-muted-foreground hover:text-primary px-0 h-auto">
-                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
+            <Button variant="ghost" size="sm" onClick={() => router.push('/organization')} className="mb-2 text-muted-foreground hover:text-primary px-0 h-auto">
+                <ArrowLeft className="mr-2 h-4 w-4" /> Back to Organization
             </Button>
-            <h1 className="text-3xl font-bold">{account.name} - Transactions</h1>
-            <p className="text-muted-foreground">Balance: {formatCurrency(account.balance, account.currency, account.currency, false)}
-                {account.currency !== preferredCurrency && ` (≈ ${formatCurrency(account.balance, account.currency, preferredCurrency, true)})`}
-            </p>
+            <h1 className="text-3xl font-bold flex items-center">
+                <CategoryIcon /> <span className="ml-2">{category.name} - Transactions</span>
+            </h1>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -395,31 +383,13 @@ export default function AccountDetailPage() {
         </DropdownMenu>
       </div>
 
-      <Card className="mb-8">
-          <CardHeader>
-              <CardTitle>Spending Breakdown for {account.name}</CardTitle>
-              <CardDescription>Spending by category for {dateRangeLabel} ({preferredCurrency}).</CardDescription>
-          </CardHeader>
-          <CardContent className="h-80">
-              {isLoading ? (
-                  <Skeleton className="h-full w-full" />
-              ) : spendingData.length > 0 ? (
-                  <SpendingChart data={spendingData} currency={preferredCurrency} />
-              ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">
-                      No spending data for this account in the selected period.
-                  </div>
-              )}
-          </CardContent>
-      </Card>
-
       <div className="flex flex-col md:flex-row gap-8">
         <div className="flex-grow">
           <Card>
             <CardHeader>
-              <CardTitle>Transactions for {dateRangeLabel}</CardTitle>
+              <CardTitle>Transactions for {category.name} ({dateRangeLabel})</CardTitle>
               <CardDescription>
-                All transactions for the account: {account.name}.
+                All transactions in the category: {category.name}.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -430,15 +400,14 @@ export default function AccountDetailPage() {
                       <TableHead>Description</TableHead>
                       <TableHead className="text-right">Amount</TableHead>
                       <TableHead>Date</TableHead>
-                      <TableHead>Category</TableHead>
+                      <TableHead>Account</TableHead>
                       <TableHead>Tags</TableHead>
                       <TableHead className="text-right">Actions</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {filteredTransactions.map((transaction) => {
-                      const categoryDetails = allCategories.find(c => c.name === transaction.category);
-                      const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
+                      const account = allAccounts.find(acc => acc.id === transaction.accountId);
                       return (
                         <TableRow key={transaction.id} className="hover:bg-muted/50">
                           <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -451,21 +420,7 @@ export default function AccountDetailPage() {
                             )}
                           </TableCell>
                           <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(transaction.date)}</TableCell>
-                          <TableCell>
-                             {categoryDetails ? (
-                                <Link href={`/categories/${categoryDetails.id}`} passHref>
-                                    <Badge variant="outline" className={`flex items-center gap-1 ${color} border hover:bg-muted/80 cursor-pointer`}>
-                                        <CategoryIcon />
-                                        <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
-                                    </Badge>
-                                </Link>
-                             ) : (
-                                <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
-                                    <CategoryIcon />
-                                    <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
-                                </Badge>
-                             )}
-                          </TableCell>
+                          <TableCell className="text-muted-foreground">{account?.name || 'Unknown Account'}</TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
                               {transaction.tags?.map(tag => {
@@ -502,7 +457,7 @@ export default function AccountDetailPage() {
                                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                                     </div>
                                   </AlertDialogTrigger>
-                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( // Ensure not to show delete confirmation if edit dialog is open for the same tx
+                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( 
                                     <AlertDialogContent>
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -529,7 +484,7 @@ export default function AccountDetailPage() {
                 </Table>
               ) : (
                 <div className="text-center py-10">
-                  <p className="text-muted-foreground">No transactions found for this account in the selected period.</p>
+                  <p className="text-muted-foreground">No transactions found for this category in the selected period.</p>
                 </div>
               )}
             </CardContent>
@@ -538,7 +493,7 @@ export default function AccountDetailPage() {
         <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
           <MonthlySummarySidebar
             transactions={filteredTransactions}
-            accounts={account ? [account] : []}
+            accounts={allAccounts}
             preferredCurrency={preferredCurrency}
             transactionType="all" 
             isLoading={isLoading}
@@ -559,12 +514,12 @@ export default function AccountDetailPage() {
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleUpdateTransaction} // This effectively becomes "onSaveEditedTransaction"
+              onTransactionAdded={handleUpdateTransaction}
               isLoading={isLoading}
               initialData={{
-                ...selectedTransaction, // Pass the full selected transaction for editing
+                ...selectedTransaction, 
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.abs(selectedTransaction.amount), // Amount should be positive in form
+                amount: Math.abs(selectedTransaction.amount), 
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />
@@ -575,7 +530,7 @@ export default function AccountDetailPage() {
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
         setIsAddTransactionDialogOpen(open);
         if (!open) {
-            setClonedTransactionData(undefined); // Reset cloned data when dialog closes
+            setClonedTransactionData(undefined);
             setTransactionTypeToAdd(null);
         }
       }}>
@@ -583,7 +538,6 @@ export default function AccountDetailPage() {
           <DialogHeader>
              <DialogTitle>
               {clonedTransactionData ? 'Clone & Edit Transaction' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}
-              {account && !clonedTransactionData && ` for ${account.name}`}
             </DialogTitle>
           </DialogHeader>
           {isLoading ? <Skeleton className="h-64 w-full"/> : 
@@ -592,18 +546,15 @@ export default function AccountDetailPage() {
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleTransactionAdded} // For new or cloned
-              onTransferAdded={handleTransferAdded}     // For new or cloned transfers
+              onTransactionAdded={handleTransactionAdded}
+              onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
               initialData={
                 clonedTransactionData ||
-                (transactionTypeToAdd !== 'transfer' && account
-                    ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                    : (transactionTypeToAdd === 'transfer' && account 
-                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                        : {date: new Date()}) // Fallback for safety
-                )
+                ( (transactionTypeToAdd === 'expense' || transactionTypeToAdd === 'income') && category
+                    ? { category: category.name, date: new Date() } // Pre-fill category for expense/income
+                    : {date: new Date()}) // Fallback for transfer or safety
               }
             />
           )}

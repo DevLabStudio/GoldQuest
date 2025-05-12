@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -21,6 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
+import Link from 'next/link'; // Import Link
 
 const INITIAL_TRANSACTION_LIMIT = 50;
 
@@ -38,8 +38,8 @@ const formatDate = (dateString: string): string => {
 export default function TransfersPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
@@ -78,8 +78,8 @@ export default function TransfersPage() {
         ]);
         if (isMounted) {
           setAccounts(fetchedAccounts);
-          setCategories(fetchedCategories);
-          setTags(fetchedTags);
+          setAllCategories(fetchedCategories);
+          setAllTags(fetchedTags);
         }
 
 
@@ -130,8 +130,8 @@ export default function TransfersPage() {
             const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([getAccounts(), getCategories(), getTags()]);
             setAccounts(fetchedAccounts);
-            setCategories(fetchedCategories);
-            setTags(fetchedTags);
+            setAllCategories(fetchedCategories);
+            setAllTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
                 const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id)); 
                 const txsByAcc = await Promise.all(tPromises);
@@ -322,7 +322,7 @@ export default function TransfersPage() {
             tags: editingTransferPair.from.tags || [],
         };
     }
-    return undefined;
+    return {date: new Date()}; // Default for new transaction
   }, [editingTransferPair, transactionTypeToAdd]);
 
   const dateRangeLabel = useMemo(() => {
@@ -456,7 +456,7 @@ export default function TransfersPage() {
                                                             <AlertDialogFooter>
                                                             <AlertDialogCancel onClick={() => setSelectedTransactionPair(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
                                                             <AlertDialogAction onClick={handleDeleteTransferConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                                                {isDeleting ? "Deleting Transfer..." : "Delete Transfer"}
+                                                                {isDeleting Transfer..." : "Delete Transfer"}
                                                             </AlertDialogAction>
                                                             </AlertDialogFooter>
                                                         </AlertDialogContent>
@@ -507,25 +507,25 @@ export default function TransfersPage() {
               {editingTransferPair ? 'Modify the details of your transfer.' : `Enter the details for your new ${transactionTypeToAdd || 'transaction'}.`}
             </DialogDescription>
           </DialogHeader>
-          {accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd && (
+          {isLoading ? <Skeleton className="h-64 w-full" /> :
+            (accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={accounts}
-              categories={categories}
-              tags={tags}
+              categories={allCategories}
+              tags={allTags}
               onTransactionAdded={handleTransactionAdded} 
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
-              initialData={initialFormDataForEdit || {date: new Date()}}
+              initialData={initialFormDataForEdit}
             />
           )}
-           {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
+           {(accounts.length === 0 || allCategories.length === 0 || allTags.length === 0) && !isLoading && (
                <div className="py-4 text-center text-muted-foreground">
-                 Please ensure you have at least one account, category, and tag set up before adding transactions.
+                 Please ensure you have at least one account (or two for transfers), category, and tag set up before adding transactions.
                    You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.
                </div>
             )}
-             {isLoading && <Skeleton className="h-40 w-full" /> }
         </DialogContent>
       </Dialog>
     </div>

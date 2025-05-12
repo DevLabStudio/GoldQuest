@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -23,6 +22,7 @@ import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
+import Link from 'next/link';
 
 
 const formatDate = (dateString: string): string => {
@@ -38,8 +38,8 @@ const formatDate = (dateString: string): string => {
 
 export default function RevenuePage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [tags, setTags] = useState<Tag[]>([]);
+  const [allCategories, setAllCategories] = useState<Category[]>([]);
+  const [allTags, setAllTags] = useState<Tag[]>([]);
   const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -78,8 +78,8 @@ export default function RevenuePage() {
             ]);
 
             if(isMounted) setAccounts(fetchedAccounts);
-            if(isMounted) setCategories(fetchedCategories);
-            if(isMounted) setTags(fetchedTags);
+            if(isMounted) setAllCategories(fetchedCategories);
+            if(isMounted) setAllTags(fetchedTags);
 
             if (fetchedAccounts.length > 0) {
                 const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
@@ -144,7 +144,7 @@ export default function RevenuePage() {
         try {
             const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); 
             const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
-            setAccounts(fetchedAccounts); setCategories(fetchedCategories); setTags(fetchedTags);
+            setAccounts(fetchedAccounts); setAllCategories(fetchedCategories); setAllTags(fetchedTags);
             if (fetchedAccounts.length > 0) {
                 const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const txsByAcc = await Promise.all(tPromises);
@@ -426,7 +426,7 @@ export default function RevenuePage() {
                             {incomeTransactions.map((transaction) => {
                                 const account = getAccountForTransaction(transaction.accountId);
                                 if (!account) return null;
-
+                                const categoryDetails = allCategories.find(c => c.name === transaction.category);
                                 const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
                                 
                                 return (
@@ -444,10 +444,19 @@ export default function RevenuePage() {
                                         <TableCell className="text-muted-foreground">{transaction.description}</TableCell> 
                                         <TableCell className="text-muted-foreground">{account.name}</TableCell>
                                         <TableCell>
-                                            <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
-                                                <CategoryIcon />
-                                                <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
-                                            </Badge>
+                                            {categoryDetails ? (
+                                                <Link href={`/categories/${categoryDetails.id}`} passHref>
+                                                    <Badge variant="outline" className={`flex items-center gap-1 ${color} border hover:bg-muted/80 cursor-pointer`}>
+                                                        <CategoryIcon />
+                                                        <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
+                                                    </Badge>
+                                                </Link>
+                                            ) : (
+                                                <Badge variant="outline" className={`flex items-center gap-1 ${color} border`}>
+                                                    <CategoryIcon />
+                                                    <span className="capitalize">{transaction.category || 'Uncategorized'}</span>
+                                                </Badge>
+                                            )}
                                         </TableCell>
                                         <TableCell>
                                             <div className="flex flex-wrap gap-1">
@@ -544,11 +553,11 @@ export default function RevenuePage() {
                         Modify the details of the transaction.
                     </DialogDescription>
                 </DialogHeader>
-                {selectedTransaction && accounts.length > 0 && categories.length > 0 && tags.length > 0 && (
+                {selectedTransaction && accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
                     <AddTransactionForm
                         accounts={accounts}
-                        categories={categories}
-                        tags={tags}
+                        categories={allCategories}
+                        tags={allTags}
                         onTransactionAdded={handleUpdateTransaction} // This effectively becomes "onSaveEditedTransaction"
                         isLoading={isLoading}
                         initialData={{
@@ -562,7 +571,7 @@ export default function RevenuePage() {
                  {!selectedTransaction && (
                      <p className="text-muted-foreground text-center p-4">Loading transaction data...</p>
                  )}
-                  {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && (
+                  {(accounts.length === 0 || allCategories.length === 0 || allTags.length === 0) && (
                      <p className="text-destructive text-center p-4">Cannot edit transaction: Missing account, category, or tag data.</p>
                  )}
             </DialogContent>
@@ -585,11 +594,11 @@ export default function RevenuePage() {
             </DialogDescription>
           </DialogHeader>
           {isLoading ? <Skeleton className="h-64 w-full" /> : 
-          (accounts.length > 0 && categories.length > 0 && tags.length > 0 && transactionTypeToAdd) && (
+          (accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={accounts}
-              categories={categories}
-              tags={tags}
+              categories={allCategories}
+              tags={allTags}
               onTransactionAdded={handleTransactionAdded}
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
@@ -597,7 +606,7 @@ export default function RevenuePage() {
               initialData={clonedTransactionData || {date: new Date()}}
             />
           )}
-           {(accounts.length === 0 || categories.length === 0 || tags.length === 0) && !isLoading && (
+           {(accounts.length === 0 || allCategories.length === 0 || allTags.length === 0) && !isLoading && (
                <div className="py-4 text-center text-muted-foreground">
                  Please ensure you have at least one account, category, and tag set up before adding transactions.
                    You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.
