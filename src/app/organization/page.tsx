@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -306,16 +307,16 @@ export default function OrganizationPage() {
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
-                        <Link href={`/groups/${group.id}`} legacyBehavior passHref>
-                           <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1">
+                        <Link href={`/groups/${group.id}`} passHref legacyBehavior>
+                           <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                              <a><Eye className="h-4 w-4" /><span>View Details</span></a>
                            </Button>
                         </Link>
-                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}>
-                           <Edit3 className="mr-1 h-4 w-4" /> Edit Name
+                        <Button asChild variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}>
+                           <span><Edit3 className="mr-1 h-4 w-4" /> Edit Name</span>
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
-                          <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
+                        <Button asChild variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
+                          <span><Settings2 className="mr-1 h-4 w-4" /> Manage Categories</span>
                         </Button>
                         <AlertDialog
                           open={selectedGroupForDeletion?.id === group.id}
@@ -324,8 +325,8 @@ export default function OrganizationPage() {
                           }}
                         >
                           <AlertDialogTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
-                                <Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span>
+                             <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
+                                <span><Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span></span>
                              </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -435,7 +436,7 @@ export default function OrganizationPage() {
                          <CategoryIcon className="h-4 w-4" /> <span className="capitalize truncate">{category.name}</span>
                        </div>
                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); openEditCategoryDialog(category);}}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
+                          <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openEditCategoryDialog(category);}}><span><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></span></Button>
                           <AlertDialog
                             open={selectedCategory?.id === category.id && !isEditCategoryDialogOpen && !isDeletingCategory}
                             onOpenChange={(isOpen) => {
@@ -443,8 +444,8 @@ export default function OrganizationPage() {
                             }}
                           >
                               <AlertDialogTrigger asChild>
-                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); openDeleteCategoryDialog(category);}}>
-                                      <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span>
+                                  <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openDeleteCategoryDialog(category);}}>
+                                      <span><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></span>
                                   </Button>
                               </AlertDialogTrigger>
                               <AlertDialogContent>
@@ -503,7 +504,7 @@ export default function OrganizationPage() {
                         <TagIconStyledComponent /> <span className="truncate">{tag.name}</span>
                       </div>
                       <div className="absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); openEditTagDialog(tag);}}><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button>
+                        <Button asChild variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openEditTagDialog(tag);}}><span><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></span></Button>
                         <AlertDialog
                             open={selectedTag?.id === tag.id && !isEditTagDialogOpen && !isDeletingTag}
                             onOpenChange={(isOpen) => {
@@ -511,8 +512,8 @@ export default function OrganizationPage() {
                             }}
                         >
                             <AlertDialogTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); openDeleteTagDialog(tag);}}>
-                                    <Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span>
+                                <Button asChild variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openDeleteTagDialog(tag);}}>
+                                    <span><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></span>
                                 </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent>
@@ -568,3 +569,4 @@ export default function OrganizationPage() {
     </div>
   );
 }
+
