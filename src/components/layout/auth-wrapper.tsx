@@ -180,7 +180,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-                <SidebarGroup>
+                 <SidebarGroup>
                     <SidebarGroupLabel>Menu</SidebarGroupLabel>
                     <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
@@ -253,15 +253,17 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                          </SidebarMenuItem>
                         </>
                     )}
-                    <SidebarMenuItem>
-                        <Link href="/investments" passHref>
-                            <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
-                                <Wallet />
-                                <span>Investments</span>
-                            </SidebarMenuButton>
-                        </Link>
-                    </SidebarMenuItem>
-                </SidebarGroup>
+                    </SidebarGroup>
+                    <SidebarGroup>
+                        <SidebarMenuItem>
+                            <Link href="/investments" passHref>
+                                <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
+                                    <Wallet />
+                                    <span>Investments</span>
+                                </SidebarMenuButton>
+                            </Link>
+                        </SidebarMenuItem>
+                    </SidebarGroup>
                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/organization" passHref>
