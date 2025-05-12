@@ -8,17 +8,16 @@ import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import type { Category } from '@/services/categories.tsx'; // Import Category type if needed later (updated extension)
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Category name cannot be empty").max(50, "Category name too long"),
-  // Future fields: icon, color
+  icon: z.string().max(5, "Icon should be short (e.g., emoji or 1-2 chars).").optional(),
 });
 
 type AddCategoryFormData = z.infer<typeof formSchema>;
 
 interface AddCategoryFormProps {
-  onCategoryAdded: (categoryName: string) => Promise<void> | void; // Async or sync callback
+  onCategoryAdded: (categoryName: string, icon?: string) => Promise<void> | void;
   isLoading: boolean;
 }
 
@@ -27,12 +26,13 @@ const AddCategoryForm: FC<AddCategoryFormProps> = ({ onCategoryAdded, isLoading 
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: "",
+      icon: "",
     },
   });
 
   async function onSubmit(values: AddCategoryFormData) {
-    await onCategoryAdded(values.name);
-    form.reset(); // Reset form after successful submission (handled in parent)
+    await onCategoryAdded(values.name, values.icon);
+    form.reset();
   }
 
   return (
@@ -55,7 +55,22 @@ const AddCategoryForm: FC<AddCategoryFormProps> = ({ onCategoryAdded, isLoading 
           )}
         />
 
-        {/* Add fields for icon/color selection here later */}
+        <FormField
+          control={form.control}
+          name="icon"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Icon (Optional)</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., 🛒 or Home" {...field} />
+              </FormControl>
+              <FormDescription>
+                Enter a short icon or emoji (e.g., 💰, 🚗).
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <Button type="submit" className="w-full" disabled={isLoading}>
           {isLoading ? "Adding..." : "Add Category"}

@@ -8,18 +8,18 @@ import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription } from "@/components/ui/form";
-import type { Category } from '@/services/categories.tsx'; // Updated extension
+import type { Category } from '@/services/categories';
 
 const formSchema = z.object({
   name: z.string().trim().min(1, "Category name cannot be empty").max(50, "Category name too long"),
-  // Future fields: icon, color
+  icon: z.string().max(5, "Icon should be short (e.g., emoji or 1-2 chars).").optional(),
 });
 
 type EditCategoryFormData = z.infer<typeof formSchema>;
 
 interface EditCategoryFormProps {
-  category: Category; // The category being edited
-  onCategoryUpdated: (categoryId: string, newName: string) => Promise<void> | void; // Async or sync
+  category: Category;
+  onCategoryUpdated: (categoryId: string, newName: string, newIcon?: string) => Promise<void> | void;
   isLoading: boolean;
 }
 
@@ -28,12 +28,12 @@ const EditCategoryForm: FC<EditCategoryFormProps> = ({ category, onCategoryUpdat
     resolver: zodResolver(formSchema),
     defaultValues: {
       name: category.name,
+      icon: category.icon || "",
     },
   });
 
   async function onSubmit(values: EditCategoryFormData) {
-    await onCategoryUpdated(category.id, values.name);
-    // Don't reset here, parent closes dialog
+    await onCategoryUpdated(category.id, values.name, values.icon);
   }
 
   return (
@@ -56,7 +56,22 @@ const EditCategoryForm: FC<EditCategoryFormProps> = ({ category, onCategoryUpdat
           )}
         />
 
-        {/* Add fields for icon/color selection here later */}
+        <FormField
+          control={form.control}
+          name="icon"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Icon (Optional)</FormLabel>
+              <FormControl>
+                <Input placeholder="e.g., 🛒 or Home" {...field} />
+              </FormControl>
+              <FormDescription>
+                Enter a short icon or emoji (e.g., 💰, 🚗). Leave blank to use default.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
 
         <Button type="submit" className="w-full" disabled={isLoading}>
            {isLoading ? "Saving..." : "Save Changes"}

@@ -2,13 +2,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link'; // Import Link
+import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users } from 'lucide-react';
+import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users, Tag as TagIconLucide } from 'lucide-react'; // Renamed Tag to TagIconLucide
 import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories";
 import AddCategoryForm from '@/components/categories/add-category-form';
 import EditCategoryForm from '@/components/categories/edit-category-form';
@@ -100,11 +100,11 @@ export default function OrganizationPage() {
 
 
   // Category Handlers
-  const handleAddCategory = async (categoryName: string) => {
+  const handleAddCategory = async (categoryName: string, icon?: string) => {
     setIsLoadingCategories(true);
     try {
-      await addCategory(categoryName);
-      await fetchData(); // Refetch all data
+      await addCategory(categoryName, icon);
+      await fetchData(); 
       setIsAddCategoryDialogOpen(false);
       toast({ title: "Success", description: `Category "${categoryName}" added.` });
     } catch (err: any) {
@@ -112,11 +112,11 @@ export default function OrganizationPage() {
       toast({ title: "Error Adding Category", description: err.message || "Could not add category.", variant: "destructive" });
     } finally { setIsLoadingCategories(false); }
   };
-  const handleUpdateCategory = async (categoryId: string, newName: string) => {
+  const handleUpdateCategory = async (categoryId: string, newName: string, newIcon?: string) => {
     setIsLoadingCategories(true);
     try {
-      await updateCategory(categoryId, newName);
-      await fetchData(); // Refetch all data
+      await updateCategory(categoryId, newName, newIcon);
+      await fetchData(); 
       setIsEditCategoryDialogOpen(false); setSelectedCategory(null);
       toast({ title: "Success", description: `Category updated to "${newName}".` });
     } catch (err: any) {
@@ -128,7 +128,7 @@ export default function OrganizationPage() {
     if (!selectedCategory) return; setIsDeletingCategory(true);
     try {
       await deleteCategory(selectedCategory.id);
-      await fetchData(); // Refetch all data
+      await fetchData(); 
       toast({ title: "Category Deleted", description: `Category "${selectedCategory.name}" removed.` });
     } catch (err: any) {
       console.error("Failed to delete category:", err);
@@ -143,7 +143,7 @@ export default function OrganizationPage() {
     setIsLoadingTags(true);
     try {
       await addTag(tagName);
-      await fetchData(); // Refetch all data
+      await fetchData(); 
       setIsAddTagDialogOpen(false);
       toast({ title: "Success", description: `Tag "${tagName}" added.` });
     } catch (err: any) {
@@ -155,7 +155,7 @@ export default function OrganizationPage() {
     setIsLoadingTags(true);
     try {
       await updateTag(tagId, newName);
-      await fetchData(); // Refetch all data
+      await fetchData(); 
       setIsEditTagDialogOpen(false); setSelectedTag(null);
       toast({ title: "Success", description: `Tag updated to "${newName}".` });
     } catch (err: any) {
@@ -167,7 +167,7 @@ export default function OrganizationPage() {
     if (!selectedTag) return; setIsDeletingTag(true);
     try {
       await deleteTag(selectedTag.id);
-      await fetchData(); // Refetch all data
+      await fetchData(); 
       toast({ title: "Tag Deleted", description: `Tag "${selectedTag.name}" removed.` });
     } catch (err: any) {
       console.error("Failed to delete tag:", err);
@@ -182,7 +182,7 @@ export default function OrganizationPage() {
     setIsLoadingGroups(true);
     try {
       await addGroup(groupName);
-      await fetchData(); // Refetch all data
+      await fetchData(); 
       setIsAddGroupDialogOpen(false);
       toast({ title: "Success", description: `Group "${groupName}" added.` });
     } catch (err: any) {
@@ -220,7 +220,7 @@ export default function OrganizationPage() {
     setIsDeletingGroup(true);
     try {
       await deleteGroup(selectedGroupForDeletion.id);
-      await fetchData(); // Refetch all data
+      await fetchData(); 
       toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
     } catch (err:any) {
       console.error("Failed to delete group:", err);
@@ -318,10 +318,10 @@ export default function OrganizationPage() {
                           {group.categoryIds.map(catId => {
                             const category = categories.find(c => c.id === catId);
                             if (!category) return null;
-                            const { icon: CategoryIcon, color } = getCategoryStyle(category.name);
+                            const { icon: CategoryIcon, color } = getCategoryStyle(category);
                             return (
                               <Badge key={catId} variant="outline" className={`flex items-center gap-1 ${color} border`}>
-                                <CategoryIcon /> <span className="capitalize">{category.name}</span>
+                                <CategoryIcon className="h-4 w-4" /> <span className="capitalize">{category.name}</span>
                               </Badge>
                             );
                           })}
@@ -368,7 +368,7 @@ export default function OrganizationPage() {
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Add New Category</DialogTitle>
-                  <DialogDescription>Enter a unique name for the new category.</DialogDescription>
+                  <DialogDescription>Enter a unique name and optionally an icon (emoji) for the new category.</DialogDescription>
                 </DialogHeader>
                 <AddCategoryForm onCategoryAdded={handleAddCategory} isLoading={isLoadingCategories} />
               </DialogContent>
@@ -385,12 +385,12 @@ export default function OrganizationPage() {
           ) : categories.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {categories.map((category) => {
-                const { icon: CategoryIcon, color } = getCategoryStyle(category.name);
+                const { icon: CategoryIcon, color } = getCategoryStyle(category);
                 return (
                   <Link key={category.id} href={`/categories/${category.id}`} passHref className="group relative">
                      <Badge variant="outline" className={`w-full justify-between py-2 px-3 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`}>
                        <div className="flex items-center gap-1 overflow-hidden mr-8">
-                         <CategoryIcon /> <span className="capitalize truncate">{category.name}</span>
+                         <CategoryIcon className="h-4 w-4" /> <span className="capitalize truncate">{category.name}</span>
                        </div>
                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); openEditCategoryDialog(category);}}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
@@ -398,7 +398,6 @@ export default function OrganizationPage() {
                             open={selectedCategory?.id === category.id && !isEditCategoryDialogOpen && !isDeletingCategory}
                             onOpenChange={(isOpen) => {
                                 if (!isOpen) setSelectedCategory(null);
-                                // If opening, openDeleteCategoryDialog should be called by the trigger's onClick
                             }}
                           >
                               <AlertDialogTrigger asChild>
@@ -431,7 +430,7 @@ export default function OrganizationPage() {
             <Dialog open={isAddTagDialogOpen} onOpenChange={setIsAddTagDialogOpen}>
               <DialogTrigger asChild>
                 <Button variant="default" size="sm">
-                  <PlusCircle className="mr-2 h-4 w-4" /> Add New Tag
+                  <TagIconLucide className="mr-2 h-4 w-4" /> Add New Tag
                 </Button>
               </DialogTrigger>
               <DialogContent>
@@ -454,12 +453,12 @@ export default function OrganizationPage() {
           ) : tags.length > 0 ? (
             <div className="flex flex-wrap gap-3">
               {tags.map((tag) => {
-                const { icon: TagIconStyled, color } = getTagStyle(tag.name);
+                const { icon: TagIconStyledComponent, color } = getTagStyle(tag.name);
                 return (
                   <div key={tag.id} className="group relative">
                     <Badge variant="outline" className={`justify-between py-1 px-2.5 text-sm ${color} border items-center`}>
                       <div className="flex items-center gap-1 overflow-hidden mr-8">
-                        <TagIconStyled /> <span className="truncate">{tag.name}</span>
+                        <TagIconStyledComponent /> <span className="truncate">{tag.name}</span>
                       </div>
                       <div className="absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => openEditTagDialog(tag)}><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button>
@@ -496,7 +495,7 @@ export default function OrganizationPage() {
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Edit Category</DialogTitle>
-                    <DialogDescription>Modify the name of your category.</DialogDescription>
+                    <DialogDescription>Modify the name and icon (emoji) of your category.</DialogDescription>
                 </DialogHeader>
                 {selectedCategory && (
                     <EditCategoryForm 
@@ -527,4 +526,3 @@ export default function OrganizationPage() {
     </div>
   );
 }
-
