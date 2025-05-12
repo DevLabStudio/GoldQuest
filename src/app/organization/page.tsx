@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect } from 'react';
@@ -8,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users, Tag as TagIconLucide, Eye } from 'lucide-react'; 
+import { PlusCircle, Edit, Trash2, FolderPlus, Settings2, Users, Tag as TagIconLucide, Eye, Edit3 } from 'lucide-react';
 import { getCategories, addCategory, updateCategory, deleteCategory, type Category, getCategoryStyle } from "@/services/categories";
 import AddCategoryForm from '@/components/categories/add-category-form';
 import EditCategoryForm from '@/components/categories/edit-category-form';
@@ -17,6 +16,7 @@ import AddTagForm from '@/components/tags/add-tag-form';
 import EditTagForm from '@/components/tags/edit-tag-form';
 import { getGroups, addGroup, updateGroup, deleteGroup, type Group } from "@/services/groups";
 import AddGroupForm from '@/components/organization/add-group-form';
+import EditGroupForm from '@/components/organization/edit-group-form'; // Import EditGroupForm
 import ManageGroupCategoriesDialog from '@/components/organization/manage-group-categories-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
@@ -47,6 +47,8 @@ export default function OrganizationPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
+  const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false); // State for edit group dialog
+  const [selectedGroupForEdit, setSelectedGroupForEdit] = useState<Group | null>(null); // State for group being edited
   const [isManageGroupCategoriesDialogOpen, setIsManageGroupCategoriesDialogOpen] = useState(false);
   const [selectedGroupForCategoryManagement, setSelectedGroupForCategoryManagement] = useState<Group | null>(null);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
@@ -191,6 +193,34 @@ export default function OrganizationPage() {
     } finally { setIsLoadingGroups(false); }
   };
 
+  const handleUpdateGroup = async (groupId: string, newName: string) => {
+    setIsLoadingGroups(true);
+    const groupToUpdate = groups.find(g => g.id === groupId);
+    if (!groupToUpdate) {
+        toast({ title: "Error", description: "Group not found for update.", variant: "destructive" });
+        setIsLoadingGroups(false);
+        return;
+    }
+    try {
+        await updateGroup({ ...groupToUpdate, name: newName }); // Only update name here, categories managed separately
+        await fetchData();
+        setIsEditGroupDialogOpen(false);
+        setSelectedGroupForEdit(null);
+        toast({ title: "Success", description: `Group name updated to "${newName}".` });
+    } catch (err: any) {
+        console.error("Failed to update group name:", err);
+        toast({ title: "Error Updating Group Name", description: err.message || "Could not update group name.", variant: "destructive" });
+    } finally {
+        setIsLoadingGroups(false);
+    }
+  };
+
+  const openEditGroupDialog = (group: Group) => {
+    setSelectedGroupForEdit(group);
+    setIsEditGroupDialogOpen(true);
+  };
+
+
   const handleSaveGroupCategories = async (groupId: string, selectedCategoryIds: string[]) => {
     setIsLoadingGroups(true);
     try {
@@ -277,20 +307,16 @@ export default function OrganizationPage() {
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
                         <Link href={`/groups/${group.id}`} legacyBehavior passHref>
-                           <a className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 flex items-center gap-1")}>
-                             <Eye className="h-4 w-4" />
-                             <span>View Details</span>
-                           </a>
+                           <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1">
+                             <a><Eye className="h-4 w-4" /><span>View Details</span></a>
+                           </Button>
                         </Link>
-                        <div
-                          role="button"
-                          tabIndex={0}
-                          className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 cursor-pointer flex items-center")}
-                          onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}
-                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}}
-                        >
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}>
+                           <Edit3 className="mr-1 h-4 w-4" /> Edit Name
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
                           <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
-                        </div>
+                        </Button>
                         <AlertDialog
                           open={selectedGroupForDeletion?.id === group.id}
                           onOpenChange={(isOpen) => {
@@ -298,16 +324,9 @@ export default function OrganizationPage() {
                           }}
                         >
                           <AlertDialogTrigger asChild>
-                             <div
-                                role="button"
-                                tabIndex={0}
-                                className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer flex items-center justify-center")}
-                                onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}
-                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openDeleteGroupDialog(group); }}}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="sr-only">Delete Group</span>
-                             </div>
+                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
+                                <Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span>
+                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
                             <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the group "{selectedGroupForDeletion?.name}". Categories within it will not be deleted but unlinked.</AlertDialogDescription></AlertDialogHeader>
@@ -358,6 +377,23 @@ export default function OrganizationPage() {
           isLoading={isLoadingGroups}
         />
       )}
+
+      {/* Edit Group Dialog */}
+      <Dialog open={isEditGroupDialogOpen} onOpenChange={(open) => { setIsEditGroupDialogOpen(open); if (!open) setSelectedGroupForEdit(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Group Name</DialogTitle>
+            <DialogDescription>Change the name of your group.</DialogDescription>
+          </DialogHeader>
+          {selectedGroupForEdit && (
+            <EditGroupForm
+              group={selectedGroupForEdit}
+              onGroupUpdated={handleUpdateGroup}
+              isLoading={isLoadingGroups}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
 
       {/* Categories Section */}
@@ -532,4 +568,3 @@ export default function OrganizationPage() {
     </div>
   );
 }
-
