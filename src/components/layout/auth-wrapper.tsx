@@ -51,12 +51,13 @@ const LogoIcon = () => (
     <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
 
     {/* Circles at vertices */}
+    <circle cx="75" cy="25" r="5" fill="currentColor"/>
     <circle cx="50" cy="10" r="5" fill="currentColor"/>
     <circle cx="25" cy="25" r="5" fill="currentColor"/>
-    <circle cx="75" cy="25" r="5" fill="currentColor"/>
     <circle cx="25" cy="75" r="5" fill="currentColor"/>
     <circle cx="50" cy="90" r="5" fill="currentColor"/>
     <circle cx="75" cy="75" r="5" fill="currentColor"/>
+    <circle cx="75" cy="50" r="5" fill="currentColor"/> {/* Added this circle */}
     <circle cx="50" cy="50" r="5" fill="currentColor"/>
   </svg>
 );
@@ -67,7 +68,7 @@ interface AuthWrapperProps {
 }
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
-  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences } = useAuthContext();
+  const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences, firebaseError } = useAuthContext();
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
@@ -78,12 +79,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   useEffect(() => {
     setIsClient(true);
+    // Set class name after mount to ensure styles are applied correctly
     setLoadingDivClassName("flex items-center justify-center min-h-screen bg-background text-foreground");
   }, []);
   
   useEffect(() => {
       const applyTheme = () => {
-          if (!isClient) return;
+          if (!isClient) return; // Only run on client
           const root = document.documentElement;
           let currentTheme = theme;
 
@@ -94,11 +96,12 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
           root.classList.remove('dark', 'light');
           root.classList.add(currentTheme);
-          root.style.colorScheme = currentTheme;
+          root.style.colorScheme = currentTheme; // Important for native elements
       };
 
       applyTheme(); 
 
+      // Listen for system theme changes if 'system' is selected
       if (theme === 'system' && typeof window !== 'undefined') {
           const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
           const handleChange = () => applyTheme();
@@ -125,6 +128,8 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     
     if(typeof window !== 'undefined') {
         const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
+        // Check if preferences are loaded and specifically if the theme is set.
+        // This implies preferences have been fetched at least once.
         const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
 
         if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
@@ -139,8 +144,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
-  const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control'; // Updated for single page
-  const isOrganizationActive = isClient && pathname === '/organization';
+  const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control';
+  const isOrganizationActive = isClient && (pathname === '/organization' || pathname.startsWith('/categories/') || pathname.startsWith('/tags/') || pathname.startsWith('/groups/'));
+  const isAccountsActive = isClient && (pathname === '/accounts' || pathname.startsWith('/accounts/'));
 
 
   if (!isClient || isLoadingAuth) {
@@ -148,6 +154,15 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
       <div className={loadingDivClassName}>Loading authentication...</div>
     );
   }
+  
+  if (firebaseError && !isFirebaseActive) {
+     if (pathname !== '/login' && pathname !== '/signup') {
+         router.push('/login'); // Redirect to login if firebase is critically broken and not on auth pages
+         return <div className={loadingDivClassName}>Firebase not available. Redirecting...</div>;
+     }
+     // Allow login/signup pages to render with the firebase error message handled within them
+  }
+
 
   if (!isAuthenticated && isFirebaseActive) {
     if (pathname !== '/signup' && pathname !== '/login') {
@@ -158,10 +173,11 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
     router.push('/login');
-    return <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Redirecting to login...</div>;
+    return <div className={loadingDivClassName}>Redirecting to login...</div>;
   }
 
   if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup'))) {
+     // If firebase is inactive but we are on login/signup, allow those pages to render
      if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup')) {
          return <LoginPage />;
      }
@@ -192,8 +208,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
+
                 <SidebarGroup>
-                    <SidebarMenuItem>
+                     <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
                             <SidebarMenuButton tooltip="Financial Control" isActive={isAnyFinancialControlRouteActive}>
                                 <SlidersHorizontal />
@@ -203,7 +220,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                     </SidebarMenuItem>
                      <SidebarMenuItem>
                         <Link href="/accounts" passHref>
-                        <SidebarMenuButton tooltip="Manage Accounts" isActive={isActive('/accounts')}>
+                        <SidebarMenuButton tooltip="Manage Accounts" isActive={isAccountsActive}>
                             <Landmark />
                             <span>Accounts</span>
                         </SidebarMenuButton>
@@ -253,7 +270,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                                     <span>Expenses</span>
                                 </SidebarMenuButton>
                             </Link>
-                        </SidebarMenuItem>
+                         </SidebarMenuItem>
                          <SidebarMenuItem className="ml-4">
                              <Link href="/transfers" passHref>
                                  <SidebarMenuButton tooltip="View Transfers" size="sm" isActive={isActive('/transfers')}>
@@ -333,6 +350,8 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
+  // Fallback for any unhandled state, though ideally one of the above conditions should always be met.
   return <div className={loadingDivClassName}>Preparing application...</div>;
 }
+
 
