@@ -222,8 +222,7 @@ export default function OrganizationPage() {
       await deleteGroup(selectedGroupForDeletion.id);
       await fetchData(); // Refetch all data
       toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
-    } catch (err: any)
-     {
+    } catch (err:any) {
       console.error("Failed to delete group:", err);
       toast({ title: "Error Deleting Group", description: err.message || "Could not delete group.", variant: "destructive" });
     } finally {
@@ -286,7 +285,12 @@ export default function OrganizationPage() {
                         >
                           <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
                         </div>
-                        <AlertDialog>
+                        <AlertDialog
+                          open={selectedGroupForDeletion?.id === group.id}
+                          onOpenChange={(isOpen) => {
+                            if (!isOpen) setSelectedGroupForDeletion(null);
+                          }}
+                        >
                           <AlertDialogTrigger asChild>
                              <div
                                 role="button"
@@ -299,12 +303,10 @@ export default function OrganizationPage() {
                                 <span className="sr-only">Delete Group</span>
                              </div>
                           </AlertDialogTrigger>
-                           {selectedGroupForDeletion?.id === group.id && (
-                              <AlertDialogContent>
-                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the group "{selectedGroupForDeletion.name}". Categories within it will not be deleted but unlinked.</AlertDialogDescription></AlertDialogHeader>
-                                <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedGroupForDeletion(null)} disabled={isDeletingGroup}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGroupConfirm} disabled={isDeletingGroup} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingGroup ? "Deleting..." : "Delete Group"}</AlertDialogAction></AlertDialogFooter>
-                              </AlertDialogContent>
-                           )}
+                          <AlertDialogContent>
+                            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the group "{selectedGroupForDeletion?.name}". Categories within it will not be deleted but unlinked.</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedGroupForDeletion(null)} disabled={isDeletingGroup}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGroupConfirm} disabled={isDeletingGroup} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingGroup ? "Deleting..." : "Delete Group"}</AlertDialogAction></AlertDialogFooter>
+                          </AlertDialogContent>
                         </AlertDialog>
                       </div>
                     </div>
@@ -392,14 +394,22 @@ export default function OrganizationPage() {
                        </div>
                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                           <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); openEditCategoryDialog(category);}}><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></Button>
-                          <AlertDialog>
-                              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); openDeleteCategoryDialog(category);}}><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
-                              {selectedCategory?.id === category.id && !isEditCategoryDialogOpen && (
-                                  <AlertDialogContent>
-                                      <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedCategory.name}".</AlertDialogDescription></AlertDialogHeader>
-                                      <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedCategory(null)} disabled={isDeletingCategory}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteCategoryConfirm} disabled={isDeletingCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingCategory ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
-                                  </AlertDialogContent>
-                              )}
+                          <AlertDialog
+                            open={selectedCategory?.id === category.id && !isEditCategoryDialogOpen && !isDeletingCategory}
+                            onOpenChange={(isOpen) => {
+                                if (!isOpen) setSelectedCategory(null);
+                                // If opening, openDeleteCategoryDialog should be called by the trigger's onClick
+                            }}
+                          >
+                              <AlertDialogTrigger asChild>
+                                  <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); openDeleteCategoryDialog(category);}}>
+                                      <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span>
+                                  </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                  <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedCategory?.name}".</AlertDialogDescription></AlertDialogHeader>
+                                  <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedCategory(null)} disabled={isDeletingCategory}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteCategoryConfirm} disabled={isDeletingCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingCategory ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
+                              </AlertDialogContent>
                           </AlertDialog>
                        </div>
                      </Badge>
@@ -453,14 +463,21 @@ export default function OrganizationPage() {
                       </div>
                       <div className="absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                         <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={() => openEditTagDialog(tag)}><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></Button>
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => openDeleteTagDialog(tag)}><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></Button></AlertDialogTrigger>
-                            {selectedTag?.id === tag.id && !isEditTagDialogOpen && (
-                                <AlertDialogContent>
-                                    <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the tag "{selectedTag.name}".</AlertDialogDescription></AlertDialogHeader>
-                                    <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedTag(null)} disabled={isDeletingTag}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTagConfirm} disabled={isDeletingTag} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingTag ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
-                                </AlertDialogContent>
-                            )}
+                        <AlertDialog
+                            open={selectedTag?.id === tag.id && !isEditTagDialogOpen && !isDeletingTag}
+                            onOpenChange={(isOpen) => {
+                                if (!isOpen) setSelectedTag(null);
+                            }}
+                        >
+                            <AlertDialogTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={() => openDeleteTagDialog(tag)}>
+                                    <Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span>
+                                </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the tag "{selectedTag?.name}".</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedTag(null)} disabled={isDeletingTag}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTagConfirm} disabled={isDeletingTag} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingTag ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
+                            </AlertDialogContent>
                         </AlertDialog>
                       </div>
                     </Badge>
