@@ -1,3 +1,4 @@
+
 'use client';
 
 import { database, auth } from '@/lib/firebase';
@@ -53,12 +54,27 @@ export async function getSubscriptions(): Promise<Subscription[]> {
     const snapshot = await get(subscriptionsRef);
     if (snapshot.exists()) {
       const subscriptionsData = snapshot.val();
-      return Object.entries(subscriptionsData).map(([id, data]) => ({
-        id,
-        ...(data as Omit<Subscription, 'id'>),
-        lastPaidMonth: (data as Subscription).lastPaidMonth || null,
-        groupId: (data as Subscription).groupId || null, // Ensure groupId is null if not present
-      }));
+      return Object.entries(subscriptionsData).map(([id, data]) => {
+        const subData = data as Partial<Omit<Subscription, 'id'>>; // Treat as partial initially
+        return {
+          id,
+          name: subData.name || 'Unnamed Subscription',
+          amount: typeof subData.amount === 'number' ? subData.amount : 0,
+          currency: subData.currency || 'USD', // Default currency
+          type: subData.type || 'expense', // Default type
+          category: subData.category || 'Uncategorized',
+          accountId: subData.accountId,
+          groupId: subData.groupId || null,
+          startDate: typeof subData.startDate === 'string' && subData.startDate ? subData.startDate : new Date().toISOString().split('T')[0], // Default if missing/invalid
+          frequency: subData.frequency || 'monthly', // Default frequency
+          nextPaymentDate: typeof subData.nextPaymentDate === 'string' && subData.nextPaymentDate ? subData.nextPaymentDate : new Date().toISOString().split('T')[0], // Default if missing/invalid
+          notes: subData.notes,
+          tags: subData.tags || [],
+          lastPaidMonth: subData.lastPaidMonth || null,
+          createdAt: subData.createdAt,
+          updatedAt: subData.updatedAt,
+        };
+      });
     }
     return [];
   } catch (error) {
@@ -126,29 +142,21 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
     updatedAt: serverTimestamp(),
   };
 
-  if (updatedSubscription.accountId) {
-    dataToUpdate.accountId = updatedSubscription.accountId;
-  } else {
-    dataToUpdate.accountId = null; // Explicitly set to null if undefined/empty to remove from DB
-  }
-
-  // Set groupId to null if it's undefined or empty, otherwise use its value
+  // Handle optional fields correctly, ensuring they are set to null if not provided
+  // to remove them from Firebase if they were previously set.
+  dataToUpdate.accountId = updatedSubscription.accountId || null;
   dataToUpdate.groupId = updatedSubscription.groupId || null;
-  
-  if (updatedSubscription.notes) {
-    dataToUpdate.notes = updatedSubscription.notes;
-  } else {
-    dataToUpdate.notes = null; // Explicitly set to null if undefined/empty
-  }
+  dataToUpdate.notes = updatedSubscription.notes || null;
+
 
   try {
     await update(subscriptionRef, dataToUpdate);
     // Return a consistent object reflecting what was attempted to be saved
     return {
       ...updatedSubscription,
-      accountId: dataToUpdate.accountId || undefined, // Reflect actual saved value (undefined if null)
-      groupId: dataToUpdate.groupId, // Reflect actual saved value (null if it was not set)
-      notes: dataToUpdate.notes || undefined, // Reflect actual saved value
+      accountId: dataToUpdate.accountId === null ? undefined : dataToUpdate.accountId,
+      groupId: dataToUpdate.groupId,
+      notes: dataToUpdate.notes === null ? undefined : dataToUpdate.notes,
       lastPaidMonth: dataToUpdate.lastPaidMonth,
     };
   } catch (error) {
