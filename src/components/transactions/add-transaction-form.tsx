@@ -80,7 +80,7 @@ interface AddTransactionFormProps {
     }) => Promise<void> | void;
   isLoading: boolean;
   initialType?: typeof transactionTypes[number];
-  initialData?: Partial<AddTransactionFormData & { date: Date | string; id?: string }>; // Added id to initialData for edit check
+  initialData?: Partial<AddTransactionFormData & { date: Date | string; id?: string }>;
 }
 
 const parseTagsInput = (input: string | undefined): string[] => {
@@ -126,7 +126,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
   const selectedToAccountId = form.watch('toAccountId');
   const formTransactionCurrency = form.watch('transactionCurrency');
 
-  // Determine if we are editing an existing transaction (which would have an ID)
   const isEditingExisting = !!(initialData && 'id' in initialData && initialData.id);
 
 
@@ -171,7 +170,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         amount: transactionAmount,
         transactionCurrency: values.transactionCurrency,
         date: formatDateFns(values.date, 'yyyy-MM-dd'),
-        description: values.description || values.category,
+        description: values.description || values.category || 'Transaction',
         category: values.category,
         tags: finalTags,
       };
@@ -218,8 +217,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     }
                   }}
                   defaultValue={field.value}
-                  // Disable type change if editing an existing transaction OR if it's an existing transfer
-                  disabled={isEditingExisting || (initialData?.type === 'transfer' && !!initialData?.id)}
+                  disabled={!!(initialData && initialData.id && initialData.type === 'transfer')}
               >
                 <FormControl>
                   <SelectTrigger>
@@ -262,14 +260,14 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>From Account</FormLabel>
-                            <Select 
+                            <Select
                                 onValueChange={(value) => {
                                     field.onChange(value);
                                     const acc = accounts.find(a => a.id === value);
                                     if (acc) form.setValue('transactionCurrency', acc.currency);
-                                }} 
+                                }}
                                 defaultValue={field.value}
-                                disabled={isEditingExisting} // Disable if editing existing transaction
+                                disabled={!!(initialData && initialData.id && initialData.type === 'transfer')}
                             >
                             <FormControl>
                                 <SelectTrigger>
@@ -294,10 +292,10 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>To Account</FormLabel>
-                            <Select 
-                                onValueChange={field.onChange} 
+                            <Select
+                                onValueChange={field.onChange}
                                 defaultValue={field.value}
-                                disabled={isEditingExisting} // Disable if editing existing transaction
+                                disabled={!!(initialData && initialData.id && initialData.type === 'transfer')}
                             >
                             <FormControl>
                                 <SelectTrigger>
@@ -324,14 +322,14 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         render={({ field }) => (
                         <FormItem>
                             <FormLabel>Account</FormLabel>
-                            <Select 
+                            <Select
                                 onValueChange={(value) => {
                                     field.onChange(value);
                                     const acc = accounts.find(a => a.id === value);
                                     if (acc) form.setValue('transactionCurrency', acc.currency);
-                                }} 
+                                }}
                                 defaultValue={field.value}
-                                disabled={isEditingExisting} // Disable if editing existing transaction
+                                disabled={!!(initialData && initialData.id && initialData.type === 'transfer')} // Keep account disabled for existing transfers
                             >
                             <FormControl>
                                 <SelectTrigger>
@@ -362,10 +360,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                             <FormControl>
                                 <Button
                                 variant={"outline"}
-                                className={cn(
-                                    "w-full pl-3 text-left font-normal",
-                                    !field.value && "text-muted-foreground"
-                                )}
+                                className={cn("w-full pl-3 text-left font-normal", !field.value && "text-muted-foreground")}
                                 >
                                 {field.value ? (
                                     formatDateFns(field.value, "PPP")
@@ -415,13 +410,10 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     render={({ field }) => (
                         <FormItem>
                         <FormLabel>Transaction Currency</FormLabel>
-                        <Select 
-                            onValueChange={field.onChange} 
-                            value={field.value} // Ensure value is controlled
-                            // Currency is derived for non-transfers or if it's an edit of existing non-transfer.
-                            // For new transfers, it's derived from fromAccount but can be overridden.
-                            // For cloned transfers, it should be editable.
-                            disabled={isEditingExisting && transactionType !== 'transfer'}
+                        <Select
+                            onValueChange={field.onChange}
+                            value={field.value}
+                            disabled={!!(initialData && initialData.id && initialData.type !== 'transfer')} // Disable if editing existing non-transfer
                         >
                             <FormControl>
                             <SelectTrigger>
@@ -437,7 +429,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                             </SelectContent>
                         </Select>
                         <FormDescription>
-                            {transactionType === 'transfer' ? 
+                            {transactionType === 'transfer' ?
                                 "Currency of the amount being transferred. Usually determined by 'From Account'." :
                                 "Determined by selected Account."
                             }
