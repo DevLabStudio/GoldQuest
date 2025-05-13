@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
@@ -9,7 +10,7 @@ import { getCategories, getCategoryStyle, Category } from '@/services/categories
 import { getTags, type Tag, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
 import { Button } from '@/components/ui/button';

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -8,7 +9,7 @@ import { getTransactions, deleteTransaction, type Transaction, addTransaction, u
 import { getCategories, Category } from '@/services/categories';
 import { getTags, Tag } from '@/services/tags';
 import { Skeleton } from "@/components/ui/skeleton";
-import { formatCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
 import { MoreHorizontal, Edit, Trash2, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
@@ -303,7 +304,7 @@ export default function TransfersPage() {
             type: 'transfer' as 'transfer',
             fromAccountId: editingTransferPair.from.accountId,
             toAccountId: editingTransferPair.to.accountId,
-            amount: Math.Abs(editingTransferPair.from.amount),
+            amount: Math.abs(editingTransferPair.from.amount),
             transactionCurrency: editingTransferPair.from.transactionCurrency,
             date: parseISO(editingTransferPair.from.date.includes('T') ? editingTransferPair.from.date : editingTransferPair.from.date + 'T00:00:00Z'),
             description: editingTransferPair.from.description,
@@ -400,10 +401,10 @@ export default function TransfersPage() {
                                     <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{pair.from.description || 'Transfer'}</TableCell>
                                         <TableCell className="text-right font-medium">
-                                            <div>{formatCurrency(Math.Abs(pair.from.amount), pair.from.transactionCurrency, pair.from.transactionCurrency, false)}</div>
+                                            <div>{formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, pair.from.transactionCurrency, false)}</div>
                                             {pair.from.transactionCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                                             <div className="text-xs text-muted-foreground">
-                                                (≈ {formatCurrency(Math.Abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true)})
+                                                (≈ {formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true)})
                                             </div>
                                             )}
                                         </TableCell>
