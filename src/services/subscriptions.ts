@@ -16,19 +16,21 @@ export interface Subscription {
   type: SubscriptionType;
   category: string;
   accountId?: string; // Optional: Link to an account
-  groupId?: string | null; // Optional: Link to a group, can be null
+  groupId: string | null; // Optional: Link to a group, can be null
   startDate: string; // ISO string: YYYY-MM-DD
   frequency: SubscriptionFrequency;
   nextPaymentDate: string; // ISO string: YYYY-MM-DD
   notes?: string;
   tags?: string[];
   lastPaidMonth?: string | null; // YYYY-MM format, or null if not paid for the current cycle
+  description?: string;
   createdAt?: object; // For server timestamp
   updatedAt?: object; // For server timestamp
 }
 
 export type NewSubscriptionData = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt' | 'lastPaidMonth'> & {
     lastPaidMonth?: string | null;
+    groupId?: string | null; // Ensure groupId is optional and can be null here too
 };
 
 export function getSubscriptionsRefPath(currentUser: User | null) {
@@ -64,13 +66,14 @@ export async function getSubscriptions(): Promise<Subscription[]> {
           type: subData.type || 'expense', // Default type
           category: subData.category || 'Uncategorized',
           accountId: subData.accountId,
-          groupId: subData.groupId || null,
+          groupId: subData.groupId === undefined ? null : subData.groupId, // Ensure groupId is null if undefined
           startDate: typeof subData.startDate === 'string' && subData.startDate ? subData.startDate : new Date().toISOString().split('T')[0], // Default if missing/invalid
           frequency: subData.frequency || 'monthly', // Default frequency
           nextPaymentDate: typeof subData.nextPaymentDate === 'string' && subData.nextPaymentDate ? subData.nextPaymentDate : new Date().toISOString().split('T')[0], // Default if missing/invalid
           notes: subData.notes,
           tags: subData.tags || [],
           lastPaidMonth: subData.lastPaidMonth || null,
+          description: subData.description,
           createdAt: subData.createdAt,
           updatedAt: subData.updatedAt,
         };
@@ -100,7 +103,7 @@ export async function addSubscription(subscriptionData: NewSubscriptionData): Pr
     ...subscriptionData,
     id: newSubscriptionRef.key,
     lastPaidMonth: subscriptionData.lastPaidMonth || null,
-    groupId: subscriptionData.groupId || null, // Set to null if undefined
+    groupId: subscriptionData.groupId === undefined || subscriptionData.groupId === "" ? null : subscriptionData.groupId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -139,13 +142,14 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
     nextPaymentDate: updatedSubscription.nextPaymentDate,
     tags: updatedSubscription.tags || [],
     lastPaidMonth: updatedSubscription.lastPaidMonth === undefined ? null : updatedSubscription.lastPaidMonth,
+    description: updatedSubscription.description || null, // Ensure description is null if empty
     updatedAt: serverTimestamp(),
   };
 
   // Handle optional fields correctly, ensuring they are set to null if not provided
   // to remove them from Firebase if they were previously set.
-  dataToUpdate.accountId = updatedSubscription.accountId || null;
-  dataToUpdate.groupId = updatedSubscription.groupId === undefined ? null : updatedSubscription.groupId;
+  dataToUpdate.accountId = updatedSubscription.accountId || null; // set to null if undefined or empty
+  dataToUpdate.groupId = updatedSubscription.groupId === undefined || updatedSubscription.groupId === "" ? null : updatedSubscription.groupId;
   dataToUpdate.notes = updatedSubscription.notes || null;
 
 
@@ -157,6 +161,7 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
       accountId: dataToUpdate.accountId === null ? undefined : dataToUpdate.accountId,
       groupId: dataToUpdate.groupId,
       notes: dataToUpdate.notes === null ? undefined : dataToUpdate.notes,
+      description: dataToUpdate.description === null ? undefined : dataToUpdate.description,
       lastPaidMonth: dataToUpdate.lastPaidMonth,
     };
   } catch (error) {
@@ -180,3 +185,4 @@ export async function deleteSubscription(subscriptionId: string): Promise<void> 
     throw error;
   }
 }
+

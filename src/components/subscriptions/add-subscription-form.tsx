@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -29,7 +30,7 @@ const formSchema = z.object({
   type: z.enum(['income', 'expense'], { required_error: "Subscription type is required" }),
   category: z.string().min(1, "Category is required"),
   accountId: z.string().optional(),
-  groupId: z.string().optional(), // Added groupId
+  groupId: z.string().optional().default("__NONE_GROUP__"), // Added groupId, default to a "none" string
   startDate: z.date({ required_error: "Start date is required" }),
   frequency: z.enum(subscriptionFrequencies, { required_error: "Frequency is required" }),
   nextPaymentDate: z.date({ required_error: "Next payment date is required" }),
@@ -71,8 +72,8 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
         amount: initialData.amount || undefined,
         currency: initialData.currency || 'BRL',
         category: initialData.category || undefined,
-        accountId: initialData.accountId || undefined,
-        groupId: initialData.groupId || undefined,
+        accountId: initialData.accountId || "__NONE_ACCOUNT__",
+        groupId: initialData.groupId || "__NONE_GROUP__",
         startDate: initialData.startDate ? (typeof initialData.startDate === 'string' ? parseISO(initialData.startDate) : initialData.startDate) : new Date(),
         nextPaymentDate: initialData.nextPaymentDate ? (typeof initialData.nextPaymentDate === 'string' ? parseISO(initialData.nextPaymentDate) : initialData.nextPaymentDate) : new Date(),
         frequency: initialData.frequency || 'monthly',
@@ -85,8 +86,8 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
       amount: undefined,
       currency: "BRL",
       category: undefined,
-      accountId: undefined,
-      groupId: undefined,
+      accountId: "__NONE_ACCOUNT__",
+      groupId: "__NONE_GROUP__",
       startDate: new Date(),
       frequency: 'monthly',
       nextPaymentDate: new Date(),
@@ -99,10 +100,10 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
   const selectedCurrency = form.watch('currency');
 
   const handleFormSubmit = async (data: AddSubscriptionFormData) => {
-    const submissionData = {
+    const submissionData: AddSubscriptionFormData = {
       ...data,
-      accountId: data.accountId === "__NONE_ACCOUNT__" ? undefined : data.accountId,
-      groupId: data.groupId === "__NONE_GROUP__" ? undefined : data.groupId, 
+      accountId: data.accountId === "__NONE_ACCOUNT__" || data.accountId === "" ? undefined : data.accountId,
+      groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? undefined : data.groupId, 
     };
     await passedOnSubmit(submissionData);
   };
@@ -216,7 +217,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                        {categories.map((cat) => (
+                        {categories.sort((a,b) => a.name.localeCompare(b.name)).map((cat) => (
                         <SelectItem key={cat.id} value={cat.name}>
                             {cat.name}
                         </SelectItem>
@@ -235,7 +236,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                     <FormLabel>Associated Account (Optional)</FormLabel>
                     <Select
                         onValueChange={field.onChange}
-                        value={field.value || ""}
+                        value={field.value || "__NONE_ACCOUNT__"} // Ensure a default string value for "None"
                     >
                     <FormControl>
                         <SelectTrigger>
@@ -244,7 +245,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                     </FormControl>
                     <SelectContent>
                         <SelectItem value="__NONE_ACCOUNT__">None</SelectItem>
-                        {accounts.map((acc) => (
+                        {accounts.sort((a,b) => a.name.localeCompare(b.name)).map((acc) => (
                         <SelectItem key={acc.id} value={acc.id}>
                             {acc.name} ({getCurrencySymbol(acc.currency)})
                         </SelectItem>
@@ -264,7 +265,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                 <FormLabel>Associated Group (Optional)</FormLabel>
                 <Select
                     onValueChange={field.onChange}
-                    value={field.value || ""}
+                    value={field.value || "__NONE_GROUP__"} // Ensure a default string value for "None"
                 >
                 <FormControl>
                     <SelectTrigger>
@@ -273,7 +274,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                 </FormControl>
                 <SelectContent>
                     <SelectItem value="__NONE_GROUP__">None</SelectItem>
-                    {groups.map((group) => (
+                    {groups.sort((a,b) => a.name.localeCompare(b.name)).map((group) => (
                     <SelectItem key={group.id} value={group.id}>
                         {group.name}
                     </SelectItem>
@@ -410,3 +411,4 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
 };
 
 export default AddSubscriptionForm;
+
