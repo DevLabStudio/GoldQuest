@@ -1,7 +1,6 @@
-
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -62,7 +61,7 @@ export default function GroupDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!groupId || typeof window === 'undefined') {
         setIsLoading(false);
         if(!groupId) setError("Group ID is missing.");
@@ -110,18 +109,18 @@ export default function GroupDetailPage() {
             setTransactions([]);
         }
 
-    } catch (err) {
+    } catch (err: any) {
         console.error(`Failed to fetch data for group ${groupId}:`, err);
         setError("Could not load group data. Please try again later.");
-        toast({ title: "Error", description: "Failed to load group data.", variant: "destructive" });
+        toast({ title: "Error", description: err.message || "Failed to load group data.", variant: "destructive" });
     } finally {
         setIsLoading(false);
     }
-  };
+  }, [groupId, toast]);
 
   useEffect(() => {
     fetchData();
-  }, [groupId, toast]);
+  }, [fetchData]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
@@ -189,6 +188,7 @@ export default function GroupDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -208,6 +208,7 @@ export default function GroupDetailPage() {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       await fetchData();
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -224,6 +225,7 @@ export default function GroupDetailPage() {
       await fetchData();
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -263,6 +265,7 @@ export default function GroupDetailPage() {
       await fetchData();
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -512,6 +515,7 @@ export default function GroupDetailPage() {
           <DialogHeader><DialogTitle>Edit Transaction</DialogTitle></DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
+              key={selectedTransaction.id} // Add key to force re-mount
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
@@ -520,7 +524,7 @@ export default function GroupDetailPage() {
               initialData={{
                 ...selectedTransaction, 
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.abs(selectedTransaction.amount), 
+                amount: Math.Abs(selectedTransaction.amount), 
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
@@ -57,58 +57,56 @@ export default function ExpensesPage() {
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
 
+  const fetchData = useCallback(async () => {
+    if (typeof window === 'undefined') {
+        setIsLoading(false);
+        setError("Expense data can only be loaded on the client.");
+        return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+        const prefs = await getUserPreferences(); 
+        setPreferredCurrency(prefs.preferredCurrency);
+
+        const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
+            getAccounts(),
+            getCategories(),
+            getTags()
+        ]);
+
+        setAccounts(fetchedAccounts);
+        setAllCategories(fetchedCategories);
+        setAllTags(fetchedTags);
+
+        if (fetchedAccounts.length > 0) {
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+            const transactionsByAccount = await Promise.all(transactionPromises);
+            const combinedTransactions = transactionsByAccount.flat();
+            combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            setAllTransactionsUnfiltered(combinedTransactions);
+        } else {
+            setAllTransactionsUnfiltered([]);
+        }
+
+    } catch (err: any) {
+        console.error("Failed to fetch expense data:", err);
+        setError("Could not load expense data. Please try again later.");
+        toast({
+            title: "Error",
+            description: err.message || "Failed to load required data.",
+            variant: "destructive",
+        });
+    } finally {
+        setIsLoading(false);
+    }
+  }, [toast]); 
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
-        if (typeof window === 'undefined') {
-            if(isMounted) setIsLoading(false);
-            if(isMounted) setError("Expense data can only be loaded on the client.");
-            return;
-        }
-
-        if(isMounted) setIsLoading(true);
-        if(isMounted) setError(null);
-        try {
-            const prefs = await getUserPreferences(); 
-            if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
-
-            const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
-                getAccounts(),
-                getCategories(),
-                getTags()
-            ]);
-
-            if(isMounted) setAccounts(fetchedAccounts);
-            if(isMounted) setAllCategories(fetchedCategories);
-            if(isMounted) setAllTags(fetchedTags);
-
-            if (fetchedAccounts.length > 0) {
-                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-                const transactionsByAccount = await Promise.all(transactionPromises);
-                const combinedTransactions = transactionsByAccount.flat();
-                combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                if(isMounted) setAllTransactionsUnfiltered(combinedTransactions);
-            } else {
-                if(isMounted) setAllTransactionsUnfiltered([]);
-            }
-
-        } catch (err) {
-            console.error("Failed to fetch expense data:", err);
-            if(isMounted) setError("Could not load expense data. Please try again later.");
-            if(isMounted) toast({
-                title: "Error",
-                description: "Failed to load required data.",
-                variant: "destructive",
-            });
-        } finally {
-            if(isMounted) setIsLoading(false);
-        }
-    };
-
     fetchData();
-
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key)) && isMounted) {
+        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key))) {
             console.log("Storage changed, refetching expense data...");
             fetchData();
         }
@@ -119,12 +117,11 @@ export default function ExpensesPage() {
     }
 
     return () => {
-        isMounted = false;
         if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); 
+  }, [fetchData]); 
 
   const expenseTransactions = useMemo(() => {
     if (isLoading) return [];
@@ -141,25 +138,6 @@ export default function ExpensesPage() {
         return accounts.find(acc => acc.id === accountId);
    };
 
-    const localFetchData = async () => {
-        if (typeof window === 'undefined') return;
-        setIsLoading(true); setError(null);
-        try {
-            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency); 
-            const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([ getAccounts(), getCategories(), getTags() ]);
-            setAccounts(fetchedAccounts); setAllCategories(fetchedCategories); setAllTags(fetchedTags);
-            if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-                const txsByAcc = await Promise.all(tPromises);
-                const combinedTxs = txsByAcc.flat();
-                combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                setAllTransactionsUnfiltered(combinedTxs);
-            } else { setAllTransactionsUnfiltered([]); }
-        } catch (e) { console.error(e); setError("Could not reload expense data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
-        finally { setIsLoading(false); }
-    };
-
-
     const openEditDialog = (transaction: Transaction) => {
         setSelectedTransaction(transaction);
         setIsEditDialogOpen(true);
@@ -167,12 +145,7 @@ export default function ExpensesPage() {
 
     const handleUpdateTransaction = async (formData: AddTransactionFormData) => {
         if (!selectedTransaction) return;
-
-        if (formData.type === 'transfer') {
-            console.error("Update handler received transfer data. This should not happen.");
-            toast({ title: "Update Error", description: "Cannot update transaction type to transfer.", variant: "destructive" });
-            return;
-        }
+        console.log("Form data received for update:", formData);
 
         const transactionAmount = formData.type === 'expense' ? -Math.abs(formData.amount) : Math.abs(formData.amount);
 
@@ -189,13 +162,14 @@ export default function ExpensesPage() {
         setIsLoading(true);
         try {
             await updateTransaction(transactionToUpdate);
-            await localFetchData();
+            await fetchData();
             setIsEditDialogOpen(false);
             setSelectedTransaction(null);
             toast({
                 title: "Success",
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
+            window.dispatchEvent(new Event('storage')); // Notify other components
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -218,11 +192,12 @@ export default function ExpensesPage() {
        setIsDeleting(true);
        try {
            await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-           await localFetchData();
+           await fetchData();
            toast({
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
+            window.dispatchEvent(new Event('storage')); // Notify other components
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -240,9 +215,10 @@ export default function ExpensesPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await localFetchData();
+      await fetchData();
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
+       window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -276,9 +252,10 @@ export default function ExpensesPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      await localFetchData();
+      await fetchData();
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -286,7 +263,7 @@ export default function ExpensesPage() {
   };
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    if (accounts.length === 0) {
+    if (accounts.length === 0 && type !== 'transfer') {
         toast({
             title: "No Accounts",
             description: "Please add an account first before adding transactions.",
@@ -541,6 +518,7 @@ export default function ExpensesPage() {
                     accounts={accounts}
                     preferredCurrency={preferredCurrency}
                     transactionType="expense"
+                    isLoading={isLoading}
                  />
             </div>
         </div>
@@ -559,10 +537,11 @@ export default function ExpensesPage() {
                 </DialogHeader>
                 {selectedTransaction && accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
                     <AddTransactionForm
+                        key={selectedTransaction.id} // Add key to force re-mount
                         accounts={accounts}
                         categories={allCategories}
                         tags={allTags}
-                        onTransactionAdded={handleUpdateTransaction} // This effectively becomes "onSaveEditedTransaction"
+                        onTransactionAdded={handleUpdateTransaction} 
                         isLoading={isLoading}
                         initialData={{
                             ...selectedTransaction,
@@ -622,3 +601,4 @@ export default function ExpensesPage() {
     </div>
   );
 }
+

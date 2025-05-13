@@ -192,3 +192,4 @@ function useToast() {
 }
 
 export { useToast, toast }
+export {type Action as ToastAction } ; // Export the Action type for use in other modules if needed

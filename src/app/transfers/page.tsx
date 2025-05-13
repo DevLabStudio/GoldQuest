@@ -1,11 +1,10 @@
-
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
-import { getTransactions, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
+import { getTransactions, deleteTransaction, type Transaction, addTransaction, updateTransaction } from "@/services/transactions";
 import { getCategories, Category } from '@/services/categories';
 import { getTags, Tag } from '@/services/tags';
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,6 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { useToast } from '@/hooks/use-toast';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
+import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
@@ -55,59 +55,54 @@ export default function TransfersPage() {
   const [editingTransferPair, setEditingTransferPair] = useState<{from: Transaction, to: Transaction} | null>(null);
 
 
+  const fetchData = useCallback(async () => {
+    if (typeof window === 'undefined') {
+        setIsLoading(false);
+        setError("Transfer data can only be loaded on the client.");
+        return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+    try {
+    const prefs = await getUserPreferences();
+    setPreferredCurrency(prefs.preferredCurrency);
+
+    const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
+        getAccounts(),
+        getCategories(),
+        getTags()
+    ]);
+    setAccounts(fetchedAccounts);
+    setAllCategories(fetchedCategories);
+    setAllTags(fetchedTags);
+
+
+    if (fetchedAccounts.length > 0) {
+        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+        const transactionsByAccount = await Promise.all(transactionPromises);
+        const combinedTransactions = transactionsByAccount.flat();
+        combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        setAllTransactionsUnfiltered(combinedTransactions);
+    } else {
+        setAllTransactionsUnfiltered([]);
+    }
+
+
+    } catch (err: any) {
+    console.error("Failed to fetch transfer data:", err);
+    setError("Could not load transfer data. Please try again later.");
+    toast({ title: "Error", description: err.message || "Failed to load data.", variant: "destructive" });
+    } finally {
+    setIsLoading(false);
+    }
+  }, [toast]);
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
-       if (typeof window === 'undefined') {
-         if (isMounted) {
-           setIsLoading(false);
-           setError("Transfer data can only be loaded on the client.");
-         }
-         return;
-       }
-
-      if (isMounted) setIsLoading(true);
-      if (isMounted) setError(null);
-      try {
-        const prefs = await getUserPreferences();
-        if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
-
-        const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
-          getAccounts(),
-          getCategories(),
-          getTags()
-        ]);
-        if (isMounted) {
-          setAccounts(fetchedAccounts);
-          setAllCategories(fetchedCategories);
-          setAllTags(fetchedTags);
-        }
-
-
-        if (fetchedAccounts.length > 0) {
-            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-            const transactionsByAccount = await Promise.all(transactionPromises);
-            const combinedTransactions = transactionsByAccount.flat();
-            combinedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            if (isMounted) setAllTransactionsUnfiltered(combinedTransactions);
-        } else {
-            if(isMounted) setAllTransactionsUnfiltered([]);
-        }
-
-
-      } catch (err) {
-        console.error("Failed to fetch transfer data:", err);
-        if (isMounted) setError("Could not load transfer data. Please try again later.");
-        if (isMounted) toast({ title: "Error", description: "Failed to load data.", variant: "destructive" });
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
     fetchData();
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key?.startsWith('transactions-')) && isMounted ) {
+         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key?.startsWith('transactions-')) ) {
              console.log("Storage changed, refetching transfer data...");
              fetchData();
          }
@@ -117,32 +112,11 @@ export default function TransfersPage() {
      }
 
      return () => {
-         isMounted = false;
          if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, [toast]);
-
-    const localFetchData = async () => {
-        if (typeof window === 'undefined') return;
-        setIsLoading(true); setError(null);
-        try {
-            const prefs = await getUserPreferences(); setPreferredCurrency(prefs.preferredCurrency);
-            const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([getAccounts(), getCategories(), getTags()]);
-            setAccounts(fetchedAccounts);
-            setAllCategories(fetchedCategories);
-            setAllTags(fetchedTags);
-            if (fetchedAccounts.length > 0) {
-                const tPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-                const txsByAcc = await Promise.all(tPromises);
-                const combinedTxs = txsByAcc.flat();
-                combinedTxs.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-                setAllTransactionsUnfiltered(combinedTxs);
-            } else { setAllTransactionsUnfiltered([]); }
-        } catch (e) { console.error(e); setError("Could not reload transfer data."); toast({title: "Error", description: "Failed to reload data.", variant: "destructive"});}
-        finally { setIsLoading(false); }
-    };
+  }, [fetchData]);
 
   const transferTransactionPairs = useMemo(() => {
     if (isLoading) return [];
@@ -171,6 +145,8 @@ export default function TransfersPage() {
         );
 
         if (matchingIncoming.length > 0) {
+            // Sort matching incoming by ID to pick deterministically if multiple exact matches (rare)
+            matchingIncoming.sort((a,b) => a.id.localeCompare(b.id));
             const txIn = matchingIncoming[0];
             transfers.push({ from: txOut, to: txIn });
             processedIds.add(txOut.id);
@@ -205,11 +181,12 @@ export default function TransfersPage() {
                 deleteTransaction(selectedTransactionPair[0].id, selectedTransactionPair[0].accountId),
                 deleteTransaction(selectedTransactionPair[1].id, selectedTransactionPair[1].accountId)
             ]);
-             await localFetchData();
+             await fetchData();
              toast({
                 title: "Transfer Deleted",
                 description: `Transfer record removed successfully.`,
             });
+            window.dispatchEvent(new Event('storage')); // Notify other components
         } catch (err: any) {
             console.error("Failed to delete transfer:", err);
             toast({
@@ -224,20 +201,28 @@ export default function TransfersPage() {
     };
 
   const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => {
+    // This function is a fallback for non-transfer types, primarily used by the global header's AddTransactionForm.
+    // For transfer updates via this page's form, onTransferAdded should be used.
+    setIsLoading(true);
     try {
-      if ('id' in data && data.id && editingTransferPair) {
-        console.warn("handleTransactionAdded called in edit transfer context. This should ideally go to a specific transfer update handler or onTransferAdded.");
-         toast({title: "Update Logic", description: "Transfer updates should be handled by onTransferAdded.", variant: "destructive"})
-      } else if (!('id' in data)) {
+      if (!('id' in data)) { // Only if it's a new transaction
         await addTransaction(data as Omit<Transaction, 'id'>);
         toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
+      } else {
+        // If an ID exists, it's an update, but this form is for *new* non-transfers or *new/editing* transfers.
+        // This path should ideally not be hit if the form type is correctly 'transfer' for transfer edits.
+        await updateTransaction(data as Transaction);
+         toast({ title: "Success", description: `Transaction updated.` });
       }
-      await localFetchData();
+      await fetchData();
       setIsAddTransactionDialogOpen(false);
-      setEditingTransferPair(null);
+      setEditingTransferPair(null); // Reset editing state
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
+    } finally {
+        setIsLoading(false);
     }
   };
 
@@ -278,9 +263,10 @@ export default function TransfersPage() {
       });
 
       toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
-      await localFetchData();
+      await fetchData();
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -317,7 +303,7 @@ export default function TransfersPage() {
             type: 'transfer' as 'transfer',
             fromAccountId: editingTransferPair.from.accountId,
             toAccountId: editingTransferPair.to.accountId,
-            amount: Math.abs(editingTransferPair.from.amount),
+            amount: Math.Abs(editingTransferPair.from.amount),
             transactionCurrency: editingTransferPair.from.transactionCurrency,
             date: parseISO(editingTransferPair.from.date.includes('T') ? editingTransferPair.from.date : editingTransferPair.from.date + 'T00:00:00Z'),
             description: editingTransferPair.from.description,
@@ -414,10 +400,10 @@ export default function TransfersPage() {
                                     <TableRow key={`${pair.from.id}-${pair.to.id}`} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{pair.from.description || 'Transfer'}</TableCell>
                                         <TableCell className="text-right font-medium">
-                                            <div>{formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, pair.from.transactionCurrency, false)}</div>
+                                            <div>{formatCurrency(Math.Abs(pair.from.amount), pair.from.transactionCurrency, pair.from.transactionCurrency, false)}</div>
                                             {pair.from.transactionCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                                             <div className="text-xs text-muted-foreground">
-                                                (≈ {formatCurrency(Math.abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true)})
+                                                (≈ {formatCurrency(Math.Abs(pair.from.amount), pair.from.transactionCurrency, preferredCurrency, true)})
                                             </div>
                                             )}
                                         </TableCell>
@@ -491,6 +477,7 @@ export default function TransfersPage() {
                     accounts={accounts}
                     preferredCurrency={preferredCurrency}
                     transactionType="transfer"
+                    isLoading={isLoading}
                 />
             </div>
         </div>
@@ -512,6 +499,7 @@ export default function TransfersPage() {
           {isLoading ? <Skeleton className="h-64 w-full" /> :
             (accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
+              key={editingTransferPair ? `${editingTransferPair.from.id}-${editingTransferPair.to.id}` : 'new-transaction'}
               accounts={accounts}
               categories={allCategories}
               tags={allTags}
@@ -533,3 +521,4 @@ export default function TransfersPage() {
     </div>
   );
 }
+

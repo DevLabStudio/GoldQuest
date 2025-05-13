@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -61,7 +61,7 @@ export default function AccountDetailPage() {
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     if (!accountId || typeof window === 'undefined') {
         setIsLoading(false);
         if(!accountId) setError("Account ID is missing.");
@@ -94,18 +94,18 @@ export default function AccountDetailPage() {
         fetchedTransactions.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
         setTransactions(fetchedTransactions);
 
-    } catch (err) {
+    } catch (err: any) {
         console.error(`Failed to fetch data for account ${accountId}:`, err);
         setError("Could not load account data. Please try again later.");
-        toast({ title: "Error", description: "Failed to load account data.", variant: "destructive" });
+        toast({ title: "Error", description: err.message || "Failed to load account data.", variant: "destructive" });
     } finally {
         setIsLoading(false);
     }
-  };
+  }, [accountId, toast]);
 
   useEffect(() => {
     fetchData();
-  }, [accountId, toast]);
+  }, [fetchData]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
@@ -179,6 +179,7 @@ export default function AccountDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -198,6 +199,7 @@ export default function AccountDetailPage() {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       await fetchData();
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -214,6 +216,7 @@ export default function AccountDetailPage() {
       await fetchData();
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined); // Reset cloned data
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -253,6 +256,7 @@ export default function AccountDetailPage() {
       await fetchData();
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined); // Reset cloned data
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -556,15 +560,16 @@ export default function AccountDetailPage() {
           </DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
+              key={selectedTransaction.id} // Add key to force re-mount
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleUpdateTransaction} // This effectively becomes "onSaveEditedTransaction"
+              onTransactionAdded={handleUpdateTransaction} 
               isLoading={isLoading}
               initialData={{
-                ...selectedTransaction, // Pass the full selected transaction for editing
+                ...selectedTransaction, 
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.abs(selectedTransaction.amount), // Amount should be positive in form
+                amount: Math.abs(selectedTransaction.amount), 
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />
@@ -592,8 +597,8 @@ export default function AccountDetailPage() {
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleTransactionAdded} // For new or cloned
-              onTransferAdded={handleTransferAdded}     // For new or cloned transfers
+              onTransactionAdded={handleTransactionAdded} 
+              onTransferAdded={handleTransferAdded}     
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
               initialData={
@@ -602,7 +607,7 @@ export default function AccountDetailPage() {
                     ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
                     : (transactionTypeToAdd === 'transfer' && account 
                         ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                        : {date: new Date()}) // Fallback for safety
+                        : {date: new Date()}) 
                 )
               }
             />
@@ -612,3 +617,4 @@ export default function AccountDetailPage() {
     </div>
   );
 }
+
