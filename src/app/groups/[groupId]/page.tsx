@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -184,7 +185,7 @@ export default function GroupDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      await fetchData(); 
+      // await fetchData(); // Removed direct call
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
@@ -206,7 +207,7 @@ export default function GroupDetailPage() {
     setIsDeleting(true);
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-      await fetchData();
+      // await fetchData(); // Removed direct call
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
       window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
@@ -222,7 +223,7 @@ export default function GroupDetailPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage')); // Notify other components
@@ -262,7 +263,7 @@ export default function GroupDetailPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage')); // Notify other components
@@ -524,7 +525,7 @@ export default function GroupDetailPage() {
               initialData={{
                 ...selectedTransaction, 
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.Abs(selectedTransaction.amount), 
+                amount: Math.abs(selectedTransaction.amount), 
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />

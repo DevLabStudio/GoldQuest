@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -160,7 +161,7 @@ export default function CategoryDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      await fetchData(); 
+      // await fetchData(); // Removed direct call
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
@@ -182,7 +183,7 @@ export default function CategoryDetailPage() {
     setIsDeleting(true);
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-      await fetchData();
+      // await fetchData(); // Removed direct call
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
       window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
@@ -200,7 +201,7 @@ export default function CategoryDetailPage() {
       const dataWithCategory = (data.category === 'Transfer' || !category) ? data : { ...data, category: category.name };
       await addTransaction(dataWithCategory);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined); // Reset cloned data
       window.dispatchEvent(new Event('storage')); // Notify other components
@@ -240,7 +241,7 @@ export default function CategoryDetailPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined); // Reset cloned data
       window.dispatchEvent(new Event('storage')); // Notify other components

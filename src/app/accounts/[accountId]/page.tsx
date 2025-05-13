@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -175,7 +176,7 @@ export default function AccountDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      await fetchData(); 
+      // await fetchData(); // Removed direct call, rely on storage event
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
@@ -197,7 +198,7 @@ export default function AccountDetailPage() {
     setIsDeleting(true);
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-      await fetchData();
+      // await fetchData(); // Removed direct call
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
       window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err: any) {
@@ -213,7 +214,7 @@ export default function AccountDetailPage() {
     try {
       await addTransaction({ ...data, accountId: accountId! });
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined); // Reset cloned data
       window.dispatchEvent(new Event('storage')); // Notify other components
@@ -253,7 +254,7 @@ export default function AccountDetailPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined); // Reset cloned data
       window.dispatchEvent(new Event('storage')); // Notify other components

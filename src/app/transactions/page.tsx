@@ -186,7 +186,7 @@ export default function TransactionsOverviewPage() {
         setIsLoading(true);
         try {
             await updateTransaction(transactionToUpdate);
-            await fetchData();
+            // await fetchData(); // Removed direct call, rely on storage event
             setIsEditDialogOpen(false);
             setSelectedTransaction(null);
             toast({
@@ -216,7 +216,7 @@ export default function TransactionsOverviewPage() {
        setIsDeleting(true);
        try {
            await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-           await fetchData();
+           // await fetchData(); // Removed direct call
            toast({
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
@@ -239,7 +239,7 @@ export default function TransactionsOverviewPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage')); // Notify other components
@@ -253,7 +253,9 @@ export default function TransactionsOverviewPage() {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const desc = data.description || `Transfer from ${accounts.find(a=>a.id === data.fromAccountId)?.name} to ${accounts.find(a=>a.id === data.toAccountId)?.name}`;
+      const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown Account';
+      const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown Account';
+      const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
 
       await addTransaction({
         accountId: data.fromAccountId,
@@ -276,7 +278,7 @@ export default function TransactionsOverviewPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      await fetchData();
+      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage')); // Notify other components
