@@ -2,10 +2,8 @@
 
 import React from 'react';
 import { database, auth } from '@/lib/firebase';
-import { ref, set, get, push, remove } from 'firebase/database';
+import { ref, set, get, push, remove, update } from 'firebase/database';
 import type { User } from 'firebase/auth';
-// Removed the very long lucide-react import causing parsing issues.
-// Fallback to HelpCircle or user-defined icons is already in place.
 import { HelpCircle } from 'lucide-react';
 
 export interface Category {
@@ -40,7 +38,7 @@ export const getCategoryStyle = (category: Category | string | undefined | null)
   const categoryName = typeof category === 'string' ? category : category?.name;
   const categoryIconProp = typeof category === 'object' && category?.icon ? category.icon : undefined;
 
-  if (categoryIconProp) {
+  if (categoryIconProp && categoryIconProp.trim() !== "") {
     // User-defined icon (emoji or short text)
     const IconComponent = () => <span className="mr-1">{categoryIconProp}</span>;
     const style = predefinedCategoryStyles[categoryName?.toLowerCase() || 'uncategorized'] || predefinedCategoryStyles.uncategorized;
@@ -137,11 +135,15 @@ export async function addCategory(categoryName: string, icon?: string): Promise<
   if (!newCategoryRef.key) {
     throw new Error("Failed to generate a new category ID.");
   }
-  const newCategoryData: Omit<Category, 'id'> = { name: normalizedName, icon: icon || undefined };
+
+  const dataToSave: { name: string; icon?: string } = { name: normalizedName };
+  if (icon && icon.trim()) {
+    dataToSave.icon = icon.trim();
+  }
 
   try {
-    await set(newCategoryRef, newCategoryData);
-    return { id: newCategoryRef.key, ...newCategoryData };
+    await set(newCategoryRef, dataToSave);
+    return { id: newCategoryRef.key, name: normalizedName, icon: dataToSave.icon };
   } catch (error) {
     console.error("Error adding category to Firebase:", error);
     throw error;
@@ -164,17 +166,26 @@ export async function updateCategory(categoryId: string, newName: string, newIco
       throw new Error(`Another category named "${normalizedNewName}" already exists.`);
   }
 
-  const updatedCategoryData: Partial<Omit<Category, 'id'>> = { name: normalizedNewName };
-  if (newIcon !== undefined) { // Allow setting icon to empty string or a new value
-    updatedCategoryData.icon = newIcon || undefined; // Store empty string as undefined if that's preferred
+  const updates: { name: string; icon?: string | null } = { name: normalizedNewName };
+
+  if (newIcon !== undefined) { // If newIcon was explicitly passed (even as empty string)
+    if (newIcon && newIcon.trim() !== "") {
+      updates.icon = newIcon.trim(); // Set to new icon value
+    } else {
+      updates.icon = null; // Set to null to remove the icon field in Firebase (or if empty string means remove)
+    }
   }
+  // If newIcon is undefined (not passed), the 'icon' property is not added to 'updates',
+  // so Firebase 'update' will not change the existing icon.
 
   try {
-    await set(categoryRef, updatedCategoryData);
+    await update(categoryRef, updates); // Use update for partial modifications
     // Fetch the updated category to ensure we return the full, correct object.
     const snapshot = await get(categoryRef);
     if (snapshot.exists()) {
-        return { id: categoryId, ...(snapshot.val() as Omit<Category, 'id'>) };
+        // Ensure returned object matches Category interface (icon might be null from DB if removed)
+        const val = snapshot.val() as Omit<Category, 'id'|'icon'> & {icon?: string | null};
+        return { id: categoryId, name: val.name, icon: val.icon || undefined };
     }
     throw new Error("Failed to fetch updated category after update.");
   } catch (error) {
