@@ -13,12 +13,12 @@ export interface Group {
 
 export type NewGroupData = Omit<Group, 'id' | 'categoryIds'> & { categoryIds?: string[] };
 
-function getGroupsRefPath(currentUser: User | null) {
+export function getGroupsRefPath(currentUser: User | null) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access groups.");
   return `users/${currentUser.uid}/groups`;
 }
 
-function getSingleGroupRefPath(currentUser: User | null, groupId: string) {
+export function getSingleGroupRefPath(currentUser: User | null, groupId: string) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access group.");
   return `users/${currentUser.uid}/groups/${groupId}`;
 }

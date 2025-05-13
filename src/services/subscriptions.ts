@@ -31,12 +31,12 @@ export type NewSubscriptionData = Omit<Subscription, 'id' | 'createdAt' | 'updat
     lastPaidMonth?: string | null;
 };
 
-function getSubscriptionsRefPath(currentUser: User | null) {
+export function getSubscriptionsRefPath(currentUser: User | null) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access subscriptions.");
   return `users/${currentUser.uid}/subscriptions`;
 }
 
-function getSingleSubscriptionRefPath(currentUser: User | null, subscriptionId: string) {
+export function getSingleSubscriptionRefPath(currentUser: User | null, subscriptionId: string) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access subscription.");
   return `users/${currentUser.uid}/subscriptions/${subscriptionId}`;
 }
@@ -138,14 +138,14 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
     frequency: updatedSubscription.frequency,
     nextPaymentDate: updatedSubscription.nextPaymentDate,
     tags: updatedSubscription.tags || [],
-    lastPaidMonth: updatedSubscription.lastPaidMonth || null,
+    lastPaidMonth: updatedSubscription.lastPaidMonth === undefined ? null : updatedSubscription.lastPaidMonth,
     updatedAt: serverTimestamp(),
   };
 
   // Handle optional fields correctly, ensuring they are set to null if not provided
   // to remove them from Firebase if they were previously set.
   dataToUpdate.accountId = updatedSubscription.accountId || null;
-  dataToUpdate.groupId = updatedSubscription.groupId || null;
+  dataToUpdate.groupId = updatedSubscription.groupId === undefined ? null : updatedSubscription.groupId;
   dataToUpdate.notes = updatedSubscription.notes || null;
 
 

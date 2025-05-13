@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -23,12 +24,12 @@ const defaultTagsFirebase: Omit<Tag, 'id'>[] = [
     { name: 'Project X' },
 ];
 
-function getTagsRefPath(currentUser: User | null) {
+export function getTagsRefPath(currentUser: User | null) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access tags.");
   return `users/${currentUser.uid}/tags`;
 }
 
-function getSingleTagRefPath(currentUser: User | null, tagId: string) {
+export function getSingleTagRefPath(currentUser: User | null, tagId: string) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access tag.");
   return `users/${currentUser.uid}/tags/${tagId}`;
 }

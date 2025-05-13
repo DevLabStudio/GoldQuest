@@ -3,6 +3,12 @@ import { ref, set, get, push, remove, update, serverTimestamp } from 'firebase/d
 import type { User } from 'firebase/auth';
 import { getAccounts as getAllAccounts, updateAccount as updateAccountInDb, type Account } from './account-sync'; // Renamed getAccounts to avoid conflict
 import { convertCurrency } from '@/lib/currency';
+// Import ref path getters from other services
+import { getCategoriesRefPath } from './categories';
+import { getTagsRefPath } from './tags';
+import { getGroupsRefPath } from './groups';
+import { getSubscriptionsRefPath } from './subscriptions';
+
 
 export interface Transaction {
   id: string;
@@ -116,7 +122,7 @@ export async function getTransactions(
                 ...tx,
                 tags: tx.tags || [],
                 category: tx.category || 'Uncategorized',
-                transactionCurrency: tx.transactionCurrency || allAccounts.find(a=>a.id === tx.accountId)?.currency || 'USD'
+                transactionCurrency: tx.transactionCurrency || allAppAccounts.find(a=>a.id === tx.accountId)?.currency || 'USD'
             }))
             .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -207,11 +213,6 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
     }
   } as any;
   delete dataToUpdateFirebase.id;
-  // Do not delete createdAt, let it persist from the original creation.
-  // dataToUpdateFirebase.createdAt should only be set if it was missing and needs to be set.
-  // For updates, typically only updatedAt changes. Firebase `update` won't remove fields not specified.
-  // If createdAt was stored as a server timestamp object and we read it back as a string, we might need to be careful here.
-  // However, the `updatedTransaction` object passed in should have the original `createdAt` if it exists.
 
 
   console.log("Updating transaction in Firebase RTDB:", id, dataToUpdateFirebase);
@@ -285,34 +286,48 @@ export async function deleteTransaction(transactionId: string, accountId: string
 export async function clearAllSessionTransactions(): Promise<void> {
   const currentUser = auth.currentUser;
   if (!currentUser?.uid) {
-    console.warn("User not authenticated, cannot clear transactions.");
+    console.warn("User not authenticated, cannot clear data.");
     return;
   }
 
-  console.warn("Attempting to clear ALL transactions for user:", currentUser.uid);
+  console.warn("Attempting to clear ALL user data for user:", currentUser.uid);
   try {
-    // First, clear from Firebase DB
+    // Get paths for all data types
     const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`;
-    const userFirebaseTransactionsRef = ref(database, userFirebaseTransactionsBasePath);
-    await remove(userFirebaseTransactionsRef);
+    const categoriesPath = getCategoriesRefPath(currentUser);
+    const tagsPath = getTagsRefPath(currentUser);
+    const groupsPath = getGroupsRefPath(currentUser);
+    const subscriptionsPath = getSubscriptionsRefPath(currentUser);
+    const accountsPath = `users/${currentUser.uid}/accounts`; // Directly use path
 
-    // Then, clear from localStorage for each account.
-    // It's important to get the list of accounts *before* clearing their transactions from DB,
-    // or ensure that account data is independent. Assuming getAccounts() is safe here.
-    const accounts = await getAllAccounts(); // This reads from localStorage, which should be fine.
-    for (const acc of accounts) {
+    // Clear from Firebase DB
+    await Promise.all([
+        remove(ref(database, userFirebaseTransactionsBasePath)),
+        remove(ref(database, categoriesPath)),
+        remove(ref(database, tagsPath)),
+        remove(ref(database, groupsPath)),
+        remove(ref(database, subscriptionsPath)),
+        remove(ref(database, accountsPath)) // Clear accounts from DB
+    ]);
+
+    // Clear from localStorage
+    const accounts = await getAllAccounts(); // This will now be empty if DB clear was first, or from old cache
+    for (const acc of accounts) { // If accounts were cleared from DB first, this loop might not run for transactions
       const storageKey = `transactions-${acc.id}-${currentUser.uid}`;
       localStorage.removeItem(storageKey);
-      // Also reset account balances in DB. This will also update their localStorage entry via updateAccountInDb.
-      await updateAccountInDb({ ...acc, balance: 0, lastActivity: new Date().toISOString(), balanceDifference: 0 });
     }
-    // Clear the main accounts list from localStorage to force re-fetch from (now potentially modified) DB
+    // Clear other localStorage items
     localStorage.removeItem(`userAccounts-${currentUser.uid}`);
+    localStorage.removeItem(`userCategories-${currentUser.uid}`);
+    localStorage.removeItem(`userTags-${currentUser.uid}`);
+    localStorage.removeItem(`userGroups-${currentUser.uid}`);
+    localStorage.removeItem(`userSubscriptions-${currentUser.uid}`);
+    localStorage.removeItem(`userPreferences-${currentUser.uid}`); // Also clear preferences
 
 
-    console.log("All transactions and related localStorage cleared for user:", currentUser.uid);
+    console.log("All user data cleared from Firebase and localStorage for user:", currentUser.uid);
   } catch (error) {
-    console.error("Error clearing all transactions:", error);
+    console.error("Error clearing all user data:", error);
     throw error;
   }
 }

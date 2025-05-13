@@ -1,3 +1,4 @@
+
 'use client';
 
 import React from 'react';
@@ -65,12 +66,12 @@ const defaultCategoriesFirebase: Omit<Category, 'id'>[] = [
 ];
 
 
-function getCategoriesRefPath(currentUser: User | null) {
+export function getCategoriesRefPath(currentUser: User | null) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access categories.");
   return `users/${currentUser.uid}/categories`;
 }
 
-function getSingleCategoryRefPath(currentUser: User | null, categoryId: string) {
+export function getSingleCategoryRefPath(currentUser: User | null, categoryId: string) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access category.");
   return `users/${currentUser.uid}/categories/${categoryId}`;
 }
@@ -136,14 +137,14 @@ export async function addCategory(categoryName: string, icon?: string): Promise<
     throw new Error("Failed to generate a new category ID.");
   }
 
-  const dataToSave: { name: string; icon?: string } = { name: normalizedName };
+  const newCategoryData: { name: string; icon?: string } = { name: normalizedName };
   if (icon && icon.trim()) {
-    dataToSave.icon = icon.trim();
+    newCategoryData.icon = icon.trim();
   }
 
   try {
-    await set(newCategoryRef, dataToSave);
-    return { id: newCategoryRef.key, name: normalizedName, icon: dataToSave.icon };
+    await set(newCategoryRef, newCategoryData);
+    return { id: newCategoryRef.key, name: normalizedName, icon: newCategoryData.icon };
   } catch (error) {
     console.error("Error adding category to Firebase:", error);
     throw error;
