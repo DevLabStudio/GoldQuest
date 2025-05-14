@@ -68,7 +68,7 @@ export default function FinancialControlPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userSubscriptions', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -276,23 +276,6 @@ export default function FinancialControlPage() {
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 space-y-8">
       <h1 className="text-3xl font-bold">Financial Control</h1>
 
-      {/* Budgets Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Budgets</CardTitle>
-          <CardDescription>
-            Create and track your spending against budgets for different categories.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-10">
-            <p className="text-muted-foreground">
-              Budgets feature coming soon!
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Subscriptions Section */}
       <Card>
         <CardHeader>
@@ -382,6 +365,23 @@ export default function FinancialControlPage() {
                     </CardContent>
                 </Card>
             </div>
+        </CardContent>
+      </Card>
+
+      {/* Budgets Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Budgets</CardTitle>
+          <CardDescription>
+            Create and track your spending against budgets for different categories.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-10">
+            <p className="text-muted-foreground">
+              Budgets feature coming soon!
+            </p>
+          </div>
         </CardContent>
       </Card>
 
