@@ -1,4 +1,3 @@
-
 'use client';
 
 import { FC, useMemo, useEffect } from 'react';
@@ -111,24 +110,24 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     onTransactionAdded,
     onTransferAdded,
     isLoading,
-    initialType: initialTypeFromParent, // Renamed to avoid confusion with local default logic
+    initialType: initialTypeFromParent,
     initialData
 }) => {
-  const resolvedInitialType = initialTypeFromParent ?? 'expense'; // Handle null or undefined explicitly
+  const resolvedInitialType = initialTypeFromParent ?? 'expense';
 
   const form = useForm<AddTransactionFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
         ...initialData,
         date: initialData.date ? (typeof initialData.date === 'string' ? parseISO(initialData.date.includes('T') ? initialData.date : initialData.date + 'T00:00:00Z') : initialData.date) : new Date(),
-        type: initialData.type || resolvedInitialType, // Use resolvedInitialType
+        type: initialData.type || resolvedInitialType,
         tags: initialData.tags || [],
         transactionCurrency: (initialData as Transaction)?.transactionCurrency || accounts.find(acc => acc.id === (initialData as any)?.accountId)?.currency || 'BRL',
         description: initialData.description || '',
         toAccountCurrency: (initialData as any)?.toAccountCurrency || (initialData as any)?.transactionCurrency || (accounts.find(acc => acc.id === (initialData as any)?.toAccountId)?.currency),
         exchangeRate: (initialData as any)?.exchangeRate,
     } : {
-      type: resolvedInitialType, // Use resolvedInitialType
+      type: resolvedInitialType,
       description: "",
       date: new Date(),
       accountId: accounts.length > 0 ? accounts[0].id : undefined,
@@ -223,13 +222,19 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             form.setValue('toAccountCurrency', toAccount.currency);
              if (fromAccount?.currency === toAccount.currency) {
                 form.setValue('exchangeRate', 1);
+            } else {
+                form.setValue('exchangeRate', undefined);
             }
+        }
+        // If currencies became same after account change, ensure rate is 1
+        if (form.getValues('transactionCurrency') === form.getValues('toAccountCurrency') && form.getValues('exchangeRate') !== 1) {
+            form.setValue('exchangeRate', 1);
         }
     }
   }, [selectedAccountId, selectedFromAccountId, selectedToAccountId, transactionType, accounts, form]);
 
   const getButtonText = () => {
-    const isEditing = !!initialData?.id;
+    const isEditing = !!(initialData && initialData.id); // Check if initialData AND initialData.id exist
 
     if (isLoading) {
         return isEditing ? "Saving..." : "Adding...";
@@ -241,8 +246,9 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
     // For new transactions
     let typeLabel = 'Transaction'; // Default fallback
-    if (transactionType && typeof transactionType === 'string' && transactionType.length > 0) {
-        typeLabel = transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
+    const currentTransactionType = form.getValues('type'); // Get current type from form state
+    if (currentTransactionType && typeof currentTransactionType === 'string' && currentTransactionType.length > 0) {
+        typeLabel = currentTransactionType.charAt(0).toUpperCase() + currentTransactionType.slice(1);
     }
     return `Add ${typeLabel}`;
   };
@@ -270,7 +276,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         if (fromAcc?.currency === toAcc?.currency) {
                             form.setValue('exchangeRate', 1);
                         } else {
-                            form.setValue('exchangeRate', undefined); // Clear rate for cross-currency
+                            form.setValue('exchangeRate', undefined);
                         }
                     } else {
                         form.setValue('fromAccountId', undefined);
@@ -333,7 +339,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         if (acc.currency === form.getValues('toAccountCurrency')) {
                                             form.setValue('exchangeRate', 1);
                                         } else if (form.getValues('toAccountCurrency')) {
-                                            form.setValue('exchangeRate', undefined); // Clear for cross-currency
+                                            form.setValue('exchangeRate', undefined);
                                         }
                                     }
                                 }}
@@ -372,7 +378,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         if (acc.currency === form.getValues('transactionCurrency')) {
                                             form.setValue('exchangeRate', 1);
                                         } else if (form.getValues('transactionCurrency')) {
-                                            form.setValue('exchangeRate', undefined); // Clear for cross-currency
+                                            form.setValue('exchangeRate', undefined);
                                         }
                                     }
                                 }}

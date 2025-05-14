@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -13,12 +12,12 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import SpendingChart from '@/components/dashboard/spending-chart';
-import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
+import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, CopyPlus } from 'lucide-react'; 
+import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, CopyPlus } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from '@/hooks/use-toast';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -46,7 +45,7 @@ export default function TransactionsOverviewPage() {
   const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
   const { selectedDateRange } = useDateRange();
 
@@ -69,7 +68,7 @@ export default function TransactionsOverviewPage() {
     setIsLoading(true);
     setError(null);
     try {
-        const prefs = await getUserPreferences(); 
+        const prefs = await getUserPreferences();
         setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -103,7 +102,7 @@ export default function TransactionsOverviewPage() {
     } finally {
         setIsLoading(false);
     }
-  }, [toast]); 
+  }, [toast]);
 
   useEffect(() => {
     fetchData();
@@ -111,7 +110,8 @@ export default function TransactionsOverviewPage() {
          if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for transaction overview (key: ${event.key || 'custom'}), refetching data...`);
@@ -129,13 +129,13 @@ export default function TransactionsOverviewPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [fetchData]); 
+  }, [fetchData]);
 
   const allTransactions = useMemo(() => {
     if (isLoading) return [];
     return allTransactionsUnfiltered.filter(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      if (!selectedDateRange.from || !selectedDateRange.to) return true; 
+      if (!selectedDateRange.from || !selectedDateRange.to) return true;
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
   }, [allTransactionsUnfiltered, isLoading, selectedDateRange]);
@@ -147,7 +147,7 @@ export default function TransactionsOverviewPage() {
       const categoryTotals: { [key: string]: number } = {};
 
       allTransactions.forEach(tx => {
-          if (tx.amount < 0 && tx.category !== 'Transfer') { 
+          if (tx.amount < 0 && tx.category !== 'Transfer') {
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
                  const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
@@ -182,7 +182,7 @@ export default function TransactionsOverviewPage() {
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
             amount: transactionAmount,
-            transactionCurrency: formData.transactionCurrency, 
+            transactionCurrency: formData.transactionCurrency,
             date: formatDateFns(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
@@ -198,7 +198,8 @@ export default function TransactionsOverviewPage() {
                 title: "Success",
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
-            window.dispatchEvent(new Event('storage')); 
+            await fetchData(); // Re-fetch data for immediate UI update
+            window.dispatchEvent(new Event('storage'));
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -225,7 +226,8 @@ export default function TransactionsOverviewPage() {
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
-           window.dispatchEvent(new Event('storage')); 
+           await fetchData(); // Re-fetch data for immediate UI update
+           window.dispatchEvent(new Event('storage'));
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -245,7 +247,8 @@ export default function TransactionsOverviewPage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -283,7 +286,8 @@ export default function TransactionsOverviewPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -326,7 +330,7 @@ export default function TransactionsOverviewPage() {
     };
 
     if (transaction.category === 'Transfer') {
-        typeForForm = typeBasedOnAmount; 
+        typeForForm = typeBasedOnAmount;
         toast({
             title: "Cloning Transfer Leg",
             description: `Cloned as ${typeForForm}. To create a new transfer, change type to 'Transfer' and specify accounts.`,
@@ -427,7 +431,7 @@ export default function TransactionsOverviewPage() {
                                         All recent transactions for {dateRangeLabel}.
                                 </CardDescription>
                             </div>
-                            <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('expense')}> 
+                            <Button variant="default" size="sm" onClick={() => openAddTransactionDialog('expense')}>
                                 <PlusCircle className="mr-2 h-4 w-4" /> Create new transaction
                             </Button>
                         </div>
@@ -561,10 +565,10 @@ export default function TransactionsOverviewPage() {
             </div>
             <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
                  <MonthlySummarySidebar
-                    transactions={allTransactions} 
+                    transactions={allTransactions}
                     accounts={accounts}
                     preferredCurrency={preferredCurrency}
-                    transactionType="all" 
+                    transactionType="all"
                     isLoading={isLoading}
                  />
             </div>
@@ -584,11 +588,11 @@ export default function TransactionsOverviewPage() {
                 </DialogHeader>
                 {selectedTransaction && accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
                     <AddTransactionForm
-                        key={selectedTransaction.id} 
+                        key={selectedTransaction.id}
                         accounts={accounts}
                         categories={allCategories}
                         tags={allTags}
-                        onTransactionAdded={handleUpdateTransaction} 
+                        onTransactionAdded={handleUpdateTransaction}
                         isLoading={isLoading}
                         initialData={{
                             ...selectedTransaction,

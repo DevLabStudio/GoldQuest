@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -7,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, updateTransaction, deleteTransaction, type Transaction, addTransaction } from "@/services/transactions";
-import { getCategories, getCategoryStyle, Category as CategoryType } from '@/services/categories'; // Keep for category display
+import { getCategories, getCategoryStyle, Category as CategoryType } from '@/services/categories';
 import { getTags, type Tag as TagType, getTagStyle } from '@/services/tags';
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -44,8 +43,8 @@ export default function TagDetailPage() {
 
   const [tag, setTag] = useState<TagType | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [allCategories, setAllCategories] = useState<CategoryType[]>([]); 
-  const [allTags, setAllTags] = useState<TagType[]>([]); 
+  const [allCategories, setAllCategories] = useState<CategoryType[]>([]);
+  const [allTags, setAllTags] = useState<TagType[]>([]);
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -73,7 +72,7 @@ export default function TagDetailPage() {
         setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAppAccounts, fetchedAppCategories, fetchedAppTags] = await Promise.all([
-            getAccounts(), 
+            getAccounts(),
             getCategories(),
             getTags()
         ]);
@@ -118,7 +117,8 @@ export default function TagDetailPage() {
          if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for tag ${tagId} (key: ${event.key || 'custom'}), refetching data...`);
@@ -165,7 +165,8 @@ export default function TagDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -184,7 +185,8 @@ export default function TagDetailPage() {
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -196,14 +198,15 @@ export default function TagDetailPage() {
 
   const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
     try {
-      const dataWithTag = (tag && !data.tags?.includes(tag.name)) 
-        ? { ...data, tags: [...(data.tags || []), tag.name] } 
+      const dataWithTag = (tag && !data.tags?.includes(tag.name))
+        ? { ...data, tags: [...(data.tags || []), tag.name] }
         : data;
       await addTransaction(dataWithTag);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -214,12 +217,12 @@ export default function TagDetailPage() {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const currentAccounts = await getAccounts(); 
+      const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
-      const tagsWithCurrent = (tag && !data.tags?.includes(tag.name)) 
-        ? [...(data.tags || []), tag.name] 
+      const tagsWithCurrent = (tag && !data.tags?.includes(tag.name))
+        ? [...(data.tags || []), tag.name]
         : (data.tags || []);
 
 
@@ -246,7 +249,8 @@ export default function TagDetailPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -263,7 +267,7 @@ export default function TagDetailPage() {
         return;
     }
     setTransactionTypeToAdd(type);
-    setClonedTransactionData(undefined); 
+    setClonedTransactionData(undefined);
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -277,7 +281,7 @@ export default function TagDetailPage() {
         date: parseISO(transaction.date.includes('T') ? transaction.date : transaction.date + 'T00:00:00Z'),
         description: `Clone of: ${transaction.description}`,
         category: transaction.category === 'Transfer' ? undefined : transaction.category,
-        tags: transaction.tags || [], 
+        tags: transaction.tags || [],
     };
 
     if (transaction.category === 'Transfer') {
@@ -306,7 +310,7 @@ export default function TagDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !tag) { 
+  if (isLoading && !tag) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -339,7 +343,7 @@ export default function TagDetailPage() {
         </div>
     );
   }
-  
+
   const { icon: TagIconStyled, color: tagColor } = getTagStyle(tag.name);
 
   return (
@@ -435,7 +439,7 @@ export default function TagDetailPage() {
                                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                                     </div>
                                   </AlertDialogTrigger>
-                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( 
+                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && (
                                     <AlertDialogContent>
                                       <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedTransaction.description}".</AlertDialogDescription></AlertDialogHeader>
                                       <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedTransaction(null)} disabled={isDeleting}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTransactionConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeleting ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
@@ -466,16 +470,16 @@ export default function TagDetailPage() {
           <DialogHeader><DialogTitle>Edit Transaction</DialogTitle></DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
-              key={selectedTransaction.id} 
+              key={selectedTransaction.id}
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
               isLoading={isLoading}
               initialData={{
-                ...selectedTransaction, 
+                ...selectedTransaction,
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.abs(selectedTransaction.amount), 
+                amount: Math.abs(selectedTransaction.amount),
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />
@@ -486,7 +490,7 @@ export default function TagDetailPage() {
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => { setIsAddTransactionDialogOpen(open); if (!open) { setClonedTransactionData(undefined); setTransactionTypeToAdd(null); } }}>
         <DialogContent className="sm:max-w-2xl">
           <DialogHeader><DialogTitle>{clonedTransactionData ? 'Clone & Edit Transaction' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}</DialogTitle></DialogHeader>
-          {isLoading ? <Skeleton className="h-64 w-full"/> : 
+          {isLoading ? <Skeleton className="h-64 w-full"/> :
           (allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={allAccounts}

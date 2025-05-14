@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -103,9 +102,15 @@ export default function TransfersPage() {
     fetchData();
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key?.startsWith('transactions-')) ) {
-             console.log("Storage changed, refetching transfer data...");
-             fetchData();
+         if (typeof window !== 'undefined') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log("Storage changed, refetching transfer data...");
+                fetchData();
+            }
          }
      };
      if (typeof window !== 'undefined') {
@@ -146,7 +151,6 @@ export default function TransfersPage() {
         );
 
         if (matchingIncoming.length > 0) {
-            // Sort matching incoming by ID to pick deterministically if multiple exact matches (rare)
             matchingIncoming.sort((a,b) => a.id.localeCompare(b.id));
             const txIn = matchingIncoming[0];
             transfers.push({ from: txOut, to: txIn });
@@ -182,12 +186,12 @@ export default function TransfersPage() {
                 deleteTransaction(selectedTransactionPair[0].id, selectedTransactionPair[0].accountId),
                 deleteTransaction(selectedTransactionPair[1].id, selectedTransactionPair[1].accountId)
             ]);
-             await fetchData();
-             toast({
+            toast({
                 title: "Transfer Deleted",
                 description: `Transfer record removed successfully.`,
             });
-            window.dispatchEvent(new Event('storage')); // Notify other components
+            await fetchData(); // Re-fetch data for immediate UI update
+            window.dispatchEvent(new Event('storage'));
         } catch (err: any) {
             console.error("Failed to delete transfer:", err);
             toast({
@@ -202,23 +206,19 @@ export default function TransfersPage() {
     };
 
   const handleTransactionAdded = async (data: Omit<Transaction, 'id'> | Transaction) => {
-    // This function is a fallback for non-transfer types, primarily used by the global header's AddTransactionForm.
-    // For transfer updates via this page's form, onTransferAdded should be used.
     setIsLoading(true);
     try {
-      if (!('id' in data)) { // Only if it's a new transaction
+      if (!('id' in data)) {
         await addTransaction(data as Omit<Transaction, 'id'>);
         toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       } else {
-        // If an ID exists, it's an update, but this form is for *new* non-transfers or *new/editing* transfers.
-        // This path should ideally not be hit if the form type is correctly 'transfer' for transfer edits.
         await updateTransaction(data as Transaction);
          toast({ title: "Success", description: `Transaction updated.` });
       }
-      await fetchData();
+      await fetchData(); // Re-fetch data for immediate UI update
       setIsAddTransactionDialogOpen(false);
-      setEditingTransferPair(null); // Reset editing state
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      setEditingTransferPair(null);
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
@@ -264,10 +264,10 @@ export default function TransfersPage() {
       });
 
       toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
-      await fetchData();
+      await fetchData(); // Re-fetch data for immediate UI update
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -311,7 +311,7 @@ export default function TransfersPage() {
             tags: editingTransferPair.from.tags || [],
         };
     }
-    return {date: new Date()}; // Default for new transaction
+    return {date: new Date()};
   }, [editingTransferPair, transactionTypeToAdd]);
 
   const dateRangeLabel = useMemo(() => {
@@ -511,7 +511,7 @@ export default function TransfersPage() {
               initialData={initialFormDataForEdit}
             />
           )}
-           {(accounts.length === 0 || allCategories.length === 0 || allTags.length === 0) && !isLoading && (
+           {(accounts.length === 0 || allCategories.length > 0 || allTags.length > 0) && !isLoading && (
                <div className="py-4 text-center text-muted-foreground">
                  Please ensure you have at least one account (or two for transfers), category, and tag set up before adding transactions.
                    You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.

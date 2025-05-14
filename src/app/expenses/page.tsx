@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -12,7 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns'; 
+import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -31,7 +30,7 @@ const formatDate = (dateString: string): string => {
         // Ensure date string is treated as UTC if no explicit timezone
         const date = parseISO(dateString.includes('T') ? dateString : dateString + 'T00:00:00Z');
         if (isNaN(date.getTime())) throw new Error('Invalid date');
-        return formatDateFns(date, 'MMM do, yyyy'); 
+        return formatDateFns(date, 'MMM do, yyyy');
     } catch (error) {
         console.error("Error formatting date:", dateString, error);
         return 'Invalid Date';
@@ -45,7 +44,7 @@ export default function ExpensesPage() {
   const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
   const { selectedDateRange } = useDateRange();
 
@@ -68,7 +67,7 @@ export default function ExpensesPage() {
     setIsLoading(true);
     setError(null);
     try {
-        const prefs = await getUserPreferences(); 
+        const prefs = await getUserPreferences();
         setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
@@ -102,16 +101,16 @@ export default function ExpensesPage() {
     } finally {
         setIsLoading(false);
     }
-  }, [toast]); 
+  }, [toast]);
 
   useEffect(() => {
     fetchData();
     const handleStorageChange = (event: StorageEvent) => {
         if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-             // Expenses page depends on all these for complete data
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for expenses page (key: ${event.key || 'custom'}), refetching data...`);
@@ -129,7 +128,7 @@ export default function ExpensesPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [fetchData]); 
+  }, [fetchData]);
 
   const expenseTransactions = useMemo(() => {
     if (isLoading) return [];
@@ -137,7 +136,7 @@ export default function ExpensesPage() {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
       const isInDateRange = selectedDateRange.from && selectedDateRange.to ?
                             isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to }) :
-                            true; 
+                            true;
       return tx.amount < 0 && tx.category !== 'Transfer' && isInDateRange;
     });
   }, [allTransactionsUnfiltered, isLoading, selectedDateRange]);
@@ -160,7 +159,7 @@ export default function ExpensesPage() {
         const transactionToUpdate: Transaction = {
             ...selectedTransaction,
             amount: transactionAmount,
-            transactionCurrency: formData.transactionCurrency, 
+            transactionCurrency: formData.transactionCurrency,
             date: formatDateFns(formData.date, 'yyyy-MM-dd'),
             description: formData.description || selectedTransaction.description,
             category: formData.category || selectedTransaction.category,
@@ -176,7 +175,8 @@ export default function ExpensesPage() {
                 title: "Success",
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
-            window.dispatchEvent(new Event('storage')); 
+            await fetchData(); // Re-fetch data for immediate UI update
+            window.dispatchEvent(new Event('storage'));
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -203,7 +203,8 @@ export default function ExpensesPage() {
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
-            window.dispatchEvent(new Event('storage')); 
+           await fetchData(); // Re-fetch data for immediate UI update
+           window.dispatchEvent(new Event('storage'));
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -223,7 +224,8 @@ export default function ExpensesPage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-       window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -251,7 +253,7 @@ export default function ExpensesPage() {
       await addTransaction({
         accountId: data.toAccountId,
         amount: transferAmount,
-        transactionCurrency: data.transactionCurrency, 
+        transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -261,7 +263,8 @@ export default function ExpensesPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -373,7 +376,7 @@ export default function ExpensesPage() {
         )}
 
         <div className="flex flex-col md:flex-row gap-8">
-            <div className="flex-grow"> 
+            <div className="flex-grow">
                 <Card>
                     <CardHeader>
                         <div className="flex justify-between items-center">
@@ -403,7 +406,7 @@ export default function ExpensesPage() {
                             <TableHead className="text-right">Amount</TableHead>
                             <TableHead>Date</TableHead>
                             <TableHead>Source account</TableHead>
-                            <TableHead>Destination</TableHead> 
+                            <TableHead>Destination</TableHead>
                             <TableHead>Category</TableHead>
                             <TableHead>Tags</TableHead>
                             <TableHead className="text-right">Actions</TableHead>
@@ -415,7 +418,7 @@ export default function ExpensesPage() {
                                 if (!account) return null;
                                 const categoryDetails = allCategories.find(c => c.name === transaction.category);
                                 const { icon: CategoryIcon, color } = getCategoryStyle(categoryDetails);
-                                
+
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -429,7 +432,7 @@ export default function ExpensesPage() {
                                         </TableCell>
                                         <TableCell className="whitespace-nowrap text-muted-foreground">{formatDate(transaction.date)}</TableCell>
                                         <TableCell className="text-muted-foreground">{account.name}</TableCell>
-                                        <TableCell className="text-muted-foreground">{transaction.description}</TableCell> 
+                                        <TableCell className="text-muted-foreground">{transaction.description}</TableCell>
                                         <TableCell>
                                             {categoryDetails ? (
                                                 <Link href={`/categories/${categoryDetails.id}`} passHref>
@@ -518,7 +521,7 @@ export default function ExpensesPage() {
                     </CardContent>
                 </Card>
             </div>
-            <div className="w-full md:w-72 lg:w-80 flex-shrink-0"> 
+            <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
                  <MonthlySummarySidebar
                     transactions={expenseTransactions}
                     accounts={accounts}
@@ -543,11 +546,11 @@ export default function ExpensesPage() {
                 </DialogHeader>
                 {selectedTransaction && accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
                     <AddTransactionForm
-                        key={selectedTransaction.id} 
+                        key={selectedTransaction.id}
                         accounts={accounts}
                         categories={allCategories}
                         tags={allTags}
-                        onTransactionAdded={handleUpdateTransaction} 
+                        onTransactionAdded={handleUpdateTransaction}
                         isLoading={isLoading}
                         initialData={{
                             ...selectedTransaction,

@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -53,7 +52,7 @@ export default function FinancialControlPage() {
       setSubscriptions(subs.sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
       setCategories(cats);
       setAccounts(accs);
-      setGroups(grps.sort((a, b) => a.name.localeCompare(b.name))); 
+      setGroups(grps.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error("Failed to fetch subscriptions data:", error);
       toast({ title: "Error", description: "Could not load subscriptions.", variant: "destructive" });
@@ -68,7 +67,8 @@ export default function FinancialControlPage() {
         if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userSubscriptions', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for Financial Control (key: ${event.key || 'custom'}), refetching data...`);
@@ -101,21 +101,21 @@ export default function FinancialControlPage() {
             ...payload,
             groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? null : data.groupId,
             accountId: data.accountId === "__NONE_ACCOUNT__" || data.accountId === "" ? undefined : data.accountId,
-            lastPaidMonth: editingSubscription.lastPaidMonth 
+            lastPaidMonth: editingSubscription.lastPaidMonth
         });
         toast({ title: "Success", description: "Subscription updated successfully." });
       } else {
-        await saveSubscription({ 
-            ...payload, 
+        await saveSubscription({
+            ...payload,
             groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? null : data.groupId,
             accountId: data.accountId === "__NONE_ACCOUNT__" || data.accountId === "" ? undefined : data.accountId,
-            lastPaidMonth: null 
+            lastPaidMonth: null
         });
         toast({ title: "Success", description: "Subscription added successfully." });
       }
       setIsAddSubscriptionDialogOpen(false);
       setEditingSubscription(null);
-      fetchSubscriptionData(); 
+      await fetchSubscriptionData();
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to save subscription:", error);
@@ -127,7 +127,7 @@ export default function FinancialControlPage() {
     try {
       await deleteSubscription(subscriptionId);
       toast({ title: "Success", description: "Subscription deleted." });
-      fetchSubscriptionData(); 
+      await fetchSubscriptionData();
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to delete subscription:", error);
@@ -149,14 +149,14 @@ export default function FinancialControlPage() {
     try {
       await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
-      fetchSubscriptionData(); 
+      await fetchSubscriptionData();
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to update paid status:", error);
       toast({ title: "Error", description: "Could not update paid status.", variant: "destructive" });
     }
   };
-  
+
   const groupSubscriptionsByType = (type: 'income' | 'expense') => {
     const filteredSubs = subscriptions.filter(sub => sub.type === type);
     const grouped: Record<string, Subscription[]> = {};
@@ -215,7 +215,7 @@ export default function FinancialControlPage() {
           <Checkbox
             id={`paid-${subscription.id}`}
             checked={isPaidThisMonth}
-            onCheckedChange={(checked) => handleTogglePaidStatus(subscription.id, !!checked)} 
+            onCheckedChange={(checked) => handleTogglePaidStatus(subscription.id, !!checked)}
             aria-label={`Mark ${subscription.name} as paid for ${format(new Date(), 'MMMM yyyy')}`}
           />
           <Label htmlFor={`paid-${subscription.id}`} className="text-xs font-medium">
@@ -231,7 +231,7 @@ export default function FinancialControlPage() {
   )};
 
   const renderGroupedSubscriptions = (groupedData: Record<string, Subscription[]>, type: 'income' | 'expense') => {
-    const groupOrder = ['no-group', ...groups.map(g => g.id)]; 
+    const groupOrder = ['no-group', ...groups.map(g => g.id)];
 
     return groupOrder.map(groupId => {
       const subsInGroup = groupedData[groupId];
@@ -267,7 +267,7 @@ export default function FinancialControlPage() {
           {subsInGroup.map(renderSubscriptionCard)}
         </div>
       );
-    }).filter(Boolean); 
+    }).filter(Boolean);
   };
 
 

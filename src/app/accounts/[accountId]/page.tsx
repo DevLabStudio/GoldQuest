@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -23,7 +22,7 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import { useToast } from "@/hooks/use-toast";
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
-import SpendingChart from '@/components/dashboard/spending-chart'; // Import SpendingChart
+import SpendingChart from '@/components/dashboard/spending-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
 
@@ -47,7 +46,7 @@ export default function AccountDetailPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
   const [allTags, setAllTags] = useState<Tag[]>([]);
-  const [allAccounts, setAllAccounts] = useState<Account[]>([]); // For AddTransactionForm
+  const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
@@ -75,7 +74,7 @@ export default function AccountDetailPage() {
         setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
-            getAccounts(), 
+            getAccounts(),
             getCategories(),
             getTags()
         ]);
@@ -113,7 +112,8 @@ export default function AccountDetailPage() {
         if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for account ${accountId} (key: ${event.key || 'custom'}), refetching data...`);
@@ -185,7 +185,8 @@ export default function AccountDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -204,7 +205,8 @@ export default function AccountDetailPage() {
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -219,8 +221,9 @@ export default function AccountDetailPage() {
       await addTransaction({ ...data, accountId: accountId! });
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); 
-      window.dispatchEvent(new Event('storage')); 
+      setClonedTransactionData(undefined);
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -231,7 +234,7 @@ export default function AccountDetailPage() {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const currentAccounts = await getAccounts(); 
+      const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
@@ -258,8 +261,9 @@ export default function AccountDetailPage() {
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); 
-      window.dispatchEvent(new Event('storage')); 
+      setClonedTransactionData(undefined);
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -276,7 +280,7 @@ export default function AccountDetailPage() {
         return;
     }
     setTransactionTypeToAdd(type);
-    setClonedTransactionData(undefined); 
+    setClonedTransactionData(undefined);
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -327,7 +331,7 @@ export default function AccountDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !account) { 
+  if (isLoading && !account) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -509,7 +513,7 @@ export default function AccountDetailPage() {
                                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                                     </div>
                                   </AlertDialogTrigger>
-                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( 
+                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && (
                                     <AlertDialogContent>
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -547,7 +551,7 @@ export default function AccountDetailPage() {
             transactions={filteredTransactions}
             accounts={account ? [account] : []}
             preferredCurrency={preferredCurrency}
-            transactionType="all" 
+            transactionType="all"
             isLoading={isLoading}
           />
         </div>
@@ -563,16 +567,16 @@ export default function AccountDetailPage() {
           </DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
-              key={selectedTransaction.id} 
+              key={selectedTransaction.id}
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleUpdateTransaction} 
+              onTransactionAdded={handleUpdateTransaction}
               isLoading={isLoading}
               initialData={{
-                ...selectedTransaction, 
+                ...selectedTransaction,
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.abs(selectedTransaction.amount), 
+                amount: Math.abs(selectedTransaction.amount),
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />
@@ -583,7 +587,7 @@ export default function AccountDetailPage() {
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
         setIsAddTransactionDialogOpen(open);
         if (!open) {
-            setClonedTransactionData(undefined); 
+            setClonedTransactionData(undefined);
             setTransactionTypeToAdd(null);
         }
       }}>
@@ -594,23 +598,23 @@ export default function AccountDetailPage() {
               {account && !clonedTransactionData && ` for ${account.name}`}
             </DialogTitle>
           </DialogHeader>
-          {isLoading ? <Skeleton className="h-64 w-full"/> : 
+          {isLoading ? <Skeleton className="h-64 w-full"/> :
           (allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
-              onTransactionAdded={handleTransactionAdded} 
-              onTransferAdded={handleTransferAdded}     
+              onTransactionAdded={handleTransactionAdded}
+              onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
               initialData={
                 clonedTransactionData ||
                 (transactionTypeToAdd !== 'transfer' && account
                     ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                    : (transactionTypeToAdd === 'transfer' && account 
+                    : (transactionTypeToAdd === 'transfer' && account
                         ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                        : {date: new Date()}) 
+                        : {date: new Date()})
                 )
               }
             />

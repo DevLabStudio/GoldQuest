@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -72,7 +71,7 @@ export default function CategoryDetailPage() {
         setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAppAccounts, fetchedAppCategories, fetchedAppTags] = await Promise.all([
-            getAccounts(), 
+            getAccounts(),
             getCategories(),
             getTags()
         ]);
@@ -116,8 +115,9 @@ export default function CategoryDetailPage() {
     const handleStorageChange = (event: StorageEvent) => {
         if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-']; // transactions- for any account change
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                  console.log(`Storage change for category ${categoryId} (key: ${event.key || 'custom'}), refetching data...`);
@@ -170,7 +170,8 @@ export default function CategoryDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -189,7 +190,8 @@ export default function CategoryDetailPage() {
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      window.dispatchEvent(new Event('storage')); 
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -205,8 +207,9 @@ export default function CategoryDetailPage() {
       await addTransaction(dataWithCategory);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); 
-      window.dispatchEvent(new Event('storage')); 
+      setClonedTransactionData(undefined);
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -217,7 +220,7 @@ export default function CategoryDetailPage() {
     try {
       const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const currentAccounts = await getAccounts(); 
+      const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
@@ -244,8 +247,9 @@ export default function CategoryDetailPage() {
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); 
-      window.dispatchEvent(new Event('storage')); 
+      setClonedTransactionData(undefined);
+      await fetchData(); // Re-fetch data for immediate UI update
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -262,7 +266,7 @@ export default function CategoryDetailPage() {
         return;
     }
     setTransactionTypeToAdd(type);
-    setClonedTransactionData(undefined); 
+    setClonedTransactionData(undefined);
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -287,17 +291,9 @@ export default function CategoryDetailPage() {
             variant: "default",
             duration: 7000,
         });
-        setClonedTransactionData({
-            ...baseClonedData,
-            type: typeForForm,
-            accountId: transaction.accountId,
-        });
+        setClonedTransactionData({ ...baseClonedData, type: typeForForm, accountId: transaction.accountId });
     } else {
-        setClonedTransactionData({
-            ...baseClonedData,
-            type: typeForForm,
-            accountId: transaction.accountId,
-        });
+        setClonedTransactionData({ ...baseClonedData, type: typeForForm, accountId: transaction.accountId });
     }
     setTransactionTypeToAdd(typeForForm);
     setIsAddTransactionDialogOpen(true);
@@ -313,7 +309,7 @@ export default function CategoryDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !category) { 
+  if (isLoading && !category) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -352,7 +348,7 @@ export default function CategoryDetailPage() {
         </div>
     );
   }
-  
+
   const { icon: CategoryIcon, color: categoryColor } = getCategoryStyle(category);
 
 
@@ -442,41 +438,21 @@ export default function CategoryDetailPage() {
                           <TableCell className="text-right">
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                  <span className="sr-only">Open menu</span>
-                                  <MoreHorizontal className="h-4 w-4" />
-                                </Button>
+                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0"><span className="sr-only">Open menu</span><MoreHorizontal className="h-4 w-4" /></Button>
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end">
-                                <DropdownMenuItem onClick={() => openEditDialog(transaction)}>
-                                  <Edit className="mr-2 h-4 w-4" /> Edit
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => openCloneAndEditDialog(transaction)}>
-                                  <CopyPlus className="mr-2 h-4 w-4" /> Clone & Edit
-                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openEditDialog(transaction)}><Edit className="mr-2 h-4 w-4" /> Edit</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => openCloneAndEditDialog(transaction)}><CopyPlus className="mr-2 h-4 w-4" /> Clone & Edit</DropdownMenuItem>
                                 <AlertDialog>
                                   <AlertDialogTrigger asChild>
-                                    <div
-                                      className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
-                                      onClick={() => openDeleteDialog(transaction)}
-                                    >
+                                    <div className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50" onClick={() => openDeleteDialog(transaction)}>
                                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                                     </div>
                                   </AlertDialogTrigger>
-                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( 
+                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && (
                                     <AlertDialogContent>
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>Are you sure?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          This action will permanently delete "{selectedTransaction.description}".
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel onClick={() => setSelectedTransaction(null)} disabled={isDeleting}>Cancel</AlertDialogCancel>
-                                        <AlertDialogAction onClick={handleDeleteTransactionConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
-                                          {isDeleting ? "Deleting..." : "Delete"}
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
+                                      <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedTransaction.description}".</AlertDialogDescription></AlertDialogHeader>
+                                      <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedTransaction(null)} disabled={isDeleting}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTransactionConfirm} disabled={isDeleting} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeleting ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
                                     </AlertDialogContent>
                                   )}
                                 </AlertDialog>
@@ -489,44 +465,31 @@ export default function CategoryDetailPage() {
                   </TableBody>
                 </Table>
               ) : (
-                <div className="text-center py-10">
-                  <p className="text-muted-foreground">No transactions found for this category in the selected period.</p>
-                </div>
+                <div className="text-center py-10"><p className="text-muted-foreground">No transactions found for this category in the selected period.</p></div>
               )}
             </CardContent>
           </Card>
         </div>
         <div className="w-full md:w-72 lg:w-80 flex-shrink-0">
-          <MonthlySummarySidebar
-            transactions={filteredTransactions}
-            accounts={allAccounts}
-            preferredCurrency={preferredCurrency}
-            transactionType="all" 
-            isLoading={isLoading}
-          />
+          <MonthlySummarySidebar transactions={filteredTransactions} accounts={allAccounts} preferredCurrency={preferredCurrency} transactionType="all" isLoading={isLoading} />
         </div>
       </div>
 
-      <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
-        setIsEditDialogOpen(open);
-        if (!open) setSelectedTransaction(null);
-      }}>
+      <Dialog open={isEditDialogOpen} onOpenChange={(open) => { setIsEditDialogOpen(open); if (!open) setSelectedTransaction(null); }}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Transaction</DialogTitle>
-          </DialogHeader>
+          <DialogHeader><DialogTitle>Edit Transaction</DialogTitle></DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
-              key={selectedTransaction.id} 
+              key={selectedTransaction.id}
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
               isLoading={isLoading}
               initialData={{
-                ...selectedTransaction, 
+                ...selectedTransaction,
                 type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
-                amount: Math.abs(selectedTransaction.amount), 
+                amount: Math.abs(selectedTransaction.amount),
                 date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
               }}
             />
@@ -534,20 +497,10 @@ export default function CategoryDetailPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
-        setIsAddTransactionDialogOpen(open);
-        if (!open) {
-            setClonedTransactionData(undefined);
-            setTransactionTypeToAdd(null);
-        }
-      }}>
+      <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => { setIsAddTransactionDialogOpen(open); if (!open) { setClonedTransactionData(undefined); setTransactionTypeToAdd(null); } }}>
         <DialogContent className="sm:max-w-2xl">
-          <DialogHeader>
-             <DialogTitle>
-              {clonedTransactionData ? 'Clone & Edit Transaction' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}
-            </DialogTitle>
-          </DialogHeader>
-          {isLoading ? <Skeleton className="h-64 w-full"/> : 
+          <DialogHeader><DialogTitle>{clonedTransactionData ? 'Clone & Edit Transaction' : `Add New ${transactionTypeToAdd ? transactionTypeToAdd.charAt(0).toUpperCase() + transactionTypeToAdd.slice(1) : 'Transaction'}`}</DialogTitle></DialogHeader>
+          {isLoading ? <Skeleton className="h-64 w-full"/> :
           (allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && transactionTypeToAdd) && (
             <AddTransactionForm
               accounts={allAccounts}
@@ -557,12 +510,7 @@ export default function CategoryDetailPage() {
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
-              initialData={
-                clonedTransactionData ||
-                ( (transactionTypeToAdd === 'expense' || transactionTypeToAdd === 'income') && category
-                    ? { category: category.name, date: new Date() } 
-                    : {date: new Date()}) 
-              }
+              initialData={ clonedTransactionData || (tag ? { tags: [tag.name], date: new Date() } : {date: new Date()}) }
             />
           )}
         </DialogContent>

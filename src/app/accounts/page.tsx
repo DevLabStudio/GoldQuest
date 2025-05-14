@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -83,8 +82,9 @@ export default function AccountsPage() {
     const handleStorageChange = (event: StorageEvent) => {
          if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-']; // transactions- for any account
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change (key: ${event.key || 'custom'}), refetching data for accounts page...`);
@@ -102,19 +102,19 @@ export default function AccountsPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]); // Removed fetchAllData from deps as it's stable
+  }, [toast]);
 
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
       await addAccount(newAccountData);
-      await fetchAllData(); // Refetch after adding
+      await fetchAllData();
       setIsAddAssetDialogOpen(false);
       setIsAddCryptoDialogOpen(false);
       toast({
         title: "Success",
         description: `Account "${newAccountData.name}" added successfully.`,
       });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage'));
     } catch (err) {
        console.error("Failed to add account:", err);
        toast({
@@ -128,14 +128,14 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      await fetchAllData(); // Refetch after updating
+      await fetchAllData();
       setIsEditDialogOpen(false);
       setSelectedAccount(null);
       toast({
         title: "Success",
         description: `Account "${updatedAccountData.name}" updated successfully.`,
       });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage'));
     } catch (err) {
        console.error("Failed to update account:", err);
        toast({
@@ -149,12 +149,12 @@ export default function AccountsPage() {
    const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
-        await fetchAllData(); // Refetch after deleting
+        await fetchAllData();
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,
         });
-        window.dispatchEvent(new Event('storage')); // Notify other components
+        window.dispatchEvent(new Event('storage'));
     } catch (err) {
         console.error("Failed to delete account:", err);
         toast({
@@ -182,7 +182,7 @@ export default function AccountsPage() {
         };
     }
 
-    const relevantAccounts = [...allAccounts]; 
+    const relevantAccounts = [...allAccounts];
     if (relevantAccounts.length === 0) return { data: [], accountNames: [], chartConfig: {} };
 
     const accountColors = [
@@ -207,12 +207,12 @@ export default function AccountsPage() {
                 if (txDate >= selectedDateRange.from && txDate <= selectedDateRange.to) {
                     allDates.add(format(txDate, 'yyyy-MM-dd'));
                 }
-            } else { 
+            } else {
                  allDates.add(format(txDate, 'yyyy-MM-dd'));
             }
         }
     });
-    
+
     const sortedUniqueDates = Array.from(allDates).map(d => parseISO(d)).sort(compareAsc);
 
     if (sortedUniqueDates.length === 0 && relevantAccounts.length > 0) {
@@ -227,13 +227,13 @@ export default function AccountsPage() {
 
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalances: { [accountId: string]: number } = {}; 
+    const runningBalances: { [accountId: string]: number } = {};
 
     relevantAccounts.forEach(acc => {
         const openingBalanceTx = allTransactions.find(
             tx => tx.accountId === acc.id && tx.category?.toLowerCase() === 'opening balance'
         );
-        runningBalances[acc.id] = openingBalanceTx ? openingBalanceTx.amount : 0; 
+        runningBalances[acc.id] = openingBalanceTx ? openingBalanceTx.amount : 0;
     });
 
 
@@ -248,7 +248,7 @@ export default function AccountsPage() {
                 balanceBeforeFirstTx += convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
             });
         initialDataPoint[acc.name] = convertCurrency(balanceBeforeFirstTx, acc.currency, preferredCurrency);
-        runningBalances[acc.id] = balanceBeforeFirstTx; 
+        runningBalances[acc.id] = balanceBeforeFirstTx;
     });
     if (Object.keys(initialDataPoint).length > 1) historicalData.push(initialDataPoint);
 
@@ -257,9 +257,9 @@ export default function AccountsPage() {
         const dateStr = format(currentDate, 'yyyy-MM-dd');
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
 
-        const transactionsOnThisDay = allTransactions.filter(tx => 
+        const transactionsOnThisDay = allTransactions.filter(tx =>
             format(startOfDay(parseISO(tx.date)), 'yyyy-MM-dd') === dateStr &&
-            tx.category?.toLowerCase() !== 'opening balance' && 
+            tx.category?.toLowerCase() !== 'opening balance' &&
             relevantAccounts.some(acc => acc.id === tx.accountId)
         );
 
@@ -274,7 +274,7 @@ export default function AccountsPage() {
         relevantAccounts.forEach(acc => {
             dailySnapshot[acc.name] = convertCurrency(runningBalances[acc.id] || 0, acc.currency, preferredCurrency);
         });
-        
+
         const existingPointIndex = historicalData.findIndex(p => p.date === dateStr);
         if (existingPointIndex > -1) {
             historicalData[existingPointIndex] = { ...historicalData[existingPointIndex], ...dailySnapshot };
@@ -282,7 +282,7 @@ export default function AccountsPage() {
             historicalData.push(dailySnapshot);
         }
     }
-    
+
     historicalData.sort((a, b) => compareAsc(parseISO(a.date), parseISO(b.date)));
 
     return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
