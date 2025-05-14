@@ -1,16 +1,14 @@
 
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
-import SmallStatCard from "@/components/dashboard/small-stat-card";
-import IncomeSourceChart from "@/components/dashboard/income-source-chart";
 import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown";
+import IncomeSourceChart from "@/components/dashboard/income-source-chart";
 import IncomeExpensesChart from "@/components/dashboard/income-expenses-chart";
 import AssetsChart from "@/components/dashboard/assets-chart";
-import { DollarSign, TrendingUp, TrendingDown, Home, Users, Car } from "lucide-react";
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
@@ -39,47 +37,49 @@ export default function DashboardPage() {
   const { toast } = useToast();
   const { selectedDateRange } = useDateRange();
 
+  const fetchData = useCallback(async () => {
+    if (typeof window === 'undefined') {
+      setIsLoading(false);
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const prefs = await getUserPreferences();
+      setPreferredCurrency(prefs.preferredCurrency);
+
+      const fetchedAccounts = await getAccounts();
+      setAccounts(fetchedAccounts);
+
+      const fetchedCategories = await getCategories();
+      setCategories(fetchedCategories);
+
+      if (fetchedAccounts.length > 0) {
+        const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+        const transactionsByAccount = await Promise.all(transactionPromises);
+        const combinedTransactions = transactionsByAccount.flat();
+        setAllTransactions(combinedTransactions);
+      } else {
+        setAllTransactions([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch dashboard data:", error);
+      toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+    }
+  }, [toast]);
+
+
   useEffect(() => {
-    let isMounted = true;
-    const fetchData = async () => {
-      if (typeof window === 'undefined') {
-        if (isMounted) setIsLoading(false);
-        return;
-      }
-      if (isMounted) setIsLoading(true);
-      try {
-        const prefs = await getUserPreferences(); // Await preferences
-        if (isMounted) setPreferredCurrency(prefs.preferredCurrency);
-
-        const fetchedAccounts = await getAccounts();
-        if (isMounted) setAccounts(fetchedAccounts);
-
-        const fetchedCategories = await getCategories();
-        if (isMounted) setCategories(fetchedCategories);
-
-        if (fetchedAccounts.length > 0) {
-          const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-          const transactionsByAccount = await Promise.all(transactionPromises);
-          const combinedTransactions = transactionsByAccount.flat();
-          if (isMounted) setAllTransactions(combinedTransactions);
-        } else {
-           if (isMounted) setAllTransactions([]);
-        }
-
-
-      } catch (error) {
-        console.error("Failed to fetch dashboard data:", error);
-        if(isMounted) toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    };
-
     fetchData();
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key)) && isMounted) {
-            console.log("Storage changed on main dashboard, refetching data...");
-            if (isMounted) {
+        if (typeof window !== 'undefined' && event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log("Storage changed on main dashboard, refetching data...");
                 fetchData();
             }
         }
@@ -90,17 +90,16 @@ export default function DashboardPage() {
     }
 
     return () => {
-        isMounted = false;
         if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]);
+  }, [fetchData]);
 
   const totalNetWorth = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return accounts
-        .filter(acc => acc.includeInNetWorth !== false) // Only include if true or undefined
+        .filter(acc => acc.includeInNetWorth !== false) 
         .reduce((sum, account) => {
             return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
         }, 0);
@@ -111,7 +110,6 @@ export default function DashboardPage() {
     if (isLoading) return [];
     return allTransactions.filter(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      // If no date range selected, include all transactions
       if (!selectedDateRange.from || !selectedDateRange.to) return true;
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
@@ -121,9 +119,9 @@ export default function DashboardPage() {
   const monthlyIncome = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers from income
+      if (tx.amount > 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { // Check if account should be included
+        if (account && account.includeInNetWorth !== false) { 
           return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
         }
       }
@@ -134,9 +132,9 @@ export default function DashboardPage() {
   const monthlyExpenses = useMemo(() => {
     if (isLoading || typeof window === 'undefined') return 0;
     return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers from expenses
+      if (tx.amount < 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { // Check if account should be included
+        if (account && account.includeInNetWorth !== false) { 
           return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
         }
       }
@@ -150,9 +148,9 @@ export default function DashboardPage() {
     const expenseCategoryTotals: { [key: string]: number } = {};
 
     periodTransactions.forEach(tx => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
+      if (tx.amount < 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { // Check if account should be included
+        if (account && account.includeInNetWorth !== false) { 
           const categoryName = tx.category || 'Uncategorized';
           const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
           expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
@@ -185,9 +183,9 @@ export default function DashboardPage() {
     let colorIndex = 0;
 
     periodTransactions.forEach(tx => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { // Exclude transfers
+      if (tx.amount > 0 && tx.category !== 'Transfer') { 
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { // Check if account should be included
+        if (account && account.includeInNetWorth !== false) { 
           const categoryName = tx.category || 'Uncategorized Income';
           const convertedAmount = convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
           incomeCategoryTotals[categoryName] = (incomeCategoryTotals[categoryName] || 0) + convertedAmount;
@@ -225,7 +223,7 @@ export default function DashboardPage() {
         const monthKey = formatDateFns(txDate, 'MMM');
         const account = accounts.find(acc => acc.id === tx.accountId);
 
-        if (account && monthlyData[monthKey] && tx.category !== 'Transfer' && account.includeInNetWorth !== false) { // Exclude transfers and check includeInNetWorth
+        if (account && monthlyData[monthKey] && tx.category !== 'Transfer' && account.includeInNetWorth !== false) { 
             if (tx.amount > 0) {
                 monthlyData[monthKey].income += convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
             } else if (tx.amount < 0) {
@@ -316,3 +314,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+

@@ -111,7 +111,7 @@ export default function ExpensesPage() {
             const isLikelyOurCustomEvent = event.key === null;
              // Expenses page depends on all these for complete data
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for expenses page (key: ${event.key || 'custom'}), refetching data...`);
