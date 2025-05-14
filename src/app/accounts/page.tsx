@@ -18,7 +18,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format, parseISO, compareAsc, startOfDay } from 'date-fns';
+import { format as formatDateFns, parseISO, compareAsc, startOfDay, isSameDay } from 'date-fns';
 import Link from 'next/link';
 import AccountBalanceHistoryChart from '@/components/accounts/account-balance-history-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
@@ -171,13 +171,9 @@ export default function AccountsPage() {
   const assetAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'asset'), [allAccounts]);
   const cryptoAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'crypto'), [allAccounts]);
 
-  const accountBalanceHistoryData = useMemo(() => {
+ const accountBalanceHistoryData = useMemo(() => {
     if (isLoading || allAccounts.length === 0 || !preferredCurrency) {
-        return {
-            data: [],
-            accountNames: [],
-            chartConfig: {}
-        };
+        return { data: [], accountNames: [], chartConfig: {} };
     }
 
     const relevantAccounts = [...allAccounts];
@@ -193,128 +189,119 @@ export default function AccountsPage() {
         return acc;
     }, {} as any);
 
+    // Determine the actual start and end dates for chart calculation
+    const allTxDates = allTransactions.map(tx => parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z'));
+    const minTxDate = allTxDates.length > 0 ? allTxDates.reduce((min, d) => d < min ? d : min, allTxDates[0]) : new Date();
+    const maxTxDate = allTxDates.length > 0 ? allTxDates.reduce((max, d) => d > max ? d : max, allTxDates[0]) : new Date();
 
-    let allDates = new Set<string>();
-    if (selectedDateRange.from) allDates.add(format(startOfDay(selectedDateRange.from), 'yyyy-MM-dd'));
-    if (selectedDateRange.to) allDates.add(format(startOfDay(selectedDateRange.to), 'yyyy-MM-dd'));
+    const chartStartDate = startOfDay(selectedDateRange.from || minTxDate);
+    const chartEndDate = startOfDay(selectedDateRange.to || maxTxDate);
 
-    allTransactions.forEach(tx => {
-        if (relevantAccounts.some(acc => acc.id === tx.accountId)) {
-            const txDate = startOfDay(parseISO(tx.date));
-            if (selectedDateRange.from && selectedDateRange.to) {
-                if (txDate >= selectedDateRange.from && txDate <= selectedDateRange.to) {
-                    allDates.add(format(txDate, 'yyyy-MM-dd'));
-                }
-            } else {
-                 allDates.add(format(txDate, 'yyyy-MM-dd'));
-            }
-        }
-    });
-
-    const sortedUniqueDates = Array.from(allDates).map(d => parseISO(d)).sort(compareAsc);
-
-    if (sortedUniqueDates.length === 0 && relevantAccounts.length > 0) {
-        const todayStr = format(new Date(), 'yyyy-MM-dd');
-        const dataPoint: any = { date: todayStr };
-        relevantAccounts.forEach(acc => {
-            dataPoint[acc.name] = convertCurrency(acc.balance, acc.currency, preferredCurrency);
-        });
-        return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
-    }
-    if (sortedUniqueDates.length === 0) return { data: [], accountNames: [], chartConfig: {} };
-
-
-    const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalances: { [accountId: string]: number } = {};
-
-    // Initialize runningBalances with opening balance (converted to account's currency) or 0
+    // Calculate initial balances for each account *before* the chartStartDate
+    const initialRunningBalances: { [accountId: string]: number } = {}; // Balances in account's native currency
     relevantAccounts.forEach(acc => {
+        let balanceBeforeChartStart = 0;
         const openingBalanceTx = allTransactions.find(
             tx => tx.accountId === acc.id && tx.category?.toLowerCase() === 'opening balance'
         );
         if (openingBalanceTx) {
-            runningBalances[acc.id] = convertCurrency(openingBalanceTx.amount, openingBalanceTx.transactionCurrency, acc.currency);
-        } else {
-            runningBalances[acc.id] = 0;
+            balanceBeforeChartStart = convertCurrency(openingBalanceTx.amount, openingBalanceTx.transactionCurrency, acc.currency);
         }
-    });
 
-
-    const firstChartDate = sortedUniqueDates[0];
-    const initialDataPoint: any = { date: format(firstChartDate, 'yyyy-MM-dd') };
-    
-    relevantAccounts.forEach(acc => {
-        // Start with the (already converted) opening balance or 0
-        let balanceAtFirstChartDate = runningBalances[acc.id]; 
-        
-        // Add transactions before the first chart date
-         allTransactions
-            .filter(tx => tx.accountId === acc.id && parseISO(tx.date) < firstChartDate && tx.category?.toLowerCase() !== 'opening balance')
-            .sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)))
+        allTransactions
+            .filter(tx => {
+                const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                return tx.accountId === acc.id &&
+                       tx.category?.toLowerCase() !== 'opening balance' &&
+                       txDate < chartStartDate;
+            })
+            .sort((a, b) => compareAsc(parseISO(a.date.includes('T') ? a.date : a.date + 'T00:00:00Z'), parseISO(b.date.includes('T') ? b.date : b.date + 'T00:00:00Z')))
             .forEach(tx => {
-                balanceAtFirstChartDate += convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                balanceBeforeChartStart += convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
             });
-        
-        initialDataPoint[acc.name] = convertCurrency(balanceAtFirstChartDate, acc.currency, preferredCurrency);
-        runningBalances[acc.id] = balanceAtFirstChartDate; // Update runningBalances to this point for the iterative calculation
+        initialRunningBalances[acc.id] = balanceBeforeChartStart;
     });
 
-    if (Object.keys(initialDataPoint).length > 1) historicalData.push(initialDataPoint);
+    // Collect relevant dates for the chart
+    const chartDatesSet = new Set<string>();
+    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd'));
+    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
 
-
-    for (const currentDate of sortedUniqueDates) {
-        const dateStr = format(currentDate, 'yyyy-MM-dd');
-        // Skip if this date was already handled by initialDataPoint and no new transactions on this day
-        if (historicalData.length > 0 && historicalData[historicalData.length -1].date === dateStr && currentDate === firstChartDate) {
-             // If it's the first date and already added by initialDataPoint,
-             // we need to process transactions *on* this day and update the point if necessary,
-             // or add a new point if the initialDataPoint was for *before* this day.
-             // The current logic processes transactions *on* the day and then adds/updates snapshot.
+    allTransactions.forEach(tx => {
+        const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+        if (txDate >= chartStartDate && txDate <= chartEndDate) {
+            chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
+    });
 
+    const sortedUniqueChartDates = Array.from(chartDatesSet)
+        .map(d => parseISO(d))
+        .sort(compareAsc);
+    
+    if (sortedUniqueChartDates.length === 0 && relevantAccounts.length > 0) {
+        // If no transactions in range, show initial balances at start date
+        const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
+        relevantAccounts.forEach(acc => {
+            dataPoint[acc.name] = convertCurrency(initialRunningBalances[acc.id] || 0, acc.currency, preferredCurrency);
+        });
+        return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
+    }
+     if (sortedUniqueChartDates.length === 0) {
+         return { data: [], accountNames: [], chartConfig: {} };
+    }
+
+
+    // Build historical data
+    const historicalData: Array<{ date: string, [key: string]: any }> = [];
+    const runningBalances = { ...initialRunningBalances };
+
+    sortedUniqueChartDates.forEach(currentChartDate => {
+        const dateStr = formatDateFns(currentChartDate, 'yyyy-MM-dd');
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
 
-        const transactionsOnThisDay = allTransactions.filter(tx =>
-            format(startOfDay(parseISO(tx.date)), 'yyyy-MM-dd') === dateStr &&
-            tx.category?.toLowerCase() !== 'opening balance' &&
-            relevantAccounts.some(acc => acc.id === tx.accountId)
-        );
-        
-        // If it's not the first day, copy balances from the previous day's runningBalances for accounts not touched today
-        if (currentDate > firstChartDate) {
-            relevantAccounts.forEach(acc => {
-                if (!transactionsOnThisDay.some(tx => tx.accountId === acc.id)) {
-                    // runningBalances[acc.id] should already hold the balance from the end of the previous day.
+        // Apply transactions on the currentChartDate
+        allTransactions
+            .filter(tx => {
+                const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                return tx.category?.toLowerCase() !== 'opening balance' &&
+                       isSameDay(txDate, currentChartDate) &&
+                       relevantAccounts.some(acc => acc.id === tx.accountId);
+            })
+            .forEach(tx => {
+                const account = relevantAccounts.find(a => a.id === tx.accountId);
+                if (account) {
+                    const amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.currency);
+                    runningBalances[tx.accountId] = (runningBalances[tx.accountId] || 0) + amountInAccountCurrency;
                 }
             });
-        }
 
-
-        transactionsOnThisDay.forEach(tx => {
-            const account = relevantAccounts.find(a => a.id === tx.accountId);
-            if (account) {
-                const amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.currency);
-                runningBalances[tx.accountId] = (runningBalances[tx.accountId] || 0) + amountInAccountCurrency;
-            }
-        });
-
+        // Create snapshot for the chart
         relevantAccounts.forEach(acc => {
             dailySnapshot[acc.name] = convertCurrency(runningBalances[acc.id] || 0, acc.currency, preferredCurrency);
         });
-
-        // If an entry for this date already exists (from initialDataPoint), update it. Otherwise, push new.
-        const existingPointIndex = historicalData.findIndex(p => p.date === dateStr);
-        if (existingPointIndex > -1) {
-            historicalData[existingPointIndex] = { ...historicalData[existingPointIndex], ...dailySnapshot };
+        
+        // Avoid duplicate entries for the same date if no transactions occurred between snapshots
+        if (historicalData.length > 0 && historicalData[historicalData.length -1].date === dateStr) {
+             historicalData[historicalData.length -1] = dailySnapshot; // Update existing if same day
         } else {
             historicalData.push(dailySnapshot);
         }
+    });
+    
+    // Ensure the chart doesn't have gaps if the first data point is not the chartStartDate
+    if (historicalData.length > 0 && historicalData[0].date !== formatDateFns(chartStartDate, 'yyyy-MM-dd')) {
+        const initialPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
+        relevantAccounts.forEach(acc => {
+            initialPoint[acc.name] = convertCurrency(initialRunningBalances[acc.id] || 0, acc.currency, preferredCurrency);
+        });
+        historicalData.unshift(initialPoint);
     }
 
-    historicalData.sort((a, b) => compareAsc(parseISO(a.date), parseISO(b.date)));
 
     return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
+
   }, [allAccounts, allTransactions, preferredCurrency, isLoading, selectedDateRange]);
+
 
 
   interface AccountTableProps {
@@ -399,7 +386,7 @@ export default function AccountsPage() {
                     </div>
                   </TableCell>
                    <TableCell className="text-muted-foreground">
-                       {account.lastActivity ? format(new Date(account.lastActivity), 'PP') : 'N/A'}
+                       {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
                    </TableCell>
                    <TableCell className="text-muted-foreground">
                        {formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false)}
@@ -500,12 +487,12 @@ export default function AccountsPage() {
         <Card className="mb-8">
             <CardHeader>
                 <CardTitle>Your Accounts Overview</CardTitle>
-                <CardDescription>Historical balance of your accounts in {preferredCurrency}.</CardDescription>
+                <CardDescription>Historical balance of your accounts in {preferredCurrency}. Display period: {selectedDateRange.from ? formatDateFns(selectedDateRange.from, 'PP') : 'Start'} - {selectedDateRange.to ? formatDateFns(selectedDateRange.to, 'PP') : 'End'}</CardDescription>
             </CardHeader>
             <CardContent className="h-[400px]">
                  {isLoading || accountBalanceHistoryData.data.length === 0 ? (
                     <div className="flex h-full items-center justify-center">
-                        {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No data to display chart. Add accounts and transactions.</p>}
+                        {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No data to display chart. Add accounts and transactions, or adjust date range.</p>}
                     </div>
                 ) : (
                     <AccountBalanceHistoryChart
