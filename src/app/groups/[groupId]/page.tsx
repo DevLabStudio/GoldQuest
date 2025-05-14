@@ -125,8 +125,15 @@ export default function GroupDetailPage() {
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'userGroups', 'transactions-'].some(key => event.key?.includes(key))) {
-            fetchData();
+        if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'userGroups', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for group ${groupId} (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
         }
     };
     if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
@@ -185,11 +192,10 @@ export default function GroupDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      // await fetchData(); // Removed direct call
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -207,9 +213,8 @@ export default function GroupDetailPage() {
     setIsDeleting(true);
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-      // await fetchData(); // Removed direct call
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -223,10 +228,9 @@ export default function GroupDetailPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -263,10 +267,9 @@ export default function GroupDetailPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -430,7 +433,7 @@ export default function GroupDetailPage() {
                     {filteredTransactions.map((transaction) => {
                       const account = allAccounts.find(acc => acc.id === transaction.accountId);
                       const categoryDetails = allCategories.find(c => c.name === transaction.category);
-                      const { icon: CategoryIcon, color: categoryBadgeColor } = getCategoryStyle(transaction.category);
+                      const { icon: CategoryIcon, color: categoryBadgeColor } = getCategoryStyle(categoryDetails);
                       return (
                         <TableRow key={transaction.id} className="hover:bg-muted/50">
                           <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -516,7 +519,7 @@ export default function GroupDetailPage() {
           <DialogHeader><DialogTitle>Edit Transaction</DialogTitle></DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
-              key={selectedTransaction.id} // Add key to force re-mount
+              key={selectedTransaction.id} 
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}

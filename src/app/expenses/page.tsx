@@ -107,9 +107,16 @@ export default function ExpensesPage() {
   useEffect(() => {
     fetchData();
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key))) {
-            console.log("Storage changed, refetching expense data...");
-            fetchData();
+        if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+             // Expenses page depends on all these for complete data
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for expenses page (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
         }
     };
 
@@ -130,7 +137,7 @@ export default function ExpensesPage() {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
       const isInDateRange = selectedDateRange.from && selectedDateRange.to ?
                             isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to }) :
-                            true; // True if no range selected (All Time)
+                            true; 
       return tx.amount < 0 && tx.category !== 'Transfer' && isInDateRange;
     });
   }, [allTransactionsUnfiltered, isLoading, selectedDateRange]);
@@ -163,14 +170,13 @@ export default function ExpensesPage() {
         setIsLoading(true);
         try {
             await updateTransaction(transactionToUpdate);
-            // await fetchData(); // Removed direct call, rely on storage event
             setIsEditDialogOpen(false);
             setSelectedTransaction(null);
             toast({
                 title: "Success",
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
-            window.dispatchEvent(new Event('storage')); // Notify other components
+            window.dispatchEvent(new Event('storage')); 
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -193,12 +199,11 @@ export default function ExpensesPage() {
        setIsDeleting(true);
        try {
            await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-           // await fetchData(); // Removed direct call
            toast({
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
-            window.dispatchEvent(new Event('storage')); // Notify other components
+            window.dispatchEvent(new Event('storage')); 
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -216,10 +221,9 @@ export default function ExpensesPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-       window.dispatchEvent(new Event('storage')); // Notify other components
+       window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -255,10 +259,9 @@ export default function ExpensesPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -411,7 +414,7 @@ export default function ExpensesPage() {
                                 const account = getAccountForTransaction(transaction.accountId);
                                 if (!account) return null;
                                 const categoryDetails = allCategories.find(c => c.name === transaction.category);
-                                const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
+                                const { icon: CategoryIcon, color } = getCategoryStyle(categoryDetails);
                                 
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
@@ -540,7 +543,7 @@ export default function ExpensesPage() {
                 </DialogHeader>
                 {selectedTransaction && accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
                     <AddTransactionForm
-                        key={selectedTransaction.id} // Add key to force re-mount
+                        key={selectedTransaction.id} 
                         accounts={accounts}
                         categories={allCategories}
                         tags={allTags}
@@ -548,7 +551,7 @@ export default function ExpensesPage() {
                         isLoading={isLoading}
                         initialData={{
                             ...selectedTransaction,
-                            type: selectedTransaction.amount < 0 ? 'expense' : 'income',
+                            type: selectedTransaction.amount < 0 ? 'expense' : (selectedTransaction.category === 'Transfer' ? 'transfer' : 'income'),
                             amount: Math.abs(selectedTransaction.amount),
                             date: selectedTransaction.date ? parseISO(selectedTransaction.date.includes('T') ? selectedTransaction.date : selectedTransaction.date + 'T00:00:00Z') : new Date(),
                         }}

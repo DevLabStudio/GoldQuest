@@ -18,7 +18,7 @@ import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, addTransaction, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
-import { format as formatDateFns, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameDay } from 'date-fns'; // Use aliased import
+import { format as formatDateFns, startOfMonth, endOfMonth, isWithinInterval, parseISO, isSameDay } from 'date-fns'; 
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"; 
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
@@ -27,7 +27,7 @@ import { useDateRange } from '@/contexts/DateRangeContext';
 
 
 export default function DashboardPage() {
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -44,55 +44,57 @@ export default function DashboardPage() {
   const [selectedCategoryFilter, setSelectedCategoryFilter] = useState<string>('all');
 
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const fetchData = async () => {
+  const fetchData = useCallback(async () => {
       if (typeof window === 'undefined') {
-        if(isMounted) setIsLoading(false);
+        setIsLoading(false);
         return;
       }
-      if(isMounted) setIsLoading(true);
+      setIsLoading(true);
       try {
-        const prefs = await getUserPreferences(); // Await preferences
-        if(isMounted) setPreferredCurrency(prefs.preferredCurrency);
+        const prefs = await getUserPreferences(); 
+        setPreferredCurrency(prefs.preferredCurrency);
 
         const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
           getAccounts(),
           getCategories(),
           getTags()
         ]);
-        if(isMounted) setAccounts(fetchedAccounts);
-        if(isMounted) setCategories(fetchedCategories);
-        if(isMounted) setTags(fetchedTagsList);
+        setAccounts(fetchedAccounts);
+        setCategories(fetchedCategories);
+        setTags(fetchedTagsList);
 
         if (fetchedAccounts.length > 0) {
           const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
           const transactionsByAccount = await Promise.all(transactionPromises);
           const combinedTransactions = transactionsByAccount.flat();
-          if(isMounted) setAllTransactions(combinedTransactions);
+          setAllTransactions(combinedTransactions);
         } else {
-          if(isMounted) setAllTransactions([]);
+          setAllTransactions([]);
         }
 
-        if(isMounted) setLastUpdated(new Date());
+        setLastUpdated(new Date());
       } catch (error) {
         console.error("Failed to fetch dashboard data:", error);
-        if(isMounted) toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
       } finally {
-        if(isMounted) setIsLoading(false);
+        setIsLoading(false);
       }
-    };
+    }, [toast]);
 
+  useEffect(() => {
     fetchData();
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key === 'userCategories' || event.key === 'userTags' || event.key?.startsWith('transactions-')) {
-          console.log("Storage changed in dashboard, refetching data...");
-          if (isMounted) {
-              fetchData();
-          }
-      }
+      if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-']; // transactions- for any account change
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for dashboard (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
+        }
     };
 
     if (typeof window !== 'undefined') {
@@ -100,44 +102,15 @@ export default function DashboardPage() {
     }
 
     return () => {
-      isMounted = false;
       if (typeof window !== 'undefined') {
         window.removeEventListener('storage', handleStorageChange);
       }
     };
-  }, [toast]); 
+  }, [fetchData]); 
 
   const handleRefresh = async () => {
-     setIsLoading(true);
-     try {
-       const prefs = await getUserPreferences(); // Await preferences
-       setPreferredCurrency(prefs.preferredCurrency);
-
-       const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
-         getAccounts(),
-         getCategories(),
-         getTags()
-       ]);
-       setAccounts(fetchedAccounts);
-       setCategories(fetchedCategories);
-       setTags(fetchedTagsList);
-
-       if (fetchedAccounts.length > 0) {
-         const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-         const transactionsByAccount = await Promise.all(transactionPromises);
-         const combinedTransactions = transactionsByAccount.flat();
-         setAllTransactions(combinedTransactions);
-       } else {
-         setAllTransactions([]);
-       }
-       setLastUpdated(new Date());
-     } catch (error) {
-       console.error("Failed to fetch dashboard data:", error);
-       toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
-     } finally {
-       setIsLoading(false);
-     }
-   };
+     await fetchData();
+  };
 
   const formatLastUpdated = (date: Date | null) => {
     if (!date) return "Updating...";

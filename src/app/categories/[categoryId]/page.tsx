@@ -114,9 +114,15 @@ export default function CategoryDetailPage() {
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key))) {
-            console.log(`Storage changed for category ${categoryId}, refetching data...`);
-            fetchData();
+        if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-']; // transactions- for any account change
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                 console.log(`Storage change for category ${categoryId} (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
         }
     };
 
@@ -161,11 +167,10 @@ export default function CategoryDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      // await fetchData(); // Removed direct call
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -183,9 +188,8 @@ export default function CategoryDetailPage() {
     setIsDeleting(true);
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-      // await fetchData(); // Removed direct call
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -197,14 +201,12 @@ export default function CategoryDetailPage() {
 
   const handleTransactionAdded = async (data: Omit<Transaction, 'id'>) => {
     try {
-      // Ensure category is pre-filled if adding from this page and not a transfer
       const dataWithCategory = (data.category === 'Transfer' || !category) ? data : { ...data, category: category.name };
       await addTransaction(dataWithCategory);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); // Reset cloned data
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      setClonedTransactionData(undefined); 
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -241,10 +243,9 @@ export default function CategoryDetailPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); // Reset cloned data
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      setClonedTransactionData(undefined); 
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -352,7 +353,7 @@ export default function CategoryDetailPage() {
     );
   }
   
-  const { icon: CategoryIcon, color: categoryColor } = getCategoryStyle(category.name);
+  const { icon: CategoryIcon, color: categoryColor } = getCategoryStyle(category);
 
 
   return (
@@ -516,7 +517,7 @@ export default function CategoryDetailPage() {
           </DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
-              key={selectedTransaction.id} // Add key to force re-mount
+              key={selectedTransaction.id} 
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
@@ -559,8 +560,8 @@ export default function CategoryDetailPage() {
               initialData={
                 clonedTransactionData ||
                 ( (transactionTypeToAdd === 'expense' || transactionTypeToAdd === 'income') && category
-                    ? { category: category.name, date: new Date() } // Pre-fill category for expense/income
-                    : {date: new Date()}) // Fallback for transfer or safety
+                    ? { category: category.name, date: new Date() } 
+                    : {date: new Date()}) 
               }
             />
           )}

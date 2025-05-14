@@ -108,9 +108,15 @@ export default function TransactionsOverviewPage() {
   useEffect(() => {
     fetchData();
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'].some(key => event.key?.includes(key))) {
-            console.log("Storage changed, refetching transaction overview data...");
-            fetchData();
+         if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for transaction overview (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
         }
     };
 
@@ -129,7 +135,7 @@ export default function TransactionsOverviewPage() {
     if (isLoading) return [];
     return allTransactionsUnfiltered.filter(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      if (!selectedDateRange.from || !selectedDateRange.to) return true; // All time if no range selected
+      if (!selectedDateRange.from || !selectedDateRange.to) return true; 
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
   }, [allTransactionsUnfiltered, isLoading, selectedDateRange]);
@@ -141,7 +147,7 @@ export default function TransactionsOverviewPage() {
       const categoryTotals: { [key: string]: number } = {};
 
       allTransactions.forEach(tx => {
-          if (tx.amount < 0 && tx.category !== 'Transfer') { // Exclude transfers
+          if (tx.amount < 0 && tx.category !== 'Transfer') { 
               const account = accounts.find(acc => acc.id === tx.accountId);
               if (account) {
                  const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
@@ -186,14 +192,13 @@ export default function TransactionsOverviewPage() {
         setIsLoading(true);
         try {
             await updateTransaction(transactionToUpdate);
-            // await fetchData(); // Removed direct call, rely on storage event
             setIsEditDialogOpen(false);
             setSelectedTransaction(null);
             toast({
                 title: "Success",
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
-            window.dispatchEvent(new Event('storage')); // Notify other components
+            window.dispatchEvent(new Event('storage')); 
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -216,12 +221,11 @@ export default function TransactionsOverviewPage() {
        setIsDeleting(true);
        try {
            await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-           // await fetchData(); // Removed direct call
            toast({
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
-           window.dispatchEvent(new Event('storage')); // Notify other components
+           window.dispatchEvent(new Event('storage')); 
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -239,10 +243,9 @@ export default function TransactionsOverviewPage() {
     try {
       await addTransaction(data);
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -278,10 +281,9 @@ export default function TransactionsOverviewPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -455,7 +457,7 @@ export default function TransactionsOverviewPage() {
                                 const account = getAccountForTransaction(transaction.accountId);
                                 if (!account) return null;
                                 const categoryDetails = allCategories.find(c => c.name === transaction.category);
-                                const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
+                                const { icon: CategoryIcon, color } = getCategoryStyle(categoryDetails);
                                 return (
                                     <TableRow key={transaction.id} className="hover:bg-muted/50">
                                         <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -582,7 +584,7 @@ export default function TransactionsOverviewPage() {
                 </DialogHeader>
                 {selectedTransaction && accounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
                     <AddTransactionForm
-                        key={selectedTransaction.id} // Add key to force re-mount
+                        key={selectedTransaction.id} 
                         accounts={accounts}
                         categories={allCategories}
                         tags={allTags}

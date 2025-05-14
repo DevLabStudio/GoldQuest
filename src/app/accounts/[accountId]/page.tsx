@@ -20,7 +20,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, ArrowLeft, CopyPlus } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
-import { useToast } from '@/hooks/use-toast';
+import { useToast } from "@/hooks/use-toast";
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import SpendingChart from '@/components/dashboard/spending-chart'; // Import SpendingChart
@@ -110,9 +110,15 @@ export default function AccountDetailPage() {
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`].some(key => event.key?.includes(key))) {
-            console.log(`Storage changed for account ${accountId}, refetching data...`);
-            fetchData();
+        if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for account ${accountId} (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
         }
     };
 
@@ -176,11 +182,10 @@ export default function AccountDetailPage() {
     setIsLoading(true);
     try {
       await updateTransaction(transactionToUpdate);
-      // await fetchData(); // Removed direct call, rely on storage event
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -198,9 +203,8 @@ export default function AccountDetailPage() {
     setIsDeleting(true);
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
-      // await fetchData(); // Removed direct call
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      window.dispatchEvent(new Event('storage')); 
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -214,10 +218,9 @@ export default function AccountDetailPage() {
     try {
       await addTransaction({ ...data, accountId: accountId! });
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); // Reset cloned data
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      setClonedTransactionData(undefined); 
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -254,10 +257,9 @@ export default function AccountDetailPage() {
       });
 
       toast({ title: "Success", description: "Transfer recorded successfully." });
-      // await fetchData(); // Removed direct call
       setIsAddTransactionDialogOpen(false);
-      setClonedTransactionData(undefined); // Reset cloned data
-      window.dispatchEvent(new Event('storage')); // Notify other components
+      setClonedTransactionData(undefined); 
+      window.dispatchEvent(new Event('storage')); 
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -274,7 +276,7 @@ export default function AccountDetailPage() {
         return;
     }
     setTransactionTypeToAdd(type);
-    setClonedTransactionData(undefined); // Ensure cloned data is reset for a fresh "add"
+    setClonedTransactionData(undefined); 
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -325,7 +327,7 @@ export default function AccountDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !account) { // Added !account for initial loading state
+  if (isLoading && !account) { 
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -443,7 +445,7 @@ export default function AccountDetailPage() {
                   <TableBody>
                     {filteredTransactions.map((transaction) => {
                       const categoryDetails = allCategories.find(c => c.name === transaction.category);
-                      const { icon: CategoryIcon, color } = getCategoryStyle(transaction.category);
+                      const { icon: CategoryIcon, color } = getCategoryStyle(categoryDetails);
                       return (
                         <TableRow key={transaction.id} className="hover:bg-muted/50">
                           <TableCell className="font-medium">{transaction.description}</TableCell>
@@ -507,7 +509,7 @@ export default function AccountDetailPage() {
                                       <Trash2 className="mr-2 h-4 w-4" /> Delete
                                     </div>
                                   </AlertDialogTrigger>
-                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( // Ensure not to show delete confirmation if edit dialog is open for the same tx
+                                  {selectedTransaction?.id === transaction.id && !isEditDialogOpen && ( 
                                     <AlertDialogContent>
                                       <AlertDialogHeader>
                                         <AlertDialogTitle>Are you sure?</AlertDialogTitle>
@@ -561,7 +563,7 @@ export default function AccountDetailPage() {
           </DialogHeader>
           {selectedTransaction && allAccounts.length > 0 && allCategories.length > 0 && allTags.length > 0 && (
             <AddTransactionForm
-              key={selectedTransaction.id} // Add key to force re-mount
+              key={selectedTransaction.id} 
               accounts={allAccounts}
               categories={allCategories}
               tags={allTags}
@@ -581,7 +583,7 @@ export default function AccountDetailPage() {
       <Dialog open={isAddTransactionDialogOpen} onOpenChange={(open) => {
         setIsAddTransactionDialogOpen(open);
         if (!open) {
-            setClonedTransactionData(undefined); // Reset cloned data when dialog closes
+            setClonedTransactionData(undefined); 
             setTransactionTypeToAdd(null);
         }
       }}>

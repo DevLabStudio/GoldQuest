@@ -1,7 +1,7 @@
 
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -17,7 +17,7 @@ import AddTagForm from '@/components/tags/add-tag-form';
 import EditTagForm from '@/components/tags/edit-tag-form';
 import { getGroups, addGroup, updateGroup, deleteGroup, type Group } from "@/services/groups";
 import AddGroupForm from '@/components/organization/add-group-form';
-import EditGroupForm from '@/components/organization/edit-group-form'; // Import EditGroupForm
+import EditGroupForm from '@/components/organization/edit-group-form'; 
 import ManageGroupCategoriesDialog from '@/components/organization/manage-group-categories-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
@@ -48,8 +48,8 @@ export default function OrganizationPage() {
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
-  const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false); // State for edit group dialog
-  const [selectedGroupForEdit, setSelectedGroupForEdit] = useState<Group | null>(null); // State for group being edited
+  const [isEditGroupDialogOpen, setIsEditGroupDialogOpen] = useState(false); 
+  const [selectedGroupForEdit, setSelectedGroupForEdit] = useState<Group | null>(null); 
   const [isManageGroupCategoriesDialogOpen, setIsManageGroupCategoriesDialogOpen] = useState(false);
   const [selectedGroupForCategoryManagement, setSelectedGroupForCategoryManagement] = useState<Group | null>(null);
   const [isDeletingGroup, setIsDeletingGroup] = useState(false);
@@ -59,7 +59,7 @@ export default function OrganizationPage() {
 
   const { toast } = useToast();
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     setIsLoadingCategories(true); setIsLoadingTags(true); setIsLoadingGroups(true);
     setCategoryError(null); setTagError(null); setGroupError(null);
     try {
@@ -82,24 +82,29 @@ export default function OrganizationPage() {
     } finally {
       setIsLoadingCategories(false); setIsLoadingTags(false); setIsLoadingGroups(false);
     }
-  };
+  }, [toast]);
 
   useEffect(() => {
-    let isMounted = true;
-    if (isMounted) fetchData();
+    fetchData();
     
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && ['userCategories', 'userTags', 'userGroups'].some(key => event.key === key) && isMounted) {
-            fetchData();
+        if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userCategories', 'userTags', 'userGroups'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for organization page (key: ${event.key || 'custom'}), refetching data...`);
+                fetchData();
+            }
         }
     };
     if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
     
     return () => { 
-        isMounted = false; 
         if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
-  }, [toast]);
+  }, [fetchData]);
 
 
   // Category Handlers
@@ -107,9 +112,10 @@ export default function OrganizationPage() {
     setIsLoadingCategories(true);
     try {
       await addCategory(categoryName, icon);
-      await fetchData(); 
+      // await fetchData(); // Removed direct call, rely on storage event
       setIsAddCategoryDialogOpen(false);
       toast({ title: "Success", description: `Category "${categoryName}" added.` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to add category:", err);
       toast({ title: "Error Adding Category", description: err.message || "Could not add category.", variant: "destructive" });
@@ -119,9 +125,10 @@ export default function OrganizationPage() {
     setIsLoadingCategories(true);
     try {
       await updateCategory(categoryId, newName, newIcon);
-      await fetchData(); 
+      // await fetchData(); 
       setIsEditCategoryDialogOpen(false); setSelectedCategory(null);
       toast({ title: "Success", description: `Category updated to "${newName}".` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update category:", err);
       toast({ title: "Error Updating Category", description: err.message || "Could not update category.", variant: "destructive" });
@@ -131,8 +138,9 @@ export default function OrganizationPage() {
     if (!selectedCategory) return; setIsDeletingCategory(true);
     try {
       await deleteCategory(selectedCategory.id);
-      await fetchData(); 
+      // await fetchData(); 
       toast({ title: "Category Deleted", description: `Category "${selectedCategory.name}" removed.` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete category:", err);
       toast({ title: "Error Deleting Category", description: err.message || "Could not delete category.", variant: "destructive" });
@@ -146,9 +154,10 @@ export default function OrganizationPage() {
     setIsLoadingTags(true);
     try {
       await addTag(tagName);
-      await fetchData(); 
+      // await fetchData(); 
       setIsAddTagDialogOpen(false);
       toast({ title: "Success", description: `Tag "${tagName}" added.` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to add tag:", err);
       toast({ title: "Error Adding Tag", description: err.message || "Could not add tag.", variant: "destructive" });
@@ -158,9 +167,10 @@ export default function OrganizationPage() {
     setIsLoadingTags(true);
     try {
       await updateTag(tagId, newName);
-      await fetchData(); 
+      // await fetchData(); 
       setIsEditTagDialogOpen(false); setSelectedTag(null);
       toast({ title: "Success", description: `Tag updated to "${newName}".` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update tag:", err);
       toast({ title: "Error Updating Tag", description: err.message || "Could not update tag.", variant: "destructive" });
@@ -170,8 +180,9 @@ export default function OrganizationPage() {
     if (!selectedTag) return; setIsDeletingTag(true);
     try {
       await deleteTag(selectedTag.id);
-      await fetchData(); 
+      // await fetchData(); 
       toast({ title: "Tag Deleted", description: `Tag "${selectedTag.name}" removed.` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete tag:", err);
       toast({ title: "Error Deleting Tag", description: err.message || "Could not delete tag.", variant: "destructive" });
@@ -185,9 +196,10 @@ export default function OrganizationPage() {
     setIsLoadingGroups(true);
     try {
       await addGroup(groupName);
-      await fetchData(); 
+      // await fetchData(); 
       setIsAddGroupDialogOpen(false);
       toast({ title: "Success", description: `Group "${groupName}" added.` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to add group:", err);
       toast({ title: "Error Adding Group", description: err.message || "Could not add group.", variant: "destructive" });
@@ -203,11 +215,12 @@ export default function OrganizationPage() {
         return;
     }
     try {
-        await updateGroup({ ...groupToUpdate, name: newName }); // Only update name here, categories managed separately
-        await fetchData();
+        await updateGroup({ ...groupToUpdate, name: newName }); 
+        // await fetchData();
         setIsEditGroupDialogOpen(false);
         setSelectedGroupForEdit(null);
         toast({ title: "Success", description: `Group name updated to "${newName}".` });
+        window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
         console.error("Failed to update group name:", err);
         toast({ title: "Error Updating Group Name", description: err.message || "Could not update group name.", variant: "destructive" });
@@ -228,10 +241,11 @@ export default function OrganizationPage() {
       const groupToUpdate = groups.find(g => g.id === groupId);
       if (groupToUpdate) {
         await updateGroup({ ...groupToUpdate, categoryIds: selectedCategoryIds });
-        await fetchData();
+        // await fetchData();
         setIsManageGroupCategoriesDialogOpen(false);
         setSelectedGroupForCategoryManagement(null);
         toast({ title: "Success", description: "Categories in group updated." });
+        window.dispatchEvent(new Event('storage'));
       }
     } catch (err: any) {
       console.error("Failed to update group categories:", err);
@@ -251,8 +265,9 @@ export default function OrganizationPage() {
     setIsDeletingGroup(true);
     try {
       await deleteGroup(selectedGroupForDeletion.id);
-      await fetchData(); 
+      // await fetchData(); 
       toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
+      window.dispatchEvent(new Event('storage'));
     } catch (err:any) {
       console.error("Failed to delete group:", err);
       toast({ title: "Error Deleting Group", description: err.message || "Could not delete group.", variant: "destructive" });
@@ -379,7 +394,6 @@ export default function OrganizationPage() {
         />
       )}
 
-      {/* Edit Group Dialog */}
       <Dialog open={isEditGroupDialogOpen} onOpenChange={(open) => { setIsEditGroupDialogOpen(open); if (!open) setSelectedGroupForEdit(null); }}>
         <DialogContent>
           <DialogHeader>
@@ -397,7 +411,6 @@ export default function OrganizationPage() {
       </Dialog>
 
 
-      {/* Categories Section */}
       <Card className="mb-8">
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -465,7 +478,6 @@ export default function OrganizationPage() {
         </CardContent>
       </Card>
 
-      {/* Tags Section */}
       <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
@@ -533,7 +545,6 @@ export default function OrganizationPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Category Dialog */}
         <Dialog open={isEditCategoryDialogOpen} onOpenChange={(open) => { setIsEditCategoryDialogOpen(open); if (!open) setSelectedCategory(null); }}>
             <DialogContent>
                 <DialogHeader>
@@ -550,7 +561,6 @@ export default function OrganizationPage() {
             </DialogContent>
         </Dialog>
 
-      {/* Edit Tag Dialog */}
         <Dialog open={isEditTagDialogOpen} onOpenChange={(open) => { setIsEditTagDialogOpen(open); if (!open) setSelectedTag(null); }}>
             <DialogContent>
                 <DialogHeader>

@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
@@ -37,65 +38,56 @@ export default function AccountsPage() {
   const { selectedDateRange } = useDateRange();
 
 
-   useEffect(() => {
-    const fetchPrefs = async () => {
-        if (typeof window !== 'undefined') {
-            const prefs = await getUserPreferences();
-            setPreferredCurrency(prefs.preferredCurrency);
-        }
-    };
-    fetchPrefs();
-  }, []);
-
-
-  useEffect(() => {
-    let isMounted = true;
-    const fetchAllData = async () => {
+   const fetchAllData = async () => {
         if (typeof window === 'undefined') {
-            if(isMounted) setIsLoading(false);
-            if(isMounted) setError("Account data can only be loaded on the client.");
+            setIsLoading(false);
+            setError("Account data can only be loaded on the client.");
             return;
         }
 
-        if(isMounted) setIsLoading(true);
-        if(isMounted) setError(null);
+        setIsLoading(true);
+        setError(null);
         try {
+            const prefs = await getUserPreferences();
+            setPreferredCurrency(prefs.preferredCurrency);
+
             const fetchedAccounts = await getAccounts();
-            if(isMounted) setAllAccounts(fetchedAccounts);
+            setAllAccounts(fetchedAccounts);
 
             if (fetchedAccounts.length > 0) {
                 const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
                 const transactionsByAccount = await Promise.all(transactionPromises);
                 const combinedTransactions = transactionsByAccount.flat();
-                if(isMounted) setAllTransactions(combinedTransactions);
+                setAllTransactions(combinedTransactions);
             } else {
-                if(isMounted) setAllTransactions([]);
+                setAllTransactions([]);
             }
 
         } catch (err) {
             console.error("Failed to fetch accounts or transactions:", err);
-            if(isMounted) setError("Could not load data. Please ensure local storage is accessible and try again.");
-            if(isMounted) toast({
+            setError("Could not load data. Please ensure local storage is accessible and try again.");
+            toast({
                 title: "Error",
                 description: "Failed to load accounts or transactions.",
                 variant: "destructive",
             });
         } finally {
-            if(isMounted) setIsLoading(false);
+            setIsLoading(false);
         }
     };
 
+
+  useEffect(() => {
     fetchAllData();
 
     const handleStorageChange = (event: StorageEvent) => {
-        if (event.key === 'userAccounts' || event.key === 'userPreferences' || event.key?.startsWith('transactions-')) {
-            console.log("Storage changed, refetching data for accounts page...");
-            if (typeof window !== 'undefined' && isMounted) {
-                const fetchPrefs = async () => {
-                    const prefs = await getUserPreferences();
-                    setPreferredCurrency(prefs.preferredCurrency);
-                };
-                fetchPrefs();
+         if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-']; // transactions- for any account
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change (key: ${event.key || 'custom'}), refetching data for accounts page...`);
                 fetchAllData();
             }
         }
@@ -106,41 +98,23 @@ export default function AccountsPage() {
     }
 
     return () => {
-        isMounted = false;
         if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]);
-
-  const localFetchAccountsData = async () => {
-    if (typeof window === 'undefined') return;
-    setIsLoading(true); setError(null);
-    try { 
-        const fetchedAccounts = await getAccounts();
-        setAllAccounts(fetchedAccounts);
-        if (fetchedAccounts.length > 0) {
-            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-            const transactionsByAccount = await Promise.all(transactionPromises);
-            setAllTransactions(transactionsByAccount.flat());
-        } else {
-            setAllTransactions([]);
-        }
-    }
-    catch (err) { console.error(err); setError("Could not reload accounts."); }
-    finally { setIsLoading(false); }
-  }
+  }, [toast]); // Removed fetchAllData from deps as it's stable
 
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
       await addAccount(newAccountData);
-      await localFetchAccountsData();
+      await fetchAllData(); // Refetch after adding
       setIsAddAssetDialogOpen(false);
       setIsAddCryptoDialogOpen(false);
       toast({
         title: "Success",
         description: `Account "${newAccountData.name}" added successfully.`,
       });
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err) {
        console.error("Failed to add account:", err);
        toast({
@@ -154,13 +128,14 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      await localFetchAccountsData();
+      await fetchAllData(); // Refetch after updating
       setIsEditDialogOpen(false);
       setSelectedAccount(null);
       toast({
         title: "Success",
         description: `Account "${updatedAccountData.name}" updated successfully.`,
       });
+      window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err) {
        console.error("Failed to update account:", err);
        toast({
@@ -174,11 +149,12 @@ export default function AccountsPage() {
    const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
-        await localFetchAccountsData();
+        await fetchAllData(); // Refetch after deleting
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,
         });
+        window.dispatchEvent(new Event('storage')); // Notify other components
     } catch (err) {
         console.error("Failed to delete account:", err);
         toast({
@@ -206,7 +182,6 @@ export default function AccountsPage() {
         };
     }
 
-    // Show ALL accounts in this chart, regardless of includeInNetWorth
     const relevantAccounts = [...allAccounts]; 
     if (relevantAccounts.length === 0) return { data: [], accountNames: [], chartConfig: {} };
 
@@ -221,7 +196,6 @@ export default function AccountsPage() {
     }, {} as any);
 
 
-    // Get all unique transaction dates across all relevant accounts, plus start/end of global range
     let allDates = new Set<string>();
     if (selectedDateRange.from) allDates.add(format(startOfDay(selectedDateRange.from), 'yyyy-MM-dd'));
     if (selectedDateRange.to) allDates.add(format(startOfDay(selectedDateRange.to), 'yyyy-MM-dd'));
@@ -233,7 +207,7 @@ export default function AccountsPage() {
                 if (txDate >= selectedDateRange.from && txDate <= selectedDateRange.to) {
                     allDates.add(format(txDate, 'yyyy-MM-dd'));
                 }
-            } else { // All time
+            } else { 
                  allDates.add(format(txDate, 'yyyy-MM-dd'));
             }
         }
@@ -242,7 +216,6 @@ export default function AccountsPage() {
     const sortedUniqueDates = Array.from(allDates).map(d => parseISO(d)).sort(compareAsc);
 
     if (sortedUniqueDates.length === 0 && relevantAccounts.length > 0) {
-        // If no transactions in range, show current balances at "today"
         const todayStr = format(new Date(), 'yyyy-MM-dd');
         const dataPoint: any = { date: todayStr };
         relevantAccounts.forEach(acc => {
@@ -254,18 +227,16 @@ export default function AccountsPage() {
 
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalances: { [accountId: string]: number } = {}; // in account's original currency
+    const runningBalances: { [accountId: string]: number } = {}; 
 
     relevantAccounts.forEach(acc => {
-        // Find opening balance transaction for this account
         const openingBalanceTx = allTransactions.find(
             tx => tx.accountId === acc.id && tx.category?.toLowerCase() === 'opening balance'
         );
-        runningBalances[acc.id] = openingBalanceTx ? openingBalanceTx.amount : 0; // Assumes OB tx amount is correct initial balance
+        runningBalances[acc.id] = openingBalanceTx ? openingBalanceTx.amount : 0; 
     });
 
 
-    // Create initial state before the first transaction date or at the start of the range
     const firstChartDate = sortedUniqueDates[0];
     const initialDataPoint: any = { date: format(firstChartDate, 'yyyy-MM-dd') };
     relevantAccounts.forEach(acc => {
@@ -277,7 +248,7 @@ export default function AccountsPage() {
                 balanceBeforeFirstTx += convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
             });
         initialDataPoint[acc.name] = convertCurrency(balanceBeforeFirstTx, acc.currency, preferredCurrency);
-        runningBalances[acc.id] = balanceBeforeFirstTx; // Update running balance to this point
+        runningBalances[acc.id] = balanceBeforeFirstTx; 
     });
     if (Object.keys(initialDataPoint).length > 1) historicalData.push(initialDataPoint);
 
@@ -288,7 +259,7 @@ export default function AccountsPage() {
 
         const transactionsOnThisDay = allTransactions.filter(tx => 
             format(startOfDay(parseISO(tx.date)), 'yyyy-MM-dd') === dateStr &&
-            tx.category?.toLowerCase() !== 'opening balance' && // Ignore OB for daily changes
+            tx.category?.toLowerCase() !== 'opening balance' && 
             relevantAccounts.some(acc => acc.id === tx.accountId)
         );
 
@@ -304,7 +275,6 @@ export default function AccountsPage() {
             dailySnapshot[acc.name] = convertCurrency(runningBalances[acc.id] || 0, acc.currency, preferredCurrency);
         });
         
-        // Update existing point for the day or add new if not present
         const existingPointIndex = historicalData.findIndex(p => p.date === dateStr);
         if (existingPointIndex > -1) {
             historicalData[existingPointIndex] = { ...historicalData[existingPointIndex], ...dailySnapshot };
@@ -313,7 +283,6 @@ export default function AccountsPage() {
         }
     }
     
-    // Ensure data is sorted by date again after potential out-of-order processing
     historicalData.sort((a, b) => compareAsc(parseISO(a.date), parseISO(b.date)));
 
     return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
@@ -565,3 +534,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+

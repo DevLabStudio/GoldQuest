@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from "@/components/ui/button";
 import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -53,7 +53,7 @@ export default function FinancialControlPage() {
       setSubscriptions(subs.sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
       setCategories(cats);
       setAccounts(accs);
-      setGroups(grps.sort((a, b) => a.name.localeCompare(b.name))); // Sort groups
+      setGroups(grps.sort((a, b) => a.name.localeCompare(b.name))); 
     } catch (error) {
       console.error("Failed to fetch subscriptions data:", error);
       toast({ title: "Error", description: "Could not load subscriptions.", variant: "destructive" });
@@ -64,11 +64,16 @@ export default function FinancialControlPage() {
 
   useEffect(() => {
     fetchSubscriptionData();
-     // Listen to storage events to refetch data if other tabs modify it
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.key && ['userSubscriptions', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'].some(key => event.key!.includes(key))) {
-            console.log("Storage changed in Financial Control, refetching data...");
-            fetchSubscriptionData();
+        if (event.type === 'storage') {
+            const isLikelyOurCustomEvent = event.key === null;
+            const relevantKeysForThisPage = ['userSubscriptions', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
+            if (isLikelyOurCustomEvent || isRelevantExternalChange) {
+                console.log(`Storage change for Financial Control (key: ${event.key || 'custom'}), refetching data...`);
+                fetchSubscriptionData();
+            }
         }
     };
     if (typeof window !== 'undefined') {
@@ -96,7 +101,7 @@ export default function FinancialControlPage() {
             ...payload,
             groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? null : data.groupId,
             accountId: data.accountId === "__NONE_ACCOUNT__" || data.accountId === "" ? undefined : data.accountId,
-            lastPaidMonth: editingSubscription.lastPaidMonth // Preserve lastPaidMonth unless explicitly changed
+            lastPaidMonth: editingSubscription.lastPaidMonth 
         });
         toast({ title: "Success", description: "Subscription updated successfully." });
       } else {
@@ -104,13 +109,14 @@ export default function FinancialControlPage() {
             ...payload, 
             groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? null : data.groupId,
             accountId: data.accountId === "__NONE_ACCOUNT__" || data.accountId === "" ? undefined : data.accountId,
-            lastPaidMonth: null // New subscriptions haven't been paid for current cycle yet
+            lastPaidMonth: null 
         });
         toast({ title: "Success", description: "Subscription added successfully." });
       }
       setIsAddSubscriptionDialogOpen(false);
       setEditingSubscription(null);
-      fetchSubscriptionData(); // Refetch to ensure list is updated
+      fetchSubscriptionData(); 
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to save subscription:", error);
       toast({ title: "Error", description: `Could not save subscription: ${error.message}`, variant: "destructive" });
@@ -121,7 +127,8 @@ export default function FinancialControlPage() {
     try {
       await deleteSubscription(subscriptionId);
       toast({ title: "Success", description: "Subscription deleted." });
-      fetchSubscriptionData(); // Refetch
+      fetchSubscriptionData(); 
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to delete subscription:", error);
       toast({ title: "Error", description: `Could not delete subscription: ${error.message}`, variant: "destructive" });
@@ -142,7 +149,8 @@ export default function FinancialControlPage() {
     try {
       await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
-      fetchSubscriptionData(); // Refetch
+      fetchSubscriptionData(); 
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to update paid status:", error);
       toast({ title: "Error", description: "Could not update paid status.", variant: "destructive" });
@@ -207,7 +215,7 @@ export default function FinancialControlPage() {
           <Checkbox
             id={`paid-${subscription.id}`}
             checked={isPaidThisMonth}
-            onCheckedChange={(checked) => handleTogglePaidStatus(subscription.id, !!checked)} // Ensure boolean
+            onCheckedChange={(checked) => handleTogglePaidStatus(subscription.id, !!checked)} 
             aria-label={`Mark ${subscription.name} as paid for ${format(new Date(), 'MMMM yyyy')}`}
           />
           <Label htmlFor={`paid-${subscription.id}`} className="text-xs font-medium">
