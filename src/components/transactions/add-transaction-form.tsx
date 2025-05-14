@@ -47,7 +47,6 @@ const transferSchema = baseSchema.extend({
   fromAccountId: z.string().min(1, "Source account is required"),
   toAccountId: z.string().min(1, "Destination account is required"),
   amount: z.coerce.number({ invalid_type_error: "Amount must be a number" }).positive("Transfer amount must be positive"),
-  // Optional fields for cross-currency transfers
   toAccountCurrency: z.string().min(3, "Destination currency is required for transfers").refine(
       (val) => supportedCurrencies.includes(val.toUpperCase()),
       { message: "Unsupported destination currency" }
@@ -87,16 +86,16 @@ interface AddTransactionFormProps {
   onTransferAdded?: (data: {
       fromAccountId: string;
       toAccountId: string;
-      amount: number; // Amount in fromAccount's currency
-      transactionCurrency: string; // Currency of fromAccount
-      toAccountAmount?: number; // Optional: Amount in toAccount's currency (if different)
-      toAccountCurrency?: string; // Optional: Currency of toAccount (if different)
+      amount: number;
+      transactionCurrency: string;
+      toAccountAmount?: number;
+      toAccountCurrency?: string;
       date: Date;
       description?: string;
       tags?: string[];
     }) => Promise<void> | void;
   isLoading: boolean;
-  initialType?: typeof transactionTypes[number];
+  initialType?: typeof transactionTypes[number] | null; // Allow null from parent
   initialData?: Partial<AddTransactionFormData & { date: Date | string; id?: string }>;
 }
 
@@ -112,21 +111,24 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     onTransactionAdded,
     onTransferAdded,
     isLoading,
-    initialType = 'expense',
+    initialType: initialTypeFromParent, // Renamed to avoid confusion with local default logic
     initialData
 }) => {
+  const resolvedInitialType = initialTypeFromParent ?? 'expense'; // Handle null or undefined explicitly
+
   const form = useForm<AddTransactionFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: initialData ? {
         ...initialData,
         date: initialData.date ? (typeof initialData.date === 'string' ? parseISO(initialData.date.includes('T') ? initialData.date : initialData.date + 'T00:00:00Z') : initialData.date) : new Date(),
+        type: initialData.type || resolvedInitialType, // Use resolvedInitialType
         tags: initialData.tags || [],
         transactionCurrency: (initialData as Transaction)?.transactionCurrency || accounts.find(acc => acc.id === (initialData as any)?.accountId)?.currency || 'BRL',
         description: initialData.description || '',
         toAccountCurrency: (initialData as any)?.toAccountCurrency || (initialData as any)?.transactionCurrency || (accounts.find(acc => acc.id === (initialData as any)?.toAccountId)?.currency),
         exchangeRate: (initialData as any)?.exchangeRate,
     } : {
-      type: initialType,
+      type: resolvedInitialType, // Use resolvedInitialType
       description: "",
       date: new Date(),
       accountId: accounts.length > 0 ? accounts[0].id : undefined,
@@ -148,9 +150,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
   const formTransactionCurrency = form.watch('transactionCurrency');
   const formToAccountCurrency = form.watch('toAccountCurrency');
 
-
   const isEditingExisting = !!(initialData && 'id' in initialData && initialData.id);
-
 
   const selectedAccountCurrency = useMemo(() => {
       let accIdToUse: string | undefined;
@@ -161,7 +161,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
       }
       return accounts.find(acc => acc.id === accIdToUse)?.currency || formTransactionCurrency || 'BRL';
   }, [selectedAccountId, selectedFromAccountId, accounts, transactionType, formTransactionCurrency]);
-
 
   async function onSubmit(values: AddTransactionFormData) {
     const finalTags = values.tags || [];
@@ -176,10 +175,10 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         await onTransferAdded({
             fromAccountId: values.fromAccountId,
             toAccountId: values.toAccountId,
-            amount: values.amount, // This is fromAmount in fromCurrency
-            transactionCurrency: values.transactionCurrency, // fromCurrency
+            amount: values.amount,
+            transactionCurrency: values.transactionCurrency,
             toAccountAmount: toAccountAmount,
-            toAccountCurrency: values.toAccountCurrency || values.transactionCurrency, // toCurrency
+            toAccountCurrency: values.toAccountCurrency || values.transactionCurrency,
             date: values.date,
             description: values.description || `Transfer to ${accounts.find(a=>a.id === values.toAccountId)?.name || 'account'}`,
             tags: finalTags,
@@ -201,7 +200,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         transactionCurrency: values.transactionCurrency,
         date: formatDateFns(values.date, 'yyyy-MM-dd'),
         description: values.description || values.category || 'Transaction',
-        category: values.category!, // Category is required for expense/income by schema
+        category: values.category!,
         tags: finalTags,
       };
       await onTransactionAdded(transactionData);
@@ -222,9 +221,32 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         const toAccount = accounts.find(acc => acc.id === selectedToAccountId);
         if (toAccount && form.getValues('toAccountCurrency') !== toAccount.currency) {
             form.setValue('toAccountCurrency', toAccount.currency);
+             if (fromAccount?.currency === toAccount.currency) {
+                form.setValue('exchangeRate', 1);
+            }
         }
     }
   }, [selectedAccountId, selectedFromAccountId, selectedToAccountId, transactionType, accounts, form]);
+
+  const getButtonText = () => {
+    const isEditing = !!initialData?.id;
+
+    if (isLoading) {
+        return isEditing ? "Saving..." : "Adding...";
+    }
+
+    if (isEditing) {
+        return "Save Changes";
+    }
+
+    // For new transactions
+    let typeLabel = 'Transaction'; // Default fallback
+    if (transactionType && typeof transactionType === 'string' && transactionType.length > 0) {
+        typeLabel = transactionType.charAt(0).toUpperCase() + transactionType.slice(1);
+    }
+    return `Add ${typeLabel}`;
+  };
+
 
   return (
     <Form {...form}>
@@ -238,7 +260,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
               <Select
                   onValueChange={(value) => {
                     field.onChange(value);
-                    // Reset relevant fields when type changes to avoid validation errors with old data
                     if (value === 'transfer') {
                         form.setValue('accountId', undefined);
                         form.setValue('category', undefined);
@@ -246,8 +267,12 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         form.setValue('transactionCurrency', fromAcc?.currency || 'BRL');
                         const toAcc = accounts.find(a => a.id === form.getValues('toAccountId'));
                         form.setValue('toAccountCurrency', toAcc?.currency || 'BRL');
-                        form.setValue('exchangeRate', 1); // Default for same currency
-                    } else { // Expense or Income
+                        if (fromAcc?.currency === toAcc?.currency) {
+                            form.setValue('exchangeRate', 1);
+                        } else {
+                            form.setValue('exchangeRate', undefined); // Clear rate for cross-currency
+                        }
+                    } else {
                         form.setValue('fromAccountId', undefined);
                         form.setValue('toAccountId', undefined);
                         form.setValue('toAccountCurrency', undefined);
@@ -276,7 +301,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-            {/* Left Column */}
             <div className="space-y-4">
                 <FormField
                     control={form.control}
@@ -308,6 +332,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         form.setValue('transactionCurrency', acc.currency);
                                         if (acc.currency === form.getValues('toAccountCurrency')) {
                                             form.setValue('exchangeRate', 1);
+                                        } else if (form.getValues('toAccountCurrency')) {
+                                            form.setValue('exchangeRate', undefined); // Clear for cross-currency
                                         }
                                     }
                                 }}
@@ -331,7 +357,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         </FormItem>
                         )}
                     />
-                    <FormField
+                     <FormField
                         control={form.control}
                         name="toAccountId"
                         render={({ field }) => (
@@ -345,6 +371,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         form.setValue('toAccountCurrency', acc.currency);
                                         if (acc.currency === form.getValues('transactionCurrency')) {
                                             form.setValue('exchangeRate', 1);
+                                        } else if (form.getValues('transactionCurrency')) {
+                                            form.setValue('exchangeRate', undefined); // Clear for cross-currency
                                         }
                                     }
                                 }}
@@ -403,7 +431,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         )}
                     />
                 )}
-                 <FormField
+                <FormField
                     control={form.control}
                     name="date"
                     render={({ field }) => (
@@ -443,14 +471,13 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 />
             </div>
 
-            {/* Right Column */}
             <div className="space-y-4">
                  <FormField
                     control={form.control}
                     name="amount"
                     render={({ field }) => (
                     <FormItem>
-                        <FormLabel>Amount ({getCurrencySymbol(formTransactionCurrency)})</FormLabel>
+                        <FormLabel>Amount ({getCurrencySymbol(formTransactionCurrency || selectedAccountCurrency)})</FormLabel>
                         <FormControl>
                         <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value || ''}/>
                         </FormControl>
@@ -469,7 +496,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         <Select
                             onValueChange={field.onChange}
                             value={field.value}
-                            disabled={isEditingExisting || (transactionType !== 'transfer' && !!selectedAccountId) || (transactionType === 'transfer' && !!selectedFromAccountId) }
+                            disabled={ (transactionType !== 'transfer' && !!selectedAccountId) || (transactionType === 'transfer' && !!selectedFromAccountId) }
                         >
                             <FormControl>
                             <SelectTrigger>
@@ -487,7 +514,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         <FormDescription>
                             {transactionType === 'transfer' ?
                                 "Currency of the 'From Account'." :
-                                "Currency of the transaction. Usually matches the account currency."
+                                "Determined by selected Account."
                             }
                         </FormDescription>
                         <FormMessage />
@@ -506,7 +533,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                 <Select
                                     onValueChange={field.onChange}
                                     value={field.value}
-                                    disabled={isEditingExisting || !!selectedToAccountId}
+                                    disabled={!!selectedToAccountId}
                                 >
                                     <FormControl>
                                     <SelectTrigger>
@@ -534,7 +561,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                     <FormItem>
                                     <FormLabel>Exchange Rate (1 {formTransactionCurrency} = ? {formToAccountCurrency})</FormLabel>
                                     <FormControl>
-                                        <Input type="number" placeholder="e.g., 0.92" step="0.0001" {...field} value={field.value || ''}/>
+                                        <Input type="number" placeholder="e.g., 0.92" step="0.000001" {...field} value={field.value || ''}/>
                                     </FormControl>
                                     <FormDescription>Required for cross-currency transfer.</FormDescription>
                                     <FormMessage />
@@ -544,7 +571,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                         )}
                     </>
                 )}
-
 
                 {transactionType !== 'transfer' && (
                     <FormField
@@ -561,7 +587,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                 </FormControl>
                                 <SelectContent>
                                 {categories
-                                    .filter(cat => cat.name.toLowerCase() !== 'transfer') // Exclude 'Transfer' category
+                                    .filter(cat => cat.name.toLowerCase() !== 'transfer')
                                     .sort((a, b) => a.name.localeCompare(b.name))
                                     .map((cat) => (
                                     <SelectItem key={cat.id} value={cat.name}>
@@ -599,7 +625,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         </div>
 
         <Button type="submit" className="w-full" disabled={isLoading}>
-          {isLoading ? (initialData?.id ? "Saving..." : "Adding...") : (initialData?.id ? "Save Changes" : `Add ${transactionType ? transactionType.charAt(0).toUpperCase() + transactionType.slice(1) : 'Transaction'}`)}
+          {getButtonText()}
         </Button>
       </form>
     </Form>
@@ -607,4 +633,3 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 };
 
 export default AddTransactionForm;
-
