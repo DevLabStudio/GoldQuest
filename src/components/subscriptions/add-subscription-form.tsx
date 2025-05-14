@@ -1,4 +1,3 @@
-
 'use client';
 
 import type { FC } from 'react';
@@ -36,7 +35,7 @@ const formSchema = z.object({
   nextPaymentDate: z.date({ required_error: "Next payment date is required" }),
   notes: z.string().max(200, "Notes too long").optional(),
   tags: z.array(z.string()).optional(),
-  description: z.string().max(200, "Description too long").optional(), // Added description field
+  description: z.string().max(200, "Description too long").optional(),
 });
 
 export type AddSubscriptionFormData = z.infer<typeof formSchema>;
@@ -46,7 +45,7 @@ interface AddSubscriptionFormProps {
   isLoading: boolean;
   categories: Category[];
   accounts: Account[];
-  groups: Group[]; // Added groups prop
+  groups: Group[];
   initialData?: Partial<AddSubscriptionFormData & { id?: string; startDate: Date; nextPaymentDate: Date; }>;
 }
 
@@ -61,7 +60,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
     isLoading,
     categories,
     accounts,
-    groups, // Destructure groups
+    groups,
     initialData
 }) => {
   const form = useForm<AddSubscriptionFormData>({
@@ -103,7 +102,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
     const submissionData: AddSubscriptionFormData = {
       ...data,
       accountId: data.accountId === "__NONE_ACCOUNT__" || data.accountId === "" ? undefined : data.accountId,
-      groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? undefined : data.groupId, 
+      groupId: data.groupId === "__NONE_GROUP__" || data.groupId === "" ? undefined : data.groupId,
     };
     await passedOnSubmit(submissionData);
   };
@@ -120,7 +119,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                 <FormItem>
                 <FormLabel>Subscription Name</FormLabel>
                 <FormControl>
-                    <Input placeholder="e.g., Netflix, Gym Membership" {...field} />
+                    <Input placeholder="e.g., Netflix, Gym Membership" {...field} value={field.value || ''} />
                 </FormControl>
                 <FormMessage />
                 </FormItem>
@@ -171,7 +170,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                 <FormItem>
                     <FormLabel>Amount ({getCurrencySymbol(selectedCurrency)})</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                    <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -236,7 +235,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                     <FormLabel>Associated Account (Optional)</FormLabel>
                     <Select
                         onValueChange={field.onChange}
-                        value={field.value || "__NONE_ACCOUNT__"} // Ensure a default string value for "None"
+                        value={field.value || "__NONE_ACCOUNT__"}
                     >
                     <FormControl>
                         <SelectTrigger>
@@ -265,7 +264,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
                 <FormLabel>Associated Group (Optional)</FormLabel>
                 <Select
                     onValueChange={field.onChange}
-                    value={field.value || "__NONE_GROUP__"} // Ensure a default string value for "None"
+                    value={field.value || "__NONE_GROUP__"}
                 >
                 <FormControl>
                     <SelectTrigger>
@@ -411,4 +410,3 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
 };
 
 export default AddSubscriptionForm;
-
