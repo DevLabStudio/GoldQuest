@@ -109,10 +109,10 @@ export default function AccountDetailPage() {
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -185,8 +185,8 @@ export default function AccountDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle this
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -205,8 +205,8 @@ export default function AccountDetailPage() {
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle this
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -222,8 +222,8 @@ export default function AccountDetailPage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle this
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -262,8 +262,8 @@ export default function AccountDetailPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle this
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });

@@ -102,10 +102,10 @@ export default function TransfersPage() {
     fetchData();
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined') {
+         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log("Storage changed, refetching transfer data...");
@@ -190,8 +190,8 @@ export default function TransfersPage() {
                 title: "Transfer Deleted",
                 description: `Transfer record removed successfully.`,
             });
-            // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
             window.dispatchEvent(new Event('storage'));
+            fetchData();
         } catch (err: any) {
             console.error("Failed to delete transfer:", err);
             toast({
@@ -215,10 +215,10 @@ export default function TransfersPage() {
         await updateTransaction(data as Transaction);
          toast({ title: "Success", description: `Transaction updated.` });
       }
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
@@ -264,10 +264,10 @@ export default function TransfersPage() {
       });
 
       toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -511,7 +511,7 @@ export default function TransfersPage() {
               initialData={initialFormDataForEdit}
             />
           )}
-           {(accounts.length === 0 || allCategories.length > 0 || allTags.length > 0) && !isLoading && (
+           {(accounts.length === 0 || allCategories.length === 0 || allTags.length === 0) && !isLoading && (
                <div className="py-4 text-center text-muted-foreground">
                  Please ensure you have at least one account (or two for transfers), category, and tag set up before adding transactions.
                    You can manage these in the 'Accounts', 'Categories', and 'Tags' pages.

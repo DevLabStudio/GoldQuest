@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -88,10 +87,10 @@ export default function OrganizationPage() {
     fetchData();
     
     const handleStorageChange = (event: StorageEvent) => {
-        if (event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userCategories', 'userTags', 'userGroups'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for organization page (key: ${event.key || 'custom'}), refetching data...`);
@@ -112,10 +111,10 @@ export default function OrganizationPage() {
     setIsLoadingCategories(true);
     try {
       await addCategory(categoryName, icon);
-      // await fetchData(); // Removed direct call, rely on storage event
       setIsAddCategoryDialogOpen(false);
       toast({ title: "Success", description: `Category "${categoryName}" added.` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to add category:", err);
       toast({ title: "Error Adding Category", description: err.message || "Could not add category.", variant: "destructive" });
@@ -125,10 +124,10 @@ export default function OrganizationPage() {
     setIsLoadingCategories(true);
     try {
       await updateCategory(categoryId, newName, newIcon);
-      // await fetchData(); 
       setIsEditCategoryDialogOpen(false); setSelectedCategory(null);
       toast({ title: "Success", description: `Category updated to "${newName}".` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to update category:", err);
       toast({ title: "Error Updating Category", description: err.message || "Could not update category.", variant: "destructive" });
@@ -138,9 +137,9 @@ export default function OrganizationPage() {
     if (!selectedCategory) return; setIsDeletingCategory(true);
     try {
       await deleteCategory(selectedCategory.id);
-      // await fetchData(); 
       toast({ title: "Category Deleted", description: `Category "${selectedCategory.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to delete category:", err);
       toast({ title: "Error Deleting Category", description: err.message || "Could not delete category.", variant: "destructive" });
@@ -154,10 +153,10 @@ export default function OrganizationPage() {
     setIsLoadingTags(true);
     try {
       await addTag(tagName);
-      // await fetchData(); 
       setIsAddTagDialogOpen(false);
       toast({ title: "Success", description: `Tag "${tagName}" added.` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to add tag:", err);
       toast({ title: "Error Adding Tag", description: err.message || "Could not add tag.", variant: "destructive" });
@@ -167,10 +166,10 @@ export default function OrganizationPage() {
     setIsLoadingTags(true);
     try {
       await updateTag(tagId, newName);
-      // await fetchData(); 
       setIsEditTagDialogOpen(false); setSelectedTag(null);
       toast({ title: "Success", description: `Tag updated to "${newName}".` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to update tag:", err);
       toast({ title: "Error Updating Tag", description: err.message || "Could not update tag.", variant: "destructive" });
@@ -180,9 +179,9 @@ export default function OrganizationPage() {
     if (!selectedTag) return; setIsDeletingTag(true);
     try {
       await deleteTag(selectedTag.id);
-      // await fetchData(); 
       toast({ title: "Tag Deleted", description: `Tag "${selectedTag.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to delete tag:", err);
       toast({ title: "Error Deleting Tag", description: err.message || "Could not delete tag.", variant: "destructive" });
@@ -196,10 +195,10 @@ export default function OrganizationPage() {
     setIsLoadingGroups(true);
     try {
       await addGroup(groupName);
-      // await fetchData(); 
       setIsAddGroupDialogOpen(false);
       toast({ title: "Success", description: `Group "${groupName}" added.` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err: any) {
       console.error("Failed to add group:", err);
       toast({ title: "Error Adding Group", description: err.message || "Could not add group.", variant: "destructive" });
@@ -216,11 +215,11 @@ export default function OrganizationPage() {
     }
     try {
         await updateGroup({ ...groupToUpdate, name: newName }); 
-        // await fetchData();
         setIsEditGroupDialogOpen(false);
         setSelectedGroupForEdit(null);
         toast({ title: "Success", description: `Group name updated to "${newName}".` });
         window.dispatchEvent(new Event('storage'));
+        fetchData();
     } catch (err: any) {
         console.error("Failed to update group name:", err);
         toast({ title: "Error Updating Group Name", description: err.message || "Could not update group name.", variant: "destructive" });
@@ -241,11 +240,11 @@ export default function OrganizationPage() {
       const groupToUpdate = groups.find(g => g.id === groupId);
       if (groupToUpdate) {
         await updateGroup({ ...groupToUpdate, categoryIds: selectedCategoryIds });
-        // await fetchData();
         setIsManageGroupCategoriesDialogOpen(false);
         setSelectedGroupForCategoryManagement(null);
         toast({ title: "Success", description: "Categories in group updated." });
         window.dispatchEvent(new Event('storage'));
+        fetchData();
       }
     } catch (err: any) {
       console.error("Failed to update group categories:", err);
@@ -265,9 +264,9 @@ export default function OrganizationPage() {
     setIsDeletingGroup(true);
     try {
       await deleteGroup(selectedGroupForDeletion.id);
-      // await fetchData(); 
       toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
+      fetchData();
     } catch (err:any) {
       console.error("Failed to delete group:", err);
       toast({ title: "Error Deleting Group", description: err.message || "Could not delete group.", variant: "destructive" });

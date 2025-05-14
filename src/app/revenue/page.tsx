@@ -106,11 +106,10 @@ export default function RevenuePage() {
     fetchData();
 
     const handleStorageChange = (event: StorageEvent) => {
-         if (event.type === 'storage') {
+         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-            // Revenue page depends on all these for complete data
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -175,8 +174,8 @@ export default function RevenuePage() {
                 title: "Success",
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
-            // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
             window.dispatchEvent(new Event('storage'));
+            fetchData(); 
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -203,8 +202,8 @@ export default function RevenuePage() {
                title: "Transaction Deleted",
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
-           // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
            window.dispatchEvent(new Event('storage'));
+           fetchData(); 
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -224,8 +223,8 @@ export default function RevenuePage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
+      fetchData(); 
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -263,8 +262,8 @@ export default function RevenuePage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
+      fetchData(); 
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -307,7 +306,7 @@ export default function RevenuePage() {
     };
 
     if (transaction.category === 'Transfer') {
-        typeForForm = typeBasedOnAmount; // Transfers cloned as their original direction
+        typeForForm = typeBasedOnAmount; 
         toast({
             title: "Cloning Transfer Leg",
             description: `Cloned as ${typeForForm}. To create a new transfer, change type to 'Transfer' and specify accounts.`,
@@ -609,3 +608,4 @@ export default function RevenuePage() {
     </div>
   );
 }
+
