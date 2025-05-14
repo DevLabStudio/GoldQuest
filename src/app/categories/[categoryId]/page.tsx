@@ -116,7 +116,7 @@ export default function CategoryDetailPage() {
         if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -170,7 +170,7 @@ export default function CategoryDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      await fetchData(); // Re-fetch data for immediate UI update
+      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
@@ -190,7 +190,7 @@ export default function CategoryDetailPage() {
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      await fetchData(); // Re-fetch data for immediate UI update
+      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
@@ -208,7 +208,7 @@ export default function CategoryDetailPage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      await fetchData(); // Re-fetch data for immediate UI update
+      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
@@ -248,7 +248,7 @@ export default function CategoryDetailPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      await fetchData(); // Re-fetch data for immediate UI update
+      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
@@ -425,11 +425,11 @@ export default function CategoryDetailPage() {
                           <TableCell className="text-muted-foreground">{account?.name || 'Unknown Account'}</TableCell>
                           <TableCell>
                             <div className="flex flex-wrap gap-1">
-                              {transaction.tags?.map(tag => {
-                                const { color: tagColor } = getTagStyle(tag);
+                              {transaction.tags?.map(tagItem => { // Renamed tag to tagItem to avoid conflict
+                                const { color: tagColor } = getTagStyle(tagItem);
                                 return (
-                                  <Badge key={tag} variant="outline" className={`text-xs px-1.5 py-0.5 ${tagColor}`}>
-                                    {tag}
+                                  <Badge key={tagItem} variant="outline" className={`text-xs px-1.5 py-0.5 ${tagColor}`}>
+                                    {tagItem}
                                   </Badge>
                                 );
                               })}
@@ -510,7 +510,7 @@ export default function CategoryDetailPage() {
               onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialType={transactionTypeToAdd}
-              initialData={ clonedTransactionData || (tag ? { tags: [tag.name], date: new Date() } : {date: new Date()}) }
+              initialData={ clonedTransactionData || (category ? { category: category.name, date: new Date() } : {date: new Date()}) }
             />
           )}
         </DialogContent>
@@ -518,4 +518,3 @@ export default function CategoryDetailPage() {
     </div>
   );
 }
-

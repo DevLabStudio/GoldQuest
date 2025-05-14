@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,7 +37,7 @@ export default function AccountsPage() {
   const { selectedDateRange } = useDateRange();
 
 
-   const fetchAllData = async () => {
+   const fetchAllData = useCallback(async () => {
         if (typeof window === 'undefined') {
             setIsLoading(false);
             setError("Account data can only be loaded on the client.");
@@ -73,7 +73,7 @@ export default function AccountsPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [toast]);
 
 
   useEffect(() => {
@@ -83,7 +83,7 @@ export default function AccountsPage() {
          if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -102,12 +102,12 @@ export default function AccountsPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [toast]);
+  }, [fetchAllData]);
 
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
       await addAccount(newAccountData);
-      await fetchAllData();
+      // await fetchAllData(); // Let storage event handle this
       setIsAddAssetDialogOpen(false);
       setIsAddCryptoDialogOpen(false);
       toast({
@@ -128,7 +128,7 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      await fetchAllData();
+      // await fetchAllData(); // Let storage event handle this
       setIsEditDialogOpen(false);
       setSelectedAccount(null);
       toast({
@@ -149,7 +149,7 @@ export default function AccountsPage() {
    const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
-        await fetchAllData();
+        // await fetchAllData(); // Let storage event handle this
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,
@@ -534,4 +534,3 @@ export default function AccountsPage() {
     </div>
   );
 }
-

@@ -105,7 +105,7 @@ export default function TransfersPage() {
          if (typeof window !== 'undefined') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log("Storage changed, refetching transfer data...");
@@ -190,7 +190,7 @@ export default function TransfersPage() {
                 title: "Transfer Deleted",
                 description: `Transfer record removed successfully.`,
             });
-            await fetchData(); // Re-fetch data for immediate UI update
+            // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
             window.dispatchEvent(new Event('storage'));
         } catch (err: any) {
             console.error("Failed to delete transfer:", err);
@@ -215,7 +215,7 @@ export default function TransfersPage() {
         await updateTransaction(data as Transaction);
          toast({ title: "Success", description: `Transaction updated.` });
       }
-      await fetchData(); // Re-fetch data for immediate UI update
+      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
@@ -264,7 +264,7 @@ export default function TransfersPage() {
       });
 
       toast({ title: "Success", description: `Transfer ${editingTransferPair ? 'updated' : 'recorded'} successfully.` });
-      await fetchData(); // Re-fetch data for immediate UI update
+      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
@@ -522,4 +522,3 @@ export default function TransfersPage() {
     </div>
   );
 }
-

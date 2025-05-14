@@ -91,7 +91,7 @@ export default function OrganizationPage() {
         if (event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userCategories', 'userTags', 'userGroups'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for organization page (key: ${event.key || 'custom'}), refetching data...`);
@@ -322,16 +322,16 @@ export default function OrganizationPage() {
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
-                        <Link href={`/groups/${group.id}`} passHref legacyBehavior>
-                           <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                             <a><Eye className="h-4 w-4" /><span>View Details</span></a>
-                           </Button>
-                        </Link>
-                        <Button asChild variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}>
-                           <span><Edit3 className="mr-1 h-4 w-4" /> Edit Name</span>
+                        <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1 text-primary hover:text-primary/80" onClick={(e) => e.stopPropagation()}>
+                             <Link href={`/groups/${group.id}`} passHref legacyBehavior>
+                                <a><Eye className="h-4 w-4" /><span>View Details</span></a>
+                             </Link>
                         </Button>
-                        <Button asChild variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
-                          <span><Settings2 className="mr-1 h-4 w-4" /> Manage Categories</span>
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}>
+                           <Edit3 className="mr-1 h-4 w-4" /> Edit Name
+                        </Button>
+                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
+                          <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
                         </Button>
                         <AlertDialog
                           open={selectedGroupForDeletion?.id === group.id}
@@ -340,8 +340,8 @@ export default function OrganizationPage() {
                           }}
                         >
                           <AlertDialogTrigger asChild>
-                             <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
-                                <span><Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span></span>
+                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
+                                <Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span>
                              </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -579,4 +579,3 @@ export default function OrganizationPage() {
     </div>
   );
 }
-
