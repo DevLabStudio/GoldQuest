@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle } from 'lucide-react'; // Added Landmark for Loans
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank } from 'lucide-react'; // Added Landmark for Loans
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -405,10 +405,10 @@ export default function FinancialControlPage() {
         </CardContent>
       </Card>
 
-      {/* Piggy Banks Section */}
+      {/* Target Section (formerly Piggy Banks) */}
       <Card>
         <CardHeader>
-          <CardTitle>Piggy Banks</CardTitle>
+          <CardTitle>Target</CardTitle>
           <CardDescription>
             Set up and track progress towards your savings goals.
           </CardDescription>
@@ -416,7 +416,7 @@ export default function FinancialControlPage() {
         <CardContent>
           <div className="text-center py-10">
             <p className="text-muted-foreground">
-              Piggy Banks feature coming soon!
+              Target (Savings Goals) feature coming soon!
             </p>
           </div>
         </CardContent>
