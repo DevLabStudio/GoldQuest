@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -67,7 +68,7 @@ export default function FinancialControlPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userSubscriptions', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -116,7 +117,7 @@ export default function FinancialControlPage() {
       setIsAddSubscriptionDialogOpen(false);
       setEditingSubscription(null);
       window.dispatchEvent(new Event('storage'));
-      fetchSubscriptionData();
+      // fetchSubscriptionData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to save subscription:", error);
       toast({ title: "Error", description: `Could not save subscription: ${error.message}`, variant: "destructive" });
@@ -128,7 +129,7 @@ export default function FinancialControlPage() {
       await deleteSubscription(subscriptionId);
       toast({ title: "Success", description: "Subscription deleted." });
       window.dispatchEvent(new Event('storage'));
-      fetchSubscriptionData();
+      // fetchSubscriptionData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to delete subscription:", error);
       toast({ title: "Error", description: `Could not delete subscription: ${error.message}`, variant: "destructive" });
@@ -150,7 +151,7 @@ export default function FinancialControlPage() {
       await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
       window.dispatchEvent(new Event('storage'));
-      fetchSubscriptionData();
+      // fetchSubscriptionData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to update paid status:", error);
       toast({ title: "Error", description: "Could not update paid status.", variant: "destructive" });
@@ -403,3 +404,4 @@ export default function FinancialControlPage() {
     </div>
   );
 }
+

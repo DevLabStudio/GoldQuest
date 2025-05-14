@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -112,7 +113,7 @@ export default function AccountDetailPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -186,7 +187,7 @@ export default function AccountDetailPage() {
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      // fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -206,7 +207,7 @@ export default function AccountDetailPage() {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      // fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -223,7 +224,7 @@ export default function AccountDetailPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      // fetchData(); // Let the storage event handle the refetch
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -263,7 +264,7 @@ export default function AccountDetailPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      // fetchData(); // Let the storage event handle the refetch
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -624,3 +625,4 @@ export default function AccountDetailPage() {
     </div>
   );
 }
+

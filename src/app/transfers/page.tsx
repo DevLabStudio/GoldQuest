@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -105,7 +106,7 @@ export default function TransfersPage() {
          if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log("Storage changed, refetching transfer data...");
@@ -191,7 +192,7 @@ export default function TransfersPage() {
                 description: `Transfer record removed successfully.`,
             });
             window.dispatchEvent(new Event('storage'));
-            fetchData();
+            // fetchData(); // Let storage event handle refetch
         } catch (err: any) {
             console.error("Failed to delete transfer:", err);
             toast({
@@ -218,7 +219,7 @@ export default function TransfersPage() {
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      // fetchData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
@@ -267,7 +268,7 @@ export default function TransfersPage() {
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      // fetchData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -522,3 +523,4 @@ export default function TransfersPage() {
     </div>
   );
 }
+

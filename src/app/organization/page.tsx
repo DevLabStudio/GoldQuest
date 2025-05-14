@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
@@ -90,7 +91,7 @@ export default function OrganizationPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userCategories', 'userTags', 'userGroups'];
-            const isRelevantExternalChange = event.key !== null && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for organization page (key: ${event.key || 'custom'}), refetching data...`);
@@ -114,7 +115,7 @@ export default function OrganizationPage() {
       setIsAddCategoryDialogOpen(false);
       toast({ title: "Success", description: `Category "${categoryName}" added.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to add category:", err);
       toast({ title: "Error Adding Category", description: err.message || "Could not add category.", variant: "destructive" });
@@ -127,7 +128,7 @@ export default function OrganizationPage() {
       setIsEditCategoryDialogOpen(false); setSelectedCategory(null);
       toast({ title: "Success", description: `Category updated to "${newName}".` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update category:", err);
       toast({ title: "Error Updating Category", description: err.message || "Could not update category.", variant: "destructive" });
@@ -139,7 +140,7 @@ export default function OrganizationPage() {
       await deleteCategory(selectedCategory.id);
       toast({ title: "Category Deleted", description: `Category "${selectedCategory.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete category:", err);
       toast({ title: "Error Deleting Category", description: err.message || "Could not delete category.", variant: "destructive" });
@@ -156,7 +157,7 @@ export default function OrganizationPage() {
       setIsAddTagDialogOpen(false);
       toast({ title: "Success", description: `Tag "${tagName}" added.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to add tag:", err);
       toast({ title: "Error Adding Tag", description: err.message || "Could not add tag.", variant: "destructive" });
@@ -169,7 +170,7 @@ export default function OrganizationPage() {
       setIsEditTagDialogOpen(false); setSelectedTag(null);
       toast({ title: "Success", description: `Tag updated to "${newName}".` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update tag:", err);
       toast({ title: "Error Updating Tag", description: err.message || "Could not update tag.", variant: "destructive" });
@@ -181,7 +182,7 @@ export default function OrganizationPage() {
       await deleteTag(selectedTag.id);
       toast({ title: "Tag Deleted", description: `Tag "${selectedTag.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete tag:", err);
       toast({ title: "Error Deleting Tag", description: err.message || "Could not delete tag.", variant: "destructive" });
@@ -198,7 +199,7 @@ export default function OrganizationPage() {
       setIsAddGroupDialogOpen(false);
       toast({ title: "Success", description: `Group "${groupName}" added.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to add group:", err);
       toast({ title: "Error Adding Group", description: err.message || "Could not add group.", variant: "destructive" });
@@ -219,7 +220,7 @@ export default function OrganizationPage() {
         setSelectedGroupForEdit(null);
         toast({ title: "Success", description: `Group name updated to "${newName}".` });
         window.dispatchEvent(new Event('storage'));
-        fetchData();
+        //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
         console.error("Failed to update group name:", err);
         toast({ title: "Error Updating Group Name", description: err.message || "Could not update group name.", variant: "destructive" });
@@ -244,7 +245,7 @@ export default function OrganizationPage() {
         setSelectedGroupForCategoryManagement(null);
         toast({ title: "Success", description: "Categories in group updated." });
         window.dispatchEvent(new Event('storage'));
-        fetchData();
+        //fetchData(); // Let the storage event handle the refetch
       }
     } catch (err: any) {
       console.error("Failed to update group categories:", err);
@@ -266,7 +267,7 @@ export default function OrganizationPage() {
       await deleteGroup(selectedGroupForDeletion.id);
       toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      fetchData();
+      //fetchData(); // Let the storage event handle the refetch
     } catch (err:any) {
       console.error("Failed to delete group:", err);
       toast({ title: "Error Deleting Group", description: err.message || "Could not delete group.", variant: "destructive" });
@@ -343,10 +344,12 @@ export default function OrganizationPage() {
                                 <Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span>
                              </Button>
                           </AlertDialogTrigger>
-                          <AlertDialogContent>
-                            <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the group "{selectedGroupForDeletion?.name}". Categories within it will not be deleted but unlinked.</AlertDialogDescription></AlertDialogHeader>
-                            <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedGroupForDeletion(null)} disabled={isDeletingGroup}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGroupConfirm} disabled={isDeletingGroup} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingGroup ? "Deleting..." : "Delete Group"}</AlertDialogAction></AlertDialogFooter>
-                          </AlertDialogContent>
+                          {selectedGroupForDeletion?.id === group.id && (
+                            <AlertDialogContent>
+                                <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the group "{selectedGroupForDeletion?.name}". Categories within it will not be deleted but unlinked.</AlertDialogDescription></AlertDialogHeader>
+                                <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedGroupForDeletion(null)} disabled={isDeletingGroup}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteGroupConfirm} disabled={isDeletingGroup} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingGroup ? "Deleting..." : "Delete Group"}</AlertDialogAction></AlertDialogFooter>
+                            </AlertDialogContent>
+                          )}
                         </AlertDialog>
                       </div>
                     </div>
@@ -460,10 +463,12 @@ export default function OrganizationPage() {
                                       <span><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></span>
                                   </Button>
                               </AlertDialogTrigger>
-                              <AlertDialogContent>
-                                  <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedCategory?.name}".</AlertDialogDescription></AlertDialogHeader>
-                                  <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedCategory(null)} disabled={isDeletingCategory}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteCategoryConfirm} disabled={isDeletingCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingCategory ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
-                              </AlertDialogContent>
+                              {selectedCategory?.id === category.id && (
+                                <AlertDialogContent>
+                                    <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This action will permanently delete "{selectedCategory?.name}".</AlertDialogDescription></AlertDialogHeader>
+                                    <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedCategory(null)} disabled={isDeletingCategory}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteCategoryConfirm} disabled={isDeletingCategory} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingCategory ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
+                                </AlertDialogContent>
+                              )}
                           </AlertDialog>
                        </div>
                      </a>
@@ -527,10 +532,12 @@ export default function OrganizationPage() {
                                     <span><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></span>
                                 </Button>
                             </AlertDialogTrigger>
+                           {selectedTag?.id === tag.id && (
                             <AlertDialogContent>
                                 <AlertDialogHeader><AlertDialogTitle>Are you sure?</AlertDialogTitle><AlertDialogDescription>This will permanently delete the tag "{selectedTag?.name}".</AlertDialogDescription></AlertDialogHeader>
                                 <AlertDialogFooter><AlertDialogCancel onClick={() => setSelectedTag(null)} disabled={isDeletingTag}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleDeleteTagConfirm} disabled={isDeletingTag} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">{isDeletingTag ? "Deleting..." : "Delete"}</AlertDialogAction></AlertDialogFooter>
                             </AlertDialogContent>
+                           )}
                         </AlertDialog>
                       </div>
                     </a>
@@ -578,3 +585,4 @@ export default function OrganizationPage() {
     </div>
   );
 }
+
