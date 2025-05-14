@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -107,7 +108,6 @@ export default function AccountsPage() {
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
       await addAccount(newAccountData);
-      // await fetchAllData(); // Let storage event handle this
       setIsAddAssetDialogOpen(false);
       setIsAddCryptoDialogOpen(false);
       toast({
@@ -128,7 +128,6 @@ export default function AccountsPage() {
    const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
-      // await fetchAllData(); // Let storage event handle this
       setIsEditDialogOpen(false);
       setSelectedAccount(null);
       toast({
@@ -149,7 +148,6 @@ export default function AccountsPage() {
    const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
-        // await fetchAllData(); // Let storage event handle this
         toast({
             title: "Account Deleted",
             description: `Account removed successfully.`,
@@ -229,32 +227,51 @@ export default function AccountsPage() {
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
     const runningBalances: { [accountId: string]: number } = {};
 
+    // Initialize runningBalances with opening balance (converted to account's currency) or 0
     relevantAccounts.forEach(acc => {
         const openingBalanceTx = allTransactions.find(
             tx => tx.accountId === acc.id && tx.category?.toLowerCase() === 'opening balance'
         );
-        runningBalances[acc.id] = openingBalanceTx ? openingBalanceTx.amount : 0;
+        if (openingBalanceTx) {
+            runningBalances[acc.id] = convertCurrency(openingBalanceTx.amount, openingBalanceTx.transactionCurrency, acc.currency);
+        } else {
+            runningBalances[acc.id] = 0;
+        }
     });
 
 
     const firstChartDate = sortedUniqueDates[0];
     const initialDataPoint: any = { date: format(firstChartDate, 'yyyy-MM-dd') };
+    
     relevantAccounts.forEach(acc => {
-        let balanceBeforeFirstTx = runningBalances[acc.id];
+        // Start with the (already converted) opening balance or 0
+        let balanceAtFirstChartDate = runningBalances[acc.id]; 
+        
+        // Add transactions before the first chart date
          allTransactions
             .filter(tx => tx.accountId === acc.id && parseISO(tx.date) < firstChartDate && tx.category?.toLowerCase() !== 'opening balance')
             .sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)))
             .forEach(tx => {
-                balanceBeforeFirstTx += convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                balanceAtFirstChartDate += convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
             });
-        initialDataPoint[acc.name] = convertCurrency(balanceBeforeFirstTx, acc.currency, preferredCurrency);
-        runningBalances[acc.id] = balanceBeforeFirstTx;
+        
+        initialDataPoint[acc.name] = convertCurrency(balanceAtFirstChartDate, acc.currency, preferredCurrency);
+        runningBalances[acc.id] = balanceAtFirstChartDate; // Update runningBalances to this point for the iterative calculation
     });
+
     if (Object.keys(initialDataPoint).length > 1) historicalData.push(initialDataPoint);
 
 
     for (const currentDate of sortedUniqueDates) {
         const dateStr = format(currentDate, 'yyyy-MM-dd');
+        // Skip if this date was already handled by initialDataPoint and no new transactions on this day
+        if (historicalData.length > 0 && historicalData[historicalData.length -1].date === dateStr && currentDate === firstChartDate) {
+             // If it's the first date and already added by initialDataPoint,
+             // we need to process transactions *on* this day and update the point if necessary,
+             // or add a new point if the initialDataPoint was for *before* this day.
+             // The current logic processes transactions *on* the day and then adds/updates snapshot.
+        }
+
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
 
         const transactionsOnThisDay = allTransactions.filter(tx =>
@@ -262,6 +279,16 @@ export default function AccountsPage() {
             tx.category?.toLowerCase() !== 'opening balance' &&
             relevantAccounts.some(acc => acc.id === tx.accountId)
         );
+        
+        // If it's not the first day, copy balances from the previous day's runningBalances for accounts not touched today
+        if (currentDate > firstChartDate) {
+            relevantAccounts.forEach(acc => {
+                if (!transactionsOnThisDay.some(tx => tx.accountId === acc.id)) {
+                    // runningBalances[acc.id] should already hold the balance from the end of the previous day.
+                }
+            });
+        }
+
 
         transactionsOnThisDay.forEach(tx => {
             const account = relevantAccounts.find(a => a.id === tx.accountId);
@@ -275,6 +302,7 @@ export default function AccountsPage() {
             dailySnapshot[acc.name] = convertCurrency(runningBalances[acc.id] || 0, acc.currency, preferredCurrency);
         });
 
+        // If an entry for this date already exists (from initialDataPoint), update it. Otherwise, push new.
         const existingPointIndex = historicalData.findIndex(p => p.date === dateStr);
         if (existingPointIndex > -1) {
             historicalData[existingPointIndex] = { ...historicalData[existingPointIndex], ...dailySnapshot };
@@ -534,3 +562,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+
