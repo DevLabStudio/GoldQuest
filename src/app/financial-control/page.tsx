@@ -5,7 +5,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye } from 'lucide-react';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle } from 'lucide-react'; // Added Landmark for Loans
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -117,7 +117,6 @@ export default function FinancialControlPage() {
       setIsAddSubscriptionDialogOpen(false);
       setEditingSubscription(null);
       window.dispatchEvent(new Event('storage'));
-      // fetchSubscriptionData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to save subscription:", error);
       toast({ title: "Error", description: `Could not save subscription: ${error.message}`, variant: "destructive" });
@@ -129,7 +128,6 @@ export default function FinancialControlPage() {
       await deleteSubscription(subscriptionId);
       toast({ title: "Success", description: "Subscription deleted." });
       window.dispatchEvent(new Event('storage'));
-      // fetchSubscriptionData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to delete subscription:", error);
       toast({ title: "Error", description: `Could not delete subscription: ${error.message}`, variant: "destructive" });
@@ -151,7 +149,6 @@ export default function FinancialControlPage() {
       await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
       window.dispatchEvent(new Event('storage'));
-      // fetchSubscriptionData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to update paid status:", error);
       toast({ title: "Error", description: "Could not update paid status.", variant: "destructive" });
@@ -367,6 +364,29 @@ export default function FinancialControlPage() {
             </div>
         </CardContent>
       </Card>
+
+      {/* Loans Section */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>Loans</CardTitle>
+            <Button variant="outline" size="sm" disabled>
+              <PercentCircle className="mr-2 h-4 w-4" /> Manage Loans
+            </Button>
+          </div>
+          <CardDescription>
+            Track your loans, payments, and remaining balances.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-10">
+            <p className="text-muted-foreground">
+              Loans feature coming soon!
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
 
       {/* Budgets Section */}
       <Card>
