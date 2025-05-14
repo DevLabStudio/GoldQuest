@@ -7,13 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { UserPreferences } from '@/lib/preferences';
+import { saveUserPreferences, getUserPreferences as fetchUserPreferencesFromLib } from '@/lib/preferences'; // Import saveUserPreferences directly
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthContext } from '@/contexts/AuthContext';
 
 export default function PreferencesPage() {
-  const { user, isLoadingAuth, userPreferences, setAppTheme, refreshUserPreferences } = useAuthContext();
+  const { user, isLoadingAuth, userPreferences, refreshUserPreferences } = useAuthContext(); // Removed setAppTheme as we'll save directly
   const [preferredCurrency, setPreferredCurrency] = useState(userPreferences?.preferredCurrency || 'BRL');
   const [selectedTheme, setSelectedTheme] = useState<UserPreferences['theme']>(userPreferences?.theme || 'system');
   const [isSaving, setIsSaving] = useState(false);
@@ -41,21 +42,17 @@ export default function PreferencesPage() {
     }
     setIsSaving(true);
     try {
-      // Save preferred currency (already handled by AuthContext on preference save)
-      // For theme, call setAppTheme which updates context and saves
-      if (selectedTheme !== userPreferences?.theme) {
-        await setAppTheme(selectedTheme);
-      }
-      
-      // If currency also needs to be saved independently or if not handled by setAppTheme fully
-      if (preferredCurrency !== userPreferences?.preferredCurrency) {
-         const currentPrefs = userPreferences || { preferredCurrency: 'BRL', theme: 'system'};
-         await setAppTheme(currentPrefs.theme); // This will trigger a save with potentially new currency
-         // A more direct way would be:
-         // await saveUserPreferences({ preferredCurrency, theme: selectedTheme });
-         // await refreshUserPreferences(); // to update context if saveUserPreferences doesn't do it
-      }
+      // Construct the new preferences object with current selections from the page
+      const newPreferencesToSave: UserPreferences = {
+        preferredCurrency: preferredCurrency, // This is from PreferencesPage's local state
+        theme: selectedTheme,                 // This is also from PreferencesPage's local state
+      };
 
+      // Directly save the new preferences using the lib function
+      await saveUserPreferences(newPreferencesToSave);
+
+      // Refresh the AuthContext's state so the rest of the app sees the changes
+      await refreshUserPreferences();
 
       toast({
         title: "Preferences Saved",
@@ -74,8 +71,8 @@ export default function PreferencesPage() {
       setIsSaving(false);
     }
   };
-  
-  if (isLoadingAuth || (!userPreferences && user)) { // Show skeleton if auth loading OR if user exists but prefs not yet loaded
+
+  if (isLoadingAuth || (!userPreferences && user)) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/3 mb-6" />
@@ -169,3 +166,4 @@ export default function PreferencesPage() {
     </div>
   );
 }
+
