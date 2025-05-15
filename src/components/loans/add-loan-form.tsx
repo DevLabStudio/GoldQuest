@@ -16,8 +16,11 @@ import { CalendarIcon } from 'lucide-react';
 import { cn } from "@/lib/utils";
 import { format as formatDateFns, parseISO } from 'date-fns';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
-import type { NewLoanData } from '@/services/loans';
+import type { NewLoanData, LoanType } from '@/services/loans';
+import { loanTypeLabels } from '@/services/loans';
 import { Textarea } from '@/components/ui/textarea';
+
+const loanTypes = Object.keys(loanTypeLabels) as LoanType[];
 
 const formSchema = z.object({
   name: z.string().min(2, "Loan name must be at least 2 characters").max(100, "Name too long"),
@@ -28,6 +31,7 @@ const formSchema = z.object({
   termMonths: z.coerce.number().int().positive("Term must be a positive number of months"),
   startDate: z.date({ required_error: "Start date is required" }),
   monthlyPayment: z.coerce.number({ invalid_type_error: "Payment must be a number"}).positive("Monthly payment must be positive"),
+  loanType: z.enum(loanTypes, { required_error: "Loan type is required" }),
   notes: z.string().max(500, "Notes too long").optional(),
 });
 
@@ -36,7 +40,7 @@ export type AddLoanFormData = z.infer<typeof formSchema>;
 interface AddLoanFormProps {
   onSubmit: (data: NewLoanData) => Promise<void> | void;
   isLoading: boolean;
-  initialData?: Partial<AddLoanFormData & { id?: string; startDate: Date }>;
+  initialData?: Partial<AddLoanFormData & { id?: string; startDate: Date; loanType: LoanType; }>;
 }
 
 const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading, initialData }) => {
@@ -45,6 +49,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
     defaultValues: initialData ? {
         ...initialData,
         startDate: initialData.startDate ? (typeof initialData.startDate === 'string' ? parseISO(initialData.startDate) : initialData.startDate) : new Date(),
+        loanType: initialData.loanType || 'other',
         notes: initialData.notes || "",
         originalAmount: initialData.originalAmount ?? undefined,
         interestRate: initialData.interestRate ?? undefined,
@@ -59,6 +64,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
       termMonths: undefined,
       startDate: new Date(),
       monthlyPayment: undefined,
+      loanType: 'other',
       notes: "",
     },
   });
@@ -71,7 +77,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
         startDate: formatDateFns(data.startDate, 'yyyy-MM-dd'),
     };
     await passedOnSubmit(loanDataToSave);
-     if (!initialData?.id) { // Only reset if it's not an edit form
+     if (!initialData?.id) { 
       form.reset();
     }
   };
@@ -107,6 +113,30 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
                 )}
             />
         </div>
+        <FormField
+            control={form.control}
+            name="loanType"
+            render={({ field }) => (
+            <FormItem>
+                <FormLabel>Loan Type</FormLabel>
+                <Select onValueChange={field.onChange} defaultValue={field.value}>
+                <FormControl>
+                    <SelectTrigger>
+                    <SelectValue placeholder="Select loan type" />
+                    </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                    {loanTypes.map((type) => (
+                    <SelectItem key={type} value={type}>
+                        {loanTypeLabels[type]}
+                    </SelectItem>
+                    ))}
+                </SelectContent>
+                </Select>
+                <FormMessage />
+            </FormItem>
+            )}
+        />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <FormField
                 control={form.control}

@@ -6,6 +6,19 @@ import { ref, set, get, push, remove, update, serverTimestamp } from 'firebase/d
 import type { User } from 'firebase/auth';
 import { addMonths, format as formatDateFns } from 'date-fns';
 
+export type LoanType = 'mortgage' | 'car' | 'student' | 'personal' | 'credit_card' | 'peer_to_peer' | 'other';
+
+export const loanTypeLabels: Record<LoanType, string> = {
+  mortgage: 'Mortgage',
+  car: 'Car Loan',
+  student: 'Student Loan',
+  personal: 'Personal Loan',
+  credit_card: 'Credit Card Debt',
+  peer_to_peer: 'Peer-to-Peer Loan',
+  other: 'Other',
+};
+
+
 export interface Loan {
   id: string;
   name: string; // e.g., "Car Loan", "Student Loan"
@@ -18,6 +31,7 @@ export interface Loan {
   monthlyPayment: number;
   remainingBalance: number; // Initially same as originalAmount
   nextPaymentDate: string; // Calculated: first payment date
+  loanType: LoanType; // New field for loan type
   notes?: string;
   createdAt?: object | string;
   updatedAt?: object | string;
@@ -51,6 +65,7 @@ export async function getLoans(): Promise<Loan[]> {
       return Object.entries(loansData).map(([id, data]) => ({
         id,
         ...(data as Omit<Loan, 'id'>),
+        loanType: (data as Loan).loanType || 'other', // Default if missing
       }));
     }
     return [];
@@ -78,8 +93,9 @@ export async function addLoan(loanData: NewLoanData): Promise<Loan> {
   const newLoan: Loan = {
     ...loanData,
     id: newLoanRef.key,
-    remainingBalance: loanData.originalAmount, // Initial remaining balance is the original amount
+    remainingBalance: loanData.originalAmount, 
     nextPaymentDate: formatDateFns(firstPaymentDate, 'yyyy-MM-dd'),
+    loanType: loanData.loanType || 'other',
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
@@ -106,15 +122,19 @@ export async function updateLoan(updatedLoan: Loan): Promise<Loan> {
   const loanRef = ref(database, loanRefPath);
 
   const dataToUpdate: Partial<Omit<Loan, 'id' | 'createdAt'>> & { updatedAt: object } = {
-    ...updatedLoan, // spread all fields from updatedLoan first
+    ...updatedLoan, 
+    loanType: updatedLoan.loanType || 'other',
     updatedAt: serverTimestamp(),
   };
-  // delete (dataToUpdate as any).id; // id should not be part of the data written
-  // delete (dataToUpdate as any).createdAt; // createdAt should not be updated
+  
+  const dataToSave = {...dataToUpdate} as any;
+  delete dataToSave.id;
+  delete dataToSave.createdAt;
+
 
   try {
-    await update(loanRef, dataToUpdate);
-    return updatedLoan; // Return the object passed in, assuming it's the desired state
+    await update(loanRef, dataToSave);
+    return updatedLoan; 
   } catch (error) {
     console.error("Error updating loan in Firebase:", error);
     throw error;

@@ -5,9 +5,9 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal } from 'lucide-react';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal, Settings2 } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -19,8 +19,9 @@ import { getAccounts, type Account } from '@/services/account-sync';
 import { getGroups, type Group } from '@/services/groups';
 
 import AddLoanForm, { type AddLoanFormData } from '@/components/loans/add-loan-form';
-import type { Loan, NewLoanData } from '@/services/loans';
-import { getLoans, addLoan as saveLoan, deleteLoan as removeLoan, updateLoan as changeLoan } from '@/services/loans';
+import type { Loan, NewLoanData, LoanType } from '@/services/loans';
+import { getLoans, addLoan as saveLoan, deleteLoan as removeLoan, updateLoan as changeLoan, loanTypeLabels } from '@/services/loans';
+
 
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, convertCurrency } from '@/lib/currency';
@@ -177,10 +178,10 @@ export default function FinancialControlPage() {
   const handleLoanAdded = async (data: NewLoanData) => {
     try {
         if (editingLoan) {
-            await changeLoan({ ...editingLoan, ...data });
+            await changeLoan({ ...editingLoan, ...data, loanType: data.loanType || 'other' });
             toast({ title: "Success", description: "Loan updated successfully." });
         } else {
-            await saveLoan(data);
+            await saveLoan({ ...data, loanType: data.loanType || 'other' });
             toast({ title: "Success", description: "Loan added successfully." });
         }
         setIsAddLoanDialogOpen(false);
@@ -269,7 +270,7 @@ export default function FinancialControlPage() {
           {subscription.description && ` - ${subscription.description}`}
         </CardDescription>
       </CardHeader>
-      <CardContent className="text-xs space-y-1 pt-2">
+      <CardContent className="text-xs space-y-1 pt-2 pb-4">
         <p><span className="font-medium">Next Payment:</span> {format(parseISO(subscription.nextPaymentDate), 'MMM dd, yyyy')}</p>
         {subscription.accountId && <p><span className="font-medium">Account:</span> {accounts.find(acc => acc.id === subscription.accountId)?.name || 'N/A'}</p>}
          <div className="flex items-center space-x-2 pt-1">
@@ -454,6 +455,7 @@ export default function FinancialControlPage() {
                     initialData={editingLoan ? {
                       ...editingLoan,
                       startDate: parseISO(editingLoan.startDate),
+                      loanType: editingLoan.loanType,
                     } : undefined}
                   />
                 )}
@@ -477,7 +479,9 @@ export default function FinancialControlPage() {
                     <div className="flex justify-between items-start">
                       <div>
                         <CardTitle className="text-lg">{loan.name}</CardTitle>
-                        <CardDescription className="text-xs">Lender: {loan.lender}</CardDescription>
+                        <CardDescription className="text-xs">
+                          {loanTypeLabels[loan.loanType] || 'Loan'} from {loan.lender}
+                        </CardDescription>
                       </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -600,4 +604,3 @@ export default function FinancialControlPage() {
     </div>
   );
 }
-
