@@ -8,7 +8,7 @@ import AuthWrapper from '@/components/layout/auth-wrapper';
 import { AuthProvider } from '@/contexts/AuthContext';
 
 const oxanium = Oxanium({
-  variable: '--font-oxanium',
+  variable: '--font-oxanium', // This tells next/font to create a CSS variable
   subsets: ['latin'],
 });
 
@@ -23,14 +23,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" className={oxanium.variable}> {/* Apply oxanium.variable to html tag */}
       <head>
           {/* Metadata will be injected by Next.js from the export above */}
       </head>
       <body
       className={cn(
-          oxanium.className, // Use the generated font class name
-          'font-sans antialiased', // Ensure Tailwind's font-sans (which uses the var) is also applied if needed, along with antialiasing
+          // oxanium.className, // Removed from here
+          'font-sans antialiased', // font-sans will use var(--font-oxanium) from html
           'min-h-screen flex flex-col'
         )}
       >
@@ -42,3 +42,4 @@ export default function RootLayout({
     </html>
   );
 }
+
