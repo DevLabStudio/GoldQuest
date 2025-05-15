@@ -29,7 +29,8 @@ export default function RootLayout({
       </head>
       <body
       className={cn(
-          `${oxanium.variable} font-sans antialiased`,
+          oxanium.className, // Use the generated font class name
+          'font-sans antialiased', // Ensure Tailwind's font-sans (which uses the var) is also applied if needed, along with antialiasing
           'min-h-screen flex flex-col'
         )}
       >
@@ -41,4 +42,3 @@ export default function RootLayout({
     </html>
   );
 }
-
