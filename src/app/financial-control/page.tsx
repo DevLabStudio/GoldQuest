@@ -72,7 +72,8 @@ export default function FinancialControlPage() {
   const [budgetToDelete, setBudgetToDelete] = useState<Budget | null>(null);
   const [isDeletingBudget, setIsDeletingBudget] = useState(false);
 
-  // Common State
+  // Common State for data needed by multiple forms
+  const [isLoadingCommonData, setIsLoadingCommonData] = useState(true);
   const [categories, setCategories] = useState<Category[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
@@ -81,12 +82,14 @@ export default function FinancialControlPage() {
 
   const fetchData = useCallback(async () => {
     if (typeof window === 'undefined') {
+        setIsLoadingCommonData(false);
         setIsLoadingSubscriptions(false);
         setIsLoadingLoans(false);
         setIsLoadingCreditCards(false);
         setIsLoadingBudgets(false);
         return;
     }
+    setIsLoadingCommonData(true);
     setIsLoadingSubscriptions(true);
     setIsLoadingLoans(true);
     setIsLoadingCreditCards(true);
@@ -114,6 +117,7 @@ export default function FinancialControlPage() {
       console.error("Failed to fetch financial control data:", error);
       toast({ title: "Error", description: "Could not load data.", variant: "destructive" });
     } finally {
+      setIsLoadingCommonData(false);
       setIsLoadingSubscriptions(false);
       setIsLoadingLoans(false);
       setIsLoadingCreditCards(false);
@@ -481,7 +485,7 @@ export default function FinancialControlPage() {
                     {editingSubscription ? 'Update the details of your subscription.' : 'Enter the details of your new recurring income or expense.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingSubscriptions || isLoadingLoans || isLoadingCreditCards || isLoadingBudgets) && (!categories.length || !accounts.length || !groups.length) ? (
+                {isLoadingCommonData ? (
                      <Skeleton className="h-60 w-full" />
                 ) : (
                     <AddSubscriptionForm
@@ -574,7 +578,7 @@ export default function FinancialControlPage() {
                     {editingLoan ? 'Update the details of your loan.' : 'Enter the details for your new loan.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingLoans || isLoadingSubscriptions || isLoadingCreditCards || isLoadingBudgets) ? (<Skeleton className="h-80 w-full" />) : (
+                {isLoadingCommonData ? (<Skeleton className="h-80 w-full" />) : (
                   <AddLoanForm
                     key={editingLoan ? editingLoan.id : 'new-loan'}
                     onSubmit={handleLoanAdded}
@@ -697,7 +701,7 @@ export default function FinancialControlPage() {
                     {editingCreditCard ? 'Update the details of your credit card.' : 'Enter the details for your new credit card.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingCreditCards || isLoadingSubscriptions || isLoadingLoans || isLoadingBudgets) ? (<Skeleton className="h-80 w-full" />) : (
+                {isLoadingCommonData ? (<Skeleton className="h-80 w-full" />) : (
                   <AddCreditCardForm
                     key={editingCreditCard ? editingCreditCard.id : 'new-credit-card'}
                     onSubmit={handleCreditCardAdded}
@@ -816,7 +820,7 @@ export default function FinancialControlPage() {
                     {editingBudget ? 'Update your budget details.' : 'Define a new budget for categories or groups.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingCategories || isLoadingGroups) ? (<Skeleton className="h-96 w-full" />) : (
+                {isLoadingCommonData ? (<Skeleton className="h-96 w-full" />) : (
                   <AddBudgetForm
                     key={editingBudget ? editingBudget.id : 'new-budget'}
                     onSubmit={handleBudgetAdded}
@@ -999,3 +1003,4 @@ export default function FinancialControlPage() {
     </div>
   );
 }
+
