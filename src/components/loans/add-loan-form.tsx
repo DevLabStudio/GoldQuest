@@ -46,6 +46,10 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
         ...initialData,
         startDate: initialData.startDate ? (typeof initialData.startDate === 'string' ? parseISO(initialData.startDate) : initialData.startDate) : new Date(),
         notes: initialData.notes || "",
+        originalAmount: initialData.originalAmount ?? undefined,
+        interestRate: initialData.interestRate ?? undefined,
+        termMonths: initialData.termMonths ?? undefined,
+        monthlyPayment: initialData.monthlyPayment ?? undefined,
     } : {
       name: "",
       lender: "",
@@ -111,7 +115,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
                 <FormItem>
                     <FormLabel>Original Amount ({getCurrencySymbol(selectedCurrency)})</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="10000.00" step="0.01" {...field} />
+                    <Input type="number" placeholder="10000.00" step="0.01" {...field} value={field.value ?? ''}/>
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -150,7 +154,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
                 <FormItem>
                     <FormLabel>Annual Interest Rate (%)</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="5.0" step="0.01" {...field} />
+                    <Input type="number" placeholder="5.0" step="0.01" {...field} value={field.value ?? ''} />
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -163,7 +167,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
                 <FormItem>
                     <FormLabel>Loan Term (Months)</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="60" step="1" {...field} />
+                    <Input type="number" placeholder="60" step="1" {...field} value={field.value ?? ''}/>
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -205,7 +209,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
                 <FormItem>
                     <FormLabel>Monthly Payment ({getCurrencySymbol(selectedCurrency)})</FormLabel>
                     <FormControl>
-                    <Input type="number" placeholder="250.00" step="0.01" {...field} />
+                    <Input type="number" placeholder="250.00" step="0.01" {...field} value={field.value ?? ''}/>
                     </FormControl>
                     <FormMessage />
                 </FormItem>
@@ -220,7 +224,7 @@ const AddLoanForm: FC<AddLoanFormProps> = ({ onSubmit: passedOnSubmit, isLoading
                 <FormItem>
                 <FormLabel>Notes (Optional)</FormLabel>
                 <FormControl>
-                    <Textarea placeholder="Any additional notes about the loan..." {...field} />
+                    <Textarea placeholder="Any additional notes about the loan..." {...field} value={field.value ?? ''}/>
                 </FormControl>
                 <FormMessage />
                 </FormItem>

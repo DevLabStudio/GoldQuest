@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -68,7 +69,7 @@ const AddSubscriptionForm: FC<AddSubscriptionFormProps> = ({
     defaultValues: initialData ? {
         name: initialData.name || "",
         type: initialData.type || 'expense',
-        amount: initialData.amount || undefined,
+        amount: initialData.amount ?? undefined,
         currency: initialData.currency || 'BRL',
         category: initialData.category || undefined,
         accountId: initialData.accountId || "__NONE_ACCOUNT__",
