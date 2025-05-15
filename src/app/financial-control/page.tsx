@@ -5,9 +5,11 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit } from 'lucide-react';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import AddSubscriptionForm, { type AddSubscriptionFormData } from '@/components/subscriptions/add-subscription-form';
@@ -466,40 +468,85 @@ export default function FinancialControlPage() {
         <CardContent>
            {isLoadingLoans ? (
             <div className="space-y-4">
-                {[...Array(2)].map((_,i) => <Skeleton key={`loan-skel-${i}`} className="h-24 w-full"/>)}
+                {[...Array(2)].map((_,i) => <Skeleton key={`loan-skel-${i}`} className="h-12 w-full"/>)}
             </div>
            ) : loans.length > 0 ? (
-            <div className="space-y-4">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Lender</TableHead>
+                  <TableHead className="text-right">Original Amt.</TableHead>
+                  <TableHead className="text-right">Remaining</TableHead>
+                  <TableHead className="text-center">APR</TableHead>
+                  <TableHead className="text-center">Term</TableHead>
+                  <TableHead className="text-right">Monthly Pmt.</TableHead>
+                  <TableHead>Next Pmt.</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
                 {loans.map(loan => (
-                    <Card key={loan.id} className="bg-muted/30 dark:bg-muted/20">
-                        <CardHeader className="pb-2">
-                            <div className="flex justify-between items-start">
-                                <CardTitle className="text-lg">{loan.name}</CardTitle>
-                                <Badge variant="outline">{loan.currency}</Badge>
-                            </div>
-                            <CardDescription className="text-xs">Lender: {loan.lender}</CardDescription>
-                        </CardHeader>
-                        <CardContent className="text-sm space-y-1">
-                            <p><span className="font-medium">Original:</span> {formatCurrency(loan.originalAmount, loan.currency, preferredCurrency, true)}
-                               {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground"> ({formatCurrency(loan.originalAmount, loan.currency, loan.currency, false)})</span>}
-                            </p>
-                            <p><span className="font-medium">Remaining:</span> {formatCurrency(loan.remainingBalance, loan.currency, preferredCurrency, true)}
-                               {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground"> ({formatCurrency(loan.remainingBalance, loan.currency, loan.currency, false)})</span>}
-                            </p>
-                            <p><span className="font-medium">APR:</span> {loan.interestRate}%</p>
-                            <p><span className="font-medium">Term:</span> {loan.termMonths} months</p>
-                            <p><span className="font-medium">Monthly Payment:</span> {formatCurrency(loan.monthlyPayment, loan.currency, preferredCurrency, true)}</p>
-                            <p><span className="font-medium">Start Date:</span> {format(parseISO(loan.startDate), 'MMM dd, yyyy')}</p>
-                            <p><span className="font-medium">Next Payment:</span> {format(parseISO(loan.nextPaymentDate), 'MMM dd, yyyy')}</p>
-                            {loan.notes && <p className="text-xs text-muted-foreground pt-1">Notes: {loan.notes}</p>}
-                            <div className="flex gap-2 pt-2">
-                               <Button variant="outline" size="sm" onClick={() => openEditLoanDialog(loan)}><Edit className="mr-1 h-3 w-3"/>Edit</Button>
-                               <Button variant="destructive" size="sm" onClick={() => handleDeleteLoan(loan.id)}><Trash2 className="mr-1 h-3 w-3"/>Delete</Button>
-                            </div>
-                        </CardContent>
-                    </Card>
+                  <TableRow key={loan.id} className="hover:bg-muted/50">
+                    <TableCell className="font-medium">{loan.name}</TableCell>
+                    <TableCell className="text-muted-foreground">{loan.lender}</TableCell>
+                    <TableCell className="text-right">
+                        {formatCurrency(loan.originalAmount, loan.currency, preferredCurrency, true)}
+                        {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(loan.originalAmount, loan.currency, loan.currency, false)})</span>}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold text-primary">
+                        {formatCurrency(loan.remainingBalance, loan.currency, preferredCurrency, true)}
+                        {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(loan.remainingBalance, loan.currency, loan.currency, false)})</span>}
+                    </TableCell>
+                    <TableCell className="text-center text-muted-foreground">{loan.interestRate.toFixed(2)}%</TableCell>
+                    <TableCell className="text-center text-muted-foreground">{loan.termMonths}m</TableCell>
+                    <TableCell className="text-right text-muted-foreground">{formatCurrency(loan.monthlyPayment, loan.currency, preferredCurrency, true)}</TableCell>
+                    <TableCell className="text-muted-foreground">{format(parseISO(loan.nextPaymentDate), 'MMM dd, yyyy')}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditLoanDialog(loan)}>
+                            <Edit className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <div
+                                className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                onClick={() => handleDeleteLoan(loan.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </div>
+                            </AlertDialogTrigger>
+                            {loanToDelete?.id === loan.id && (
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action will permanently delete the loan "{loanToDelete.name}".
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setLoanToDelete(null)} disabled={isDeletingLoan}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={confirmDeleteLoan} disabled={isDeletingLoan} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    {isDeletingLoan ? "Deleting..." : "Delete Loan"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            )}
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
                 ))}
-            </div>
+              </TableBody>
+            </Table>
            ) : (
              <div className="text-center py-10">
                 <p className="text-muted-foreground">No loans added yet.</p>
@@ -508,7 +555,7 @@ export default function FinancialControlPage() {
         </CardContent>
       </Card>
 
-      {loanToDelete && (
+      {loanToDelete && !loans.find(l => l.id === loanToDelete.id && editingLoan?.id !== l.id) && (
          <AlertDialog open={!!loanToDelete} onOpenChange={(open) => { if(!open) setLoanToDelete(null);}}>
             <AlertDialogContent>
                 <AlertDialogHeader>
@@ -562,4 +609,3 @@ export default function FinancialControlPage() {
     </div>
   );
 }
-
