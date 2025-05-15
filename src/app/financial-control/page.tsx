@@ -15,7 +15,7 @@ import { Label } from "@/components/ui/label";
 import AddSubscriptionForm, { type AddSubscriptionFormData } from '@/components/subscriptions/add-subscription-form';
 import type { Subscription, SubscriptionFrequency } from '@/services/subscriptions';
 import { getSubscriptions, addSubscription as saveSubscription, deleteSubscription, updateSubscription } from '@/services/subscriptions';
-import { getCategories, type Category } from '@/services/categories';
+import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getAccounts, type Account } from '@/services/account-sync';
 import { getGroups, type Group } from '@/services/groups';
 
@@ -26,6 +26,11 @@ import { getLoans, addLoan as saveLoan, deleteLoan as removeLoan, updateLoan as 
 import AddCreditCardForm, { type AddCreditCardFormData } from '@/components/credit-cards/add-credit-card-form';
 import type { CreditCard, NewCreditCardData } from '@/services/credit-cards';
 import { getCreditCards, addCreditCard as saveCreditCard, deleteCreditCard as removeCreditCard, updateCreditCard as changeCreditCard } from '@/services/credit-cards';
+
+import AddBudgetForm, { type AddBudgetFormData } from '@/components/budgets/add-budget-form';
+import type { Budget, NewBudgetData } from '@/services/budgets';
+import { getBudgets, addBudget as saveBudget, deleteBudget as removeBudgetDb, updateBudget as changeBudget } from '@/services/budgets';
+import { Progress } from '@/components/ui/progress';
 
 
 import { useToast } from '@/hooks/use-toast';
@@ -59,6 +64,14 @@ export default function FinancialControlPage() {
   const [creditCardToDelete, setCreditCardToDelete] = useState<CreditCard | null>(null);
   const [isDeletingCreditCard, setIsDeletingCreditCard] = useState(false);
 
+  // Budgets State
+  const [isAddBudgetDialogOpen, setIsAddBudgetDialogOpen] = useState(false);
+  const [budgets, setBudgets] = useState<Budget[]>([]);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  const [isLoadingBudgets, setIsLoadingBudgets] = useState(true);
+  const [budgetToDelete, setBudgetToDelete] = useState<Budget | null>(null);
+  const [isDeletingBudget, setIsDeletingBudget] = useState(false);
+
   // Common State
   const [categories, setCategories] = useState<Category[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -71,21 +84,24 @@ export default function FinancialControlPage() {
         setIsLoadingSubscriptions(false);
         setIsLoadingLoans(false);
         setIsLoadingCreditCards(false);
+        setIsLoadingBudgets(false);
         return;
     }
     setIsLoadingSubscriptions(true);
     setIsLoadingLoans(true);
     setIsLoadingCreditCards(true);
+    setIsLoadingBudgets(true);
     try {
       const prefs = await getUserPreferences();
       setPreferredCurrency(prefs.preferredCurrency);
-      const [subs, cats, accs, grps, fetchedLoans, fetchedCreditCards] = await Promise.all([
+      const [subs, cats, accs, grps, fetchedLoans, fetchedCreditCards, fetchedBudgets] = await Promise.all([
         getSubscriptions(),
         getCategories(),
         getAccounts(),
         getGroups(),
         getLoans(),
         getCreditCards(),
+        getBudgets(),
       ]);
       setSubscriptions(subs.sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
       setCategories(cats);
@@ -93,6 +109,7 @@ export default function FinancialControlPage() {
       setGroups(grps.sort((a, b) => a.name.localeCompare(b.name)));
       setLoans(fetchedLoans.sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
       setCreditCards(fetchedCreditCards.sort((a,b) => a.name.localeCompare(b.name)));
+      setBudgets(fetchedBudgets.sort((a,b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error("Failed to fetch financial control data:", error);
       toast({ title: "Error", description: "Could not load data.", variant: "destructive" });
@@ -100,6 +117,7 @@ export default function FinancialControlPage() {
       setIsLoadingSubscriptions(false);
       setIsLoadingLoans(false);
       setIsLoadingCreditCards(false);
+      setIsLoadingBudgets(false);
     }
   }, [toast]);
 
@@ -108,7 +126,7 @@ export default function FinancialControlPage() {
     const handleStorageChange = (event: StorageEvent) => {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userSubscriptions', 'userLoans', 'userCreditCards', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
+            const relevantKeysForThisPage = ['userSubscriptions', 'userLoans', 'userCreditCards', 'userBudgets', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -281,6 +299,52 @@ export default function FinancialControlPage() {
     }
   };
 
+  // --- Budget Handlers ---
+  const handleBudgetAdded = async (data: NewBudgetData) => {
+    try {
+        if (editingBudget) {
+            await changeBudget({ ...editingBudget, ...data });
+            toast({ title: "Success", description: "Budget updated successfully." });
+        } else {
+            await saveBudget(data);
+            toast({ title: "Success", description: "Budget added successfully." });
+        }
+        setIsAddBudgetDialogOpen(false);
+        setEditingBudget(null);
+        window.dispatchEvent(new Event('storage'));
+    } catch (error: any) {
+        console.error("Failed to save budget:", error);
+        toast({ title: "Error", description: `Could not save budget: ${error.message}`, variant: "destructive" });
+    }
+  };
+
+  const openEditBudgetDialog = (budget: Budget) => {
+    setEditingBudget(budget);
+    setIsAddBudgetDialogOpen(true);
+  };
+
+  const handleDeleteBudget = (budgetId: string) => {
+    const budget = budgets.find(b => b.id === budgetId);
+    if (budget) setBudgetToDelete(budget);
+  };
+
+  const confirmDeleteBudget = async () => {
+    if (!budgetToDelete) return;
+    setIsDeletingBudget(true);
+    try {
+      await removeBudgetDb(budgetToDelete.id);
+      toast({ title: "Success", description: "Budget deleted." });
+      setBudgetToDelete(null);
+      window.dispatchEvent(new Event('storage'));
+    } catch (error: any) {
+      console.error("Failed to delete budget:", error);
+      toast({ title: "Error", description: `Could not delete budget: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsDeletingBudget(false);
+    }
+  };
+
+
   // --- Rendering Logic for Subscriptions ---
   const groupSubscriptionsByType = (type: 'income' | 'expense') => {
     const filteredSubs = subscriptions.filter(sub => sub.type === type);
@@ -417,7 +481,7 @@ export default function FinancialControlPage() {
                     {editingSubscription ? 'Update the details of your subscription.' : 'Enter the details of your new recurring income or expense.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingSubscriptions || isLoadingLoans || isLoadingCreditCards) && (!categories.length || !accounts.length || !groups.length) ? (
+                {(isLoadingSubscriptions || isLoadingLoans || isLoadingCreditCards || isLoadingBudgets) && (!categories.length || !accounts.length || !groups.length) ? (
                      <Skeleton className="h-60 w-full" />
                 ) : (
                     <AddSubscriptionForm
@@ -431,6 +495,8 @@ export default function FinancialControlPage() {
                         ...editingSubscription,
                         startDate: parseISO(editingSubscription.startDate),
                         nextPaymentDate: parseISO(editingSubscription.nextPaymentDate),
+                        tags: editingSubscription.tags || [],
+                        description: editingSubscription.description || "",
                     } : undefined}
                     />
                 )}
@@ -508,7 +574,7 @@ export default function FinancialControlPage() {
                     {editingLoan ? 'Update the details of your loan.' : 'Enter the details for your new loan.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingLoans || isLoadingSubscriptions || isLoadingCreditCards) ? (<Skeleton className="h-80 w-full" />) : (
+                {(isLoadingLoans || isLoadingSubscriptions || isLoadingCreditCards || isLoadingBudgets) ? (<Skeleton className="h-80 w-full" />) : (
                   <AddLoanForm
                     key={editingLoan ? editingLoan.id : 'new-loan'}
                     onSubmit={handleLoanAdded}
@@ -517,6 +583,7 @@ export default function FinancialControlPage() {
                       ...editingLoan,
                       startDate: parseISO(editingLoan.startDate),
                       loanType: editingLoan.loanType,
+                      notes: editingLoan.notes || "",
                     } : undefined}
                   />
                 )}
@@ -630,7 +697,7 @@ export default function FinancialControlPage() {
                     {editingCreditCard ? 'Update the details of your credit card.' : 'Enter the details for your new credit card.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingCreditCards || isLoadingSubscriptions || isLoadingLoans) ? (<Skeleton className="h-80 w-full" />) : (
+                {(isLoadingCreditCards || isLoadingSubscriptions || isLoadingLoans || isLoadingBudgets) ? (<Skeleton className="h-80 w-full" />) : (
                   <AddCreditCardForm
                     key={editingCreditCard ? editingCreditCard.id : 'new-credit-card'}
                     onSubmit={handleCreditCardAdded}
@@ -713,7 +780,7 @@ export default function FinancialControlPage() {
                       </div>
                       {card.paymentDueDate && <div><strong>Due Date:</strong> {format(parseISO(card.paymentDueDate), 'MMM dd, yyyy')}</div>}
                       {card.statementClosingDay && <div><strong>Closes On:</strong> Day {card.statementClosingDay}</div>}
-                      {card.interestRate !== undefined && <div><strong>APR:</strong> {card.interestRate.toFixed(2)}%</div>}
+                      {card.interestRate !== undefined && card.interestRate !== null && <div><strong>APR:</strong> {card.interestRate.toFixed(2)}%</div>}
                     </div>
                     {card.notes && <p className="text-xs text-muted-foreground pt-1"><strong>Notes:</strong> {card.notes}</p>}
                   </CardContent>
@@ -725,6 +792,151 @@ export default function FinancialControlPage() {
               <p className="text-muted-foreground">No credit cards added yet.</p>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* Budgets Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>Budgets</CardTitle>
+            <Dialog open={isAddBudgetDialogOpen} onOpenChange={(isOpen) => {
+              setIsAddBudgetDialogOpen(isOpen);
+              if (!isOpen) setEditingBudget(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="default" size="sm">
+                  <PercentCircle className="mr-2 h-4 w-4" /> Add New Budget
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>{editingBudget ? 'Edit' : 'Add New'} Budget</DialogTitle>
+                  <DialogDescription>
+                    {editingBudget ? 'Update your budget details.' : 'Define a new budget for categories or groups.'}
+                  </DialogDescription>
+                </DialogHeader>
+                {(isLoadingCategories || isLoadingGroups) ? (<Skeleton className="h-96 w-full" />) : (
+                  <AddBudgetForm
+                    key={editingBudget ? editingBudget.id : 'new-budget'}
+                    onSubmit={handleBudgetAdded}
+                    isLoading={isLoadingBudgets}
+                    categories={categories}
+                    groups={groups}
+                    initialData={editingBudget || undefined}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
+          </div>
+          <CardDescription>
+            Create and track your spending against budgets for different categories or groups.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingBudgets ? (
+            <div className="space-y-4">
+              {[...Array(1)].map((_, i) => <Skeleton key={`budget-skel-${i}`} className="h-24 w-full" />)}
+            </div>
+          ) : budgets.length > 0 ? (
+            <div className="space-y-4">
+              {budgets.map(budget => (
+                <Card key={budget.id} className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{budget.name}</CardTitle>
+                        <CardDescription className="text-xs">
+                          {formatCurrency(budget.amount, budget.currency, preferredCurrency, true)} / {budget.period}
+                          {budget.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(budget.amount, budget.currency, budget.currency, false)})</span>}
+                        </CardDescription>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditBudgetDialog(budget)}>
+                            <Edit className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <div
+                                className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                onClick={() => handleDeleteBudget(budget.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </div>
+                            </AlertDialogTrigger>
+                            {budgetToDelete?.id === budget.id && (
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action will permanently delete the budget "{budgetToDelete.name}".
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setBudgetToDelete(null)} disabled={isDeletingBudget}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={confirmDeleteBudget} disabled={isDeletingBudget} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    {isDeletingBudget ? "Deleting..." : "Delete Budget"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            )}
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <p><strong>Period:</strong> {budget.period.charAt(0).toUpperCase() + budget.period.slice(1)} starting {format(parseISO(budget.startDate), "MMM dd, yyyy")}
+                       {budget.period === 'custom' && budget.endDate ? ` to ${format(parseISO(budget.endDate), "MMM dd, yyyy")}` : ''}
+                    </p>
+                    <p><strong>Applies to:</strong> {budget.appliesTo === 'categories' ? 'Categories' : 'Groups'}</p>
+                    <div className="flex flex-wrap gap-1">
+                        {budget.selectedIds.map(id => {
+                            const item = budget.appliesTo === 'categories' ? categories.find(c=>c.id === id) : groups.find(g=>g.id === id);
+                            return item ? <Badge key={id} variant="secondary">{item.name}</Badge> : null;
+                        })}
+                    </div>
+                     <div className="pt-2">
+                        <Label className="text-xs text-muted-foreground">Spending Progress (Coming Soon)</Label>
+                        <Progress value={0} className="h-2 mt-1" />
+                        <div className="flex justify-between text-xs mt-1">
+                            <span>{formatCurrency(0, preferredCurrency, preferredCurrency, false)} spent</span>
+                            <span>{formatCurrency(budget.amount, budget.currency, preferredCurrency, false)}</span>
+                        </div>
+                    </div>
+                    {budget.notes && <p className="text-xs text-muted-foreground pt-1"><strong>Notes:</strong> {budget.notes}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground">No budgets created yet.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Target</CardTitle>
+          <CardDescription>
+            Set up and track progress towards your savings goals.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="text-center py-10">
+            <p className="text-muted-foreground">
+              Target (Savings Goals) feature coming soon!
+            </p>
+          </div>
         </CardContent>
       </Card>
 
@@ -764,39 +976,26 @@ export default function FinancialControlPage() {
             </AlertDialogContent>
          </AlertDialog>
       )}
+      {budgetToDelete && !budgets.find(b => b.id === budgetToDelete.id && editingBudget?.id !== b.id) && (
+         <AlertDialog open={!!budgetToDelete} onOpenChange={(open) => { if(!open) setBudgetToDelete(null);}}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Budget?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Are you sure you want to delete the budget "{budgetToDelete.name}"? This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setBudgetToDelete(null)} disabled={isDeletingBudget}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmDeleteBudget} disabled={isDeletingBudget} className="bg-destructive hover:bg-destructive/80">
+                        {isDeletingBudget ? "Deleting..." : "Delete Budget"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
+      )}
 
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Budgets</CardTitle>
-          <CardDescription>
-            Create and track your spending against budgets for different categories.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-10">
-            <p className="text-muted-foreground">
-              Budgets feature coming soon!
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Target</CardTitle>
-          <CardDescription>
-            Set up and track progress towards your savings goals.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="text-center py-10">
-            <p className="text-muted-foreground">
-              Target (Savings Goals) feature coming soon!
-            </p>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 }
