@@ -13,10 +13,10 @@ export interface CreditCard {
   limit: number;         // Credit limit
   currency: string;      // e.g., "BRL", "USD"
   currentBalance: number;  // Current outstanding balance (often negative or zero)
-  paymentDueDate?: string;  // ISO string: YYYY-MM-DD for the next payment due date
-  statementClosingDay?: number; // Day of the month (1-31) when the statement closes
-  interestRate?: number;    // APR as a percentage, e.g., 19.99
-  notes?: string;
+  paymentDueDate?: string | null;  // ISO string: YYYY-MM-DD for the next payment due date
+  statementClosingDay?: number | null; // Day of the month (1-31) when the statement closes
+  interestRate?: number | null;    // APR as a percentage, e.g., 19.99
+  notes?: string | null;
   createdAt?: object | string;
   updatedAt?: object | string;
 }
@@ -71,19 +71,37 @@ export async function addCreditCard(cardData: NewCreditCardData): Promise<Credit
     throw new Error("Failed to generate a new credit card ID.");
   }
 
-  const newCard: CreditCard = {
+  const newCardForApp: CreditCard = { // This object is for returning to the app
     ...cardData,
     id: newCardRef.key,
+    paymentDueDate: cardData.paymentDueDate || null,
+    statementClosingDay: cardData.statementClosingDay === undefined ? null : cardData.statementClosingDay,
+    interestRate: cardData.interestRate === undefined ? null : cardData.interestRate,
+    notes: cardData.notes || null,
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  
+  // Data to be saved to Firebase, ensuring no undefined values for optional fields
+  const dataToSave: any = {
+    name: cardData.name,
+    bankName: cardData.bankName,
+    limit: cardData.limit,
+    currency: cardData.currency,
+    currentBalance: cardData.currentBalance,
+    paymentDueDate: cardData.paymentDueDate || null,
+    statementClosingDay: cardData.statementClosingDay === undefined ? null : cardData.statementClosingDay,
+    interestRate: cardData.interestRate === undefined ? null : cardData.interestRate,
+    notes: cardData.notes || null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
 
-  const dataToSave = { ...newCard } as any;
-  delete dataToSave.id; // Firebase key is the ID
 
   try {
     await set(newCardRef, dataToSave);
-    return newCard;
+    // Return the version with the ID for immediate use in the app
+    return { ...newCardForApp, id: newCardRef.key };
   } catch (error) {
     console.error("Error adding credit card to Firebase:", error);
     throw error;
@@ -99,18 +117,33 @@ export async function updateCreditCard(updatedCard: CreditCard): Promise<CreditC
   const cardRefPath = getSingleCreditCardRefPath(currentUser, id);
   const cardRef = ref(database, cardRefPath);
 
-  const dataToUpdate: Partial<Omit<CreditCard, 'id' | 'createdAt'>> & { updatedAt: object } = {
-    ...updatedCard,
+  const dataToUpdate: any = {
+    name: updatedCard.name,
+    bankName: updatedCard.bankName,
+    limit: updatedCard.limit,
+    currency: updatedCard.currency,
+    currentBalance: updatedCard.currentBalance,
+    paymentDueDate: updatedCard.paymentDueDate === undefined ? null : updatedCard.paymentDueDate,
+    statementClosingDay: updatedCard.statementClosingDay === undefined ? null : updatedCard.statementClosingDay,
+    interestRate: updatedCard.interestRate === undefined ? null : updatedCard.interestRate,
+    notes: updatedCard.notes === undefined ? null : updatedCard.notes,
     updatedAt: serverTimestamp(),
   };
   
-  const dataToSave = {...dataToUpdate} as any;
-  delete dataToSave.id;
-  delete dataToSave.createdAt;
+  // id and createdAt should not be part of the update payload itself
+  // as id is the key and createdAt is set on creation.
 
   try {
-    await update(cardRef, dataToSave);
-    return updatedCard;
+    await update(cardRef, dataToUpdate);
+    // Construct the object to return, reflecting the update (including possible nulls)
+    return {
+        ...updatedCard, // Start with the input data
+        paymentDueDate: dataToUpdate.paymentDueDate,
+        statementClosingDay: dataToUpdate.statementClosingDay,
+        interestRate: dataToUpdate.interestRate,
+        notes: dataToUpdate.notes,
+        // updatedAt will be a server timestamp object, which is fine for the app to handle
+    };
   } catch (error) {
     console.error("Error updating credit card in Firebase:", error);
     throw error;
