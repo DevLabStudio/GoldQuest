@@ -3,13 +3,12 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import AddSubscriptionForm, { type AddSubscriptionFormData } from '@/components/subscriptions/add-subscription-form';
@@ -427,18 +426,18 @@ export default function FinancialControlPage() {
         </CardContent>
       </Card>
 
-      <Card>
+     <Card>
         <CardHeader>
           <div className="flex justify-between items-center">
             <CardTitle>Loans</CardTitle>
-             <Dialog open={isAddLoanDialogOpen} onOpenChange={(isOpen) => {
-                setIsAddLoanDialogOpen(isOpen);
-                if (!isOpen) setEditingLoan(null);
+            <Dialog open={isAddLoanDialogOpen} onOpenChange={(isOpen) => {
+              setIsAddLoanDialogOpen(isOpen);
+              if (!isOpen) setEditingLoan(null);
             }}>
               <DialogTrigger asChild>
-                 <Button variant="default" size="sm">
-                    <Landmark className="mr-2 h-4 w-4" /> Add New Loan
-                 </Button>
+                <Button variant="default" size="sm">
+                  <Landmark className="mr-2 h-4 w-4" /> Add New Loan
+                </Button>
               </DialogTrigger>
               <DialogContent className="sm:max-w-2xl">
                 <DialogHeader>
@@ -447,17 +446,17 @@ export default function FinancialControlPage() {
                     {editingLoan ? 'Update the details of your loan.' : 'Enter the details for your new loan.'}
                   </DialogDescription>
                 </DialogHeader>
-                 {(isLoadingLoans || isLoadingSubscriptions) ? ( <Skeleton className="h-80 w-full"/>) : (
-                    <AddLoanForm
-                        key={editingLoan ? editingLoan.id : 'new-loan'}
-                        onSubmit={handleLoanAdded}
-                        isLoading={isLoadingLoans}
-                        initialData={editingLoan ? {
-                            ...editingLoan,
-                            startDate: parseISO(editingLoan.startDate),
-                        } : undefined}
-                    />
-                 )}
+                {(isLoadingLoans || isLoadingSubscriptions) ? (<Skeleton className="h-80 w-full" />) : (
+                  <AddLoanForm
+                    key={editingLoan ? editingLoan.id : 'new-loan'}
+                    onSubmit={handleLoanAdded}
+                    isLoading={isLoadingLoans}
+                    initialData={editingLoan ? {
+                      ...editingLoan,
+                      startDate: parseISO(editingLoan.startDate),
+                    } : undefined}
+                  />
+                )}
               </DialogContent>
             </Dialog>
           </div>
@@ -466,47 +465,23 @@ export default function FinancialControlPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-           {isLoadingLoans ? (
+          {isLoadingLoans ? (
             <div className="space-y-4">
-                {[...Array(2)].map((_,i) => <Skeleton key={`loan-skel-${i}`} className="h-12 w-full"/>)}
+              {[...Array(2)].map((_, i) => <Skeleton key={`loan-skel-${i}`} className="h-40 w-full" />)}
             </div>
-           ) : loans.length > 0 ? (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Lender</TableHead>
-                  <TableHead className="text-right">Original Amt.</TableHead>
-                  <TableHead className="text-right">Remaining</TableHead>
-                  <TableHead className="text-center">APR</TableHead>
-                  <TableHead className="text-center">Term</TableHead>
-                  <TableHead className="text-right">Monthly Pmt.</TableHead>
-                  <TableHead>Next Pmt.</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {loans.map(loan => (
-                  <TableRow key={loan.id} className="hover:bg-muted/50">
-                    <TableCell className="font-medium">{loan.name}</TableCell>
-                    <TableCell className="text-muted-foreground">{loan.lender}</TableCell>
-                    <TableCell className="text-right">
-                        {formatCurrency(loan.originalAmount, loan.currency, preferredCurrency, true)}
-                        {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(loan.originalAmount, loan.currency, loan.currency, false)})</span>}
-                    </TableCell>
-                    <TableCell className="text-right font-semibold text-primary">
-                        {formatCurrency(loan.remainingBalance, loan.currency, preferredCurrency, true)}
-                        {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(loan.remainingBalance, loan.currency, loan.currency, false)})</span>}
-                    </TableCell>
-                    <TableCell className="text-center text-muted-foreground">{loan.interestRate.toFixed(2)}%</TableCell>
-                    <TableCell className="text-center text-muted-foreground">{loan.termMonths}m</TableCell>
-                    <TableCell className="text-right text-muted-foreground">{formatCurrency(loan.monthlyPayment, loan.currency, preferredCurrency, true)}</TableCell>
-                    <TableCell className="text-muted-foreground">{format(parseISO(loan.nextPaymentDate), 'MMM dd, yyyy')}</TableCell>
-                    <TableCell className="text-right">
+          ) : loans.length > 0 ? (
+            <div className="space-y-4">
+              {loans.map(loan => (
+                <Card key={loan.id} className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{loan.name}</CardTitle>
+                        <CardDescription className="text-xs">Lender: {loan.lender}</CardDescription>
+                      </div>
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
                             <MoreHorizontal className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
@@ -542,18 +517,34 @@ export default function FinancialControlPage() {
                           </AlertDialog>
                         </DropdownMenuContent>
                       </DropdownMenu>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-           ) : (
-             <div className="text-center py-10">
-                <p className="text-muted-foreground">No loans added yet.</p>
-             </div>
-           )}
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <div><strong>Original Amount:</strong> {formatCurrency(loan.originalAmount, loan.currency, preferredCurrency, true)}
+                        {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(loan.originalAmount, loan.currency, loan.currency, false)})</span>}
+                      </div>
+                      <div className="text-primary font-semibold"><strong>Remaining:</strong> {formatCurrency(loan.remainingBalance, loan.currency, preferredCurrency, true)}
+                        {loan.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(loan.remainingBalance, loan.currency, loan.currency, false)})</span>}
+                      </div>
+                      <div><strong>Interest Rate (APR):</strong> {loan.interestRate.toFixed(2)}%</div>
+                      <div><strong>Term:</strong> {loan.termMonths} months</div>
+                      <div><strong>Monthly Payment:</strong> {formatCurrency(loan.monthlyPayment, loan.currency, preferredCurrency, true)}</div>
+                       <div><strong>Next Payment:</strong> {format(parseISO(loan.nextPaymentDate), 'MMM dd, yyyy')}</div>
+                    </div>
+                    {loan.notes && <p className="text-xs text-muted-foreground pt-1"><strong>Notes:</strong> {loan.notes}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground">No loans added yet.</p>
+            </div>
+          )}
         </CardContent>
       </Card>
+
 
       {loanToDelete && !loans.find(l => l.id === loanToDelete.id && editingLoan?.id !== l.id) && (
          <AlertDialog open={!!loanToDelete} onOpenChange={(open) => { if(!open) setLoanToDelete(null);}}>
@@ -609,3 +600,4 @@ export default function FinancialControlPage() {
     </div>
   );
 }
+
