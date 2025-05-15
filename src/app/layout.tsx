@@ -23,8 +23,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={oxanium.variable}>
-      <head>
+    <html lang="en" className={oxanium.variable}><head>
           {/* Metadata will be injected by Next.js from the export above */}
       </head>
       <body
