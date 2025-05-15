@@ -5,12 +5,13 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import Link from 'next/link';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
-import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal, Settings2 } from 'lucide-react';
+import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal, Settings2, CreditCard as CreditCardIconLucide } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+
 import AddSubscriptionForm, { type AddSubscriptionFormData } from '@/components/subscriptions/add-subscription-form';
 import type { Subscription, SubscriptionFrequency } from '@/services/subscriptions';
 import { getSubscriptions, addSubscription as saveSubscription, deleteSubscription, updateSubscription } from '@/services/subscriptions';
@@ -22,9 +23,13 @@ import AddLoanForm, { type AddLoanFormData } from '@/components/loans/add-loan-f
 import type { Loan, NewLoanData, LoanType } from '@/services/loans';
 import { getLoans, addLoan as saveLoan, deleteLoan as removeLoan, updateLoan as changeLoan, loanTypeLabels } from '@/services/loans';
 
+import AddCreditCardForm, { type AddCreditCardFormData } from '@/components/credit-cards/add-credit-card-form';
+import type { CreditCard, NewCreditCardData } from '@/services/credit-cards';
+import { getCreditCards, addCreditCard as saveCreditCard, deleteCreditCard as removeCreditCard, updateCreditCard as changeCreditCard } from '@/services/credit-cards';
+
 
 import { useToast } from '@/hooks/use-toast';
-import { formatCurrency, convertCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format, parseISO, isSameMonth, isSameYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -46,6 +51,13 @@ export default function FinancialControlPage() {
   const [loanToDelete, setLoanToDelete] = useState<Loan | null>(null);
   const [isDeletingLoan, setIsDeletingLoan] = useState(false);
 
+  // Credit Cards State
+  const [isAddCreditCardDialogOpen, setIsAddCreditCardDialogOpen] = useState(false);
+  const [creditCards, setCreditCards] = useState<CreditCard[]>([]);
+  const [editingCreditCard, setEditingCreditCard] = useState<CreditCard | null>(null);
+  const [isLoadingCreditCards, setIsLoadingCreditCards] = useState(true);
+  const [creditCardToDelete, setCreditCardToDelete] = useState<CreditCard | null>(null);
+  const [isDeletingCreditCard, setIsDeletingCreditCard] = useState(false);
 
   // Common State
   const [categories, setCategories] = useState<Category[]>([]);
@@ -58,31 +70,36 @@ export default function FinancialControlPage() {
     if (typeof window === 'undefined') {
         setIsLoadingSubscriptions(false);
         setIsLoadingLoans(false);
+        setIsLoadingCreditCards(false);
         return;
     }
     setIsLoadingSubscriptions(true);
     setIsLoadingLoans(true);
+    setIsLoadingCreditCards(true);
     try {
       const prefs = await getUserPreferences();
       setPreferredCurrency(prefs.preferredCurrency);
-      const [subs, cats, accs, grps, fetchedLoans] = await Promise.all([
+      const [subs, cats, accs, grps, fetchedLoans, fetchedCreditCards] = await Promise.all([
         getSubscriptions(),
         getCategories(),
         getAccounts(),
         getGroups(),
         getLoans(),
+        getCreditCards(),
       ]);
       setSubscriptions(subs.sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
       setCategories(cats);
       setAccounts(accs);
       setGroups(grps.sort((a, b) => a.name.localeCompare(b.name)));
       setLoans(fetchedLoans.sort((a,b) => new Date(b.startDate).getTime() - new Date(a.startDate).getTime()));
+      setCreditCards(fetchedCreditCards.sort((a,b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error("Failed to fetch financial control data:", error);
       toast({ title: "Error", description: "Could not load data.", variant: "destructive" });
     } finally {
       setIsLoadingSubscriptions(false);
       setIsLoadingLoans(false);
+      setIsLoadingCreditCards(false);
     }
   }, [toast]);
 
@@ -91,7 +108,7 @@ export default function FinancialControlPage() {
     const handleStorageChange = (event: StorageEvent) => {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userSubscriptions', 'userLoans', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
+            const relevantKeysForThisPage = ['userSubscriptions', 'userLoans', 'userCreditCards', 'userCategories', 'userAccounts', 'userGroups', 'userPreferences', 'transactions-'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -219,6 +236,50 @@ export default function FinancialControlPage() {
     }
   };
 
+  // --- Credit Card Handlers ---
+  const handleCreditCardAdded = async (data: NewCreditCardData) => {
+    try {
+      if (editingCreditCard) {
+        await changeCreditCard({ ...editingCreditCard, ...data });
+        toast({ title: "Success", description: "Credit Card updated successfully." });
+      } else {
+        await saveCreditCard(data);
+        toast({ title: "Success", description: "Credit Card added successfully." });
+      }
+      setIsAddCreditCardDialogOpen(false);
+      setEditingCreditCard(null);
+      window.dispatchEvent(new Event('storage'));
+    } catch (error: any) {
+      console.error("Failed to save credit card:", error);
+      toast({ title: "Error", description: `Could not save credit card: ${error.message}`, variant: "destructive" });
+    }
+  };
+
+  const openEditCreditCardDialog = (card: CreditCard) => {
+    setEditingCreditCard(card);
+    setIsAddCreditCardDialogOpen(true);
+  };
+
+  const handleDeleteCreditCard = (cardId: string) => {
+    const card = creditCards.find(c => c.id === cardId);
+    if (card) setCreditCardToDelete(card);
+  };
+
+  const confirmDeleteCreditCard = async () => {
+    if (!creditCardToDelete) return;
+    setIsDeletingCreditCard(true);
+    try {
+      await removeCreditCard(creditCardToDelete.id);
+      toast({ title: "Success", description: "Credit Card deleted." });
+      setCreditCardToDelete(null);
+      window.dispatchEvent(new Event('storage'));
+    } catch (error: any) {
+      console.error("Failed to delete credit card:", error);
+      toast({ title: "Error", description: `Could not delete credit card: ${error.message}`, variant: "destructive" });
+    } finally {
+      setIsDeletingCreditCard(false);
+    }
+  };
 
   // --- Rendering Logic for Subscriptions ---
   const groupSubscriptionsByType = (type: 'income' | 'expense') => {
@@ -356,7 +417,7 @@ export default function FinancialControlPage() {
                     {editingSubscription ? 'Update the details of your subscription.' : 'Enter the details of your new recurring income or expense.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingSubscriptions || isLoadingLoans) && (!categories.length || !accounts.length || !groups.length) ? (
+                {(isLoadingSubscriptions || isLoadingLoans || isLoadingCreditCards) && (!categories.length || !accounts.length || !groups.length) ? (
                      <Skeleton className="h-60 w-full" />
                 ) : (
                     <AddSubscriptionForm
@@ -447,7 +508,7 @@ export default function FinancialControlPage() {
                     {editingLoan ? 'Update the details of your loan.' : 'Enter the details for your new loan.'}
                   </DialogDescription>
                 </DialogHeader>
-                {(isLoadingLoans || isLoadingSubscriptions) ? (<Skeleton className="h-80 w-full" />) : (
+                {(isLoadingLoans || isLoadingSubscriptions || isLoadingCreditCards) ? (<Skeleton className="h-80 w-full" />) : (
                   <AddLoanForm
                     key={editingLoan ? editingLoan.id : 'new-loan'}
                     onSubmit={handleLoanAdded}
@@ -549,6 +610,123 @@ export default function FinancialControlPage() {
         </CardContent>
       </Card>
 
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <CardTitle>Credit Cards</CardTitle>
+            <Dialog open={isAddCreditCardDialogOpen} onOpenChange={(isOpen) => {
+              setIsAddCreditCardDialogOpen(isOpen);
+              if (!isOpen) setEditingCreditCard(null);
+            }}>
+              <DialogTrigger asChild>
+                <Button variant="default" size="sm">
+                  <CreditCardIconLucide className="mr-2 h-4 w-4" /> Add New Credit Card
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>{editingCreditCard ? 'Edit' : 'Add New'} Credit Card</DialogTitle>
+                  <DialogDescription>
+                    {editingCreditCard ? 'Update the details of your credit card.' : 'Enter the details for your new credit card.'}
+                  </DialogDescription>
+                </DialogHeader>
+                {(isLoadingCreditCards || isLoadingSubscriptions || isLoadingLoans) ? (<Skeleton className="h-80 w-full" />) : (
+                  <AddCreditCardForm
+                    key={editingCreditCard ? editingCreditCard.id : 'new-credit-card'}
+                    onSubmit={handleCreditCardAdded}
+                    isLoading={isLoadingCreditCards}
+                    initialData={editingCreditCard || undefined}
+                  />
+                )}
+              </DialogContent>
+            </Dialog>
+          </div>
+          <CardDescription>
+            Manage your credit cards, limits, and balances.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {isLoadingCreditCards ? (
+            <div className="space-y-4">
+              {[...Array(1)].map((_, i) => <Skeleton key={`cc-skel-${i}`} className="h-32 w-full" />)}
+            </div>
+          ) : creditCards.length > 0 ? (
+            <div className="space-y-4">
+              {creditCards.map(card => (
+                <Card key={card.id} className="shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{card.name}</CardTitle>
+                        <CardDescription className="text-xs">
+                          {card.bankName}
+                        </CardDescription>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => openEditCreditCardDialog(card)}>
+                            <Edit className="mr-2 h-4 w-4" /> Edit
+                          </DropdownMenuItem>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <div
+                                className="relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-destructive/10 focus:text-destructive text-destructive data-[disabled]:pointer-events-none data-[disabled]:opacity-50"
+                                onClick={() => handleDeleteCreditCard(card.id)}
+                              >
+                                <Trash2 className="mr-2 h-4 w-4" /> Delete
+                              </div>
+                            </AlertDialogTrigger>
+                            {creditCardToDelete?.id === card.id && (
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Are you sure?</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    This action will permanently delete the credit card "{creditCardToDelete.name}".
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel onClick={() => setCreditCardToDelete(null)} disabled={isDeletingCreditCard}>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction onClick={confirmDeleteCreditCard} disabled={isDeletingCreditCard} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                                    {isDeletingCreditCard ? "Deleting..." : "Delete Credit Card"}
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            )}
+                          </AlertDialog>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="text-sm space-y-2">
+                    <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                      <div><strong>Limit:</strong> {formatCurrency(card.limit, card.currency, preferredCurrency, true)}
+                        {card.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(card.limit, card.currency, card.currency, false)})</span>}
+                      </div>
+                       <div className={`font-semibold ${card.currentBalance >=0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                          <strong>Balance:</strong> {formatCurrency(card.currentBalance, card.currency, preferredCurrency, true)}
+                        {card.currency !== preferredCurrency && <span className="text-xs text-muted-foreground block">({formatCurrency(card.currentBalance, card.currency, card.currency, false)})</span>}
+                      </div>
+                      {card.paymentDueDate && <div><strong>Due Date:</strong> {format(parseISO(card.paymentDueDate), 'MMM dd, yyyy')}</div>}
+                      {card.statementClosingDay && <div><strong>Closes On:</strong> Day {card.statementClosingDay}</div>}
+                      {card.interestRate !== undefined && <div><strong>APR:</strong> {card.interestRate.toFixed(2)}%</div>}
+                    </div>
+                    {card.notes && <p className="text-xs text-muted-foreground pt-1"><strong>Notes:</strong> {card.notes}</p>}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-10">
+              <p className="text-muted-foreground">No credit cards added yet.</p>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       {loanToDelete && !loans.find(l => l.id === loanToDelete.id && editingLoan?.id !== l.id) && (
          <AlertDialog open={!!loanToDelete} onOpenChange={(open) => { if(!open) setLoanToDelete(null);}}>
@@ -563,6 +741,24 @@ export default function FinancialControlPage() {
                     <AlertDialogCancel onClick={() => setLoanToDelete(null)} disabled={isDeletingLoan}>Cancel</AlertDialogCancel>
                     <AlertDialogAction onClick={confirmDeleteLoan} disabled={isDeletingLoan} className="bg-destructive hover:bg-destructive/80">
                         {isDeletingLoan ? "Deleting..." : "Delete Loan"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+         </AlertDialog>
+      )}
+       {creditCardToDelete && !creditCards.find(c => c.id === creditCardToDelete.id && editingCreditCard?.id !== c.id) && (
+         <AlertDialog open={!!creditCardToDelete} onOpenChange={(open) => { if(!open) setCreditCardToDelete(null);}}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Credit Card?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Are you sure you want to delete the card "{creditCardToDelete.name}"? This action cannot be undone.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setCreditCardToDelete(null)} disabled={isDeletingCreditCard}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={confirmDeleteCreditCard} disabled={isDeletingCreditCard} className="bg-destructive hover:bg-destructive/80">
+                        {isDeletingCreditCard ? "Deleting..." : "Delete Credit Card"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
