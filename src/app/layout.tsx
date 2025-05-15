@@ -8,12 +8,12 @@ import AuthWrapper from '@/components/layout/auth-wrapper'; // This component ha
 import { AuthProvider } from '@/contexts/AuthContext'; // This provides the theme state
 
 const oxanium = Oxanium({
-  variable: '--font-oxanium', // This is correct for CSS variable mode
+  variable: '--font-oxanium',
   subsets: ['latin'],
 });
 
 export const metadata: Metadata = {
-  title: 'GoldQuest', // Updated App Name
+  title: 'GoldQuest',
   description: 'Simple personal finance management',
 };
 
@@ -31,9 +31,11 @@ export default function RootLayout({
       </head>
       <body
       className={cn(
-          'font-sans antialiased', // Tailwind's font-sans will use var(--font-oxanium)
+          // oxanium.className, // Removed from here
+          'font-sans antialiased', // font-sans will use var(--font-oxanium) from html
           'min-h-screen flex flex-col'
         )}
+        suppressHydrationWarning // Add this to the body tag
       >
         <AuthProvider> {/* AuthProvider provides theme via AuthContext */}
           <AuthWrapper>{children}</AuthWrapper> {/* AuthWrapper applies theme to <html> */}
