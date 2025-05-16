@@ -1,3 +1,4 @@
+
 'use client';
 
 import { FC, useMemo, useEffect } from 'react';
@@ -85,10 +86,10 @@ interface AddTransactionFormProps {
   onTransferAdded?: (data: {
       fromAccountId: string;
       toAccountId: string;
-      amount: number;
-      transactionCurrency: string;
-      toAccountAmount?: number;
-      toAccountCurrency?: string;
+      amount: number; // Amount in fromAccount's currency
+      transactionCurrency: string; // Currency of fromAccount
+      toAccountAmount: number; // Amount in toAccount's currency
+      toAccountCurrency: string; // Currency of toAccount
       date: Date;
       description?: string;
       tags?: string[];
@@ -166,20 +167,36 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
     if (values.type === 'transfer') {
       if (onTransferAdded) {
-        let toAccountAmount = values.amount;
-        if (values.transactionCurrency !== values.toAccountCurrency && values.exchangeRate) {
-            toAccountAmount = values.amount * values.exchangeRate;
+        const fromAccount = accounts.find(acc => acc.id === values.fromAccountId);
+        const toAccount = accounts.find(acc => acc.id === values.toAccountId);
+
+        if (!fromAccount || !toAccount) {
+            toast({ title: "Error", description: "Source or destination account not found.", variant: "destructive"});
+            return;
         }
+
+        const finalTransactionCurrency = fromAccount.currency;
+        const finalToAccountCurrency = toAccount.currency;
+        let finalToAccountAmount = values.amount;
+
+        if (finalTransactionCurrency !== finalToAccountCurrency) {
+            if (!values.exchangeRate || values.exchangeRate <= 0) {
+                form.setError("exchangeRate", { type: "manual", message: "Exchange rate is required and must be positive for cross-currency transfers." });
+                return;
+            }
+            finalToAccountAmount = values.amount * values.exchangeRate;
+        }
+
 
         await onTransferAdded({
             fromAccountId: values.fromAccountId,
             toAccountId: values.toAccountId,
-            amount: values.amount,
-            transactionCurrency: values.transactionCurrency,
-            toAccountAmount: toAccountAmount,
-            toAccountCurrency: values.toAccountCurrency || values.transactionCurrency,
+            amount: values.amount, // Amount in fromAccount's currency
+            transactionCurrency: finalTransactionCurrency, // Currency of fromAccount
+            toAccountAmount: finalToAccountAmount, // Amount in toAccount's currency
+            toAccountCurrency: finalToAccountCurrency, // Currency of toAccount
             date: values.date,
-            description: values.description || `Transfer to ${accounts.find(a=>a.id === values.toAccountId)?.name || 'account'}`,
+            description: values.description || `Transfer to ${toAccount.name}`,
             tags: finalTags,
         });
       } else {
@@ -220,21 +237,33 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         const toAccount = accounts.find(acc => acc.id === selectedToAccountId);
         if (toAccount && form.getValues('toAccountCurrency') !== toAccount.currency) {
             form.setValue('toAccountCurrency', toAccount.currency);
-             if (fromAccount?.currency === toAccount.currency) {
-                form.setValue('exchangeRate', 1);
-            } else {
-                form.setValue('exchangeRate', undefined);
-            }
         }
-        // If currencies became same after account change, ensure rate is 1
-        if (form.getValues('transactionCurrency') === form.getValues('toAccountCurrency') && form.getValues('exchangeRate') !== 1) {
-            form.setValue('exchangeRate', 1);
+        // This logic should be done when both currencies are known
+        const currentFromCurrency = fromAccount?.currency || form.getValues('transactionCurrency');
+        const currentToCurrency = toAccount?.currency || form.getValues('toAccountCurrency');
+
+        if (currentFromCurrency && currentToCurrency) {
+            if (currentFromCurrency === currentToCurrency) {
+                if (form.getValues('exchangeRate') !== 1) {
+                    form.setValue('exchangeRate', 1);
+                }
+            } else {
+                // Only clear exchangeRate if it was previously 1 (for same currencies)
+                // or if one of the currencies changed making the old rate invalid.
+                // User might have already input a valid rate.
+                // This part might need more nuanced handling if we want to pre-fill rates from an API.
+                // For now, if currencies differ, we expect user input or it remains undefined.
+                // If it was 1 (from same currencies), it MUST be cleared.
+                if (form.getValues('exchangeRate') === 1) {
+                    form.setValue('exchangeRate', undefined);
+                }
+            }
         }
     }
   }, [selectedAccountId, selectedFromAccountId, selectedToAccountId, transactionType, accounts, form]);
 
   const getButtonText = () => {
-    const isEditing = !!(initialData && initialData.id); // Check if initialData AND initialData.id exist
+    const isEditing = !!(initialData && initialData.id); 
 
     if (isLoading) {
         return isEditing ? "Saving..." : "Adding...";
@@ -243,13 +272,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     if (isEditing) {
         return "Save Changes";
     }
-
-    // For new transactions
-    let typeLabel = 'Transaction'; // Default fallback
-    const currentTransactionType = form.getValues('type'); // Get current type from form state
-    if (currentTransactionType && typeof currentTransactionType === 'string' && currentTransactionType.length > 0) {
-        typeLabel = currentTransactionType.charAt(0).toUpperCase() + currentTransactionType.slice(1);
-    }
+    
+    let typeLabel = transactionType ? transactionType.charAt(0).toUpperCase() + transactionType.slice(1) : 'Transaction';
     return `Add ${typeLabel}`;
   };
 
@@ -338,7 +362,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         form.setValue('transactionCurrency', acc.currency);
                                         if (acc.currency === form.getValues('toAccountCurrency')) {
                                             form.setValue('exchangeRate', 1);
-                                        } else if (form.getValues('toAccountCurrency')) {
+                                        } else if (form.getValues('toAccountCurrency')) { 
                                             form.setValue('exchangeRate', undefined);
                                         }
                                     }
