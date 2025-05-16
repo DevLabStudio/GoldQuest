@@ -113,7 +113,7 @@ export default function AccountDetailPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -231,10 +231,12 @@ export default function AccountDetailPage() {
     }
   };
 
-   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; }) => {
+   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string;}) => {
     try {
-      const transferAmount = Math.abs(data.amount);
+      const fromAmount = -Math.abs(data.amount);
+      const toAmount = Math.abs(data.toAccountAmount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
+      
       const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
@@ -242,7 +244,7 @@ export default function AccountDetailPage() {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -transferAmount,
+        amount: fromAmount,
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -252,8 +254,8 @@ export default function AccountDetailPage() {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: transferAmount,
-        transactionCurrency: data.transactionCurrency,
+        amount: toAmount,
+        transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -573,6 +575,7 @@ export default function AccountDetailPage() {
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
+              onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialData={{
                 ...selectedTransaction,
@@ -614,7 +617,7 @@ export default function AccountDetailPage() {
                 (transactionTypeToAdd !== 'transfer' && account
                     ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
                     : (transactionTypeToAdd === 'transfer' && account
-                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date() }
+                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date(), toAccountCurrency: account.currency, exchangeRate: 1 }
                         : {date: new Date()})
                 )
               }
