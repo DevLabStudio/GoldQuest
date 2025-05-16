@@ -8,7 +8,7 @@ import {
     SidebarProvider,
     Sidebar,
     SidebarHeader,
-    SidebarTrigger,
+    // SidebarTrigger, // Removed from here
     SidebarContent,
     SidebarMenu,
     SidebarMenuItem,
@@ -19,7 +19,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal } from 'lucide-react';
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal, FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -28,7 +28,6 @@ import { DateRangeProvider } from '@/contexts/DateRangeContext';
 import GlobalHeader from './GlobalHeader';
 import { Button } from '@/components/ui/button';
 
-// New GoldQuest Logo
 const LogoIcon = () => (
   <svg
     width="24"
@@ -38,26 +37,14 @@ const LogoIcon = () => (
     xmlns="http://www.w3.org/2000/svg"
     className="mr-2 text-primary"
   >
-    {/* Thin grid lines */}
-    <path d="M25 43.3013L50 28.8675L75 43.3013" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 56.6987L50 71.1325L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M50 28.8675L50 71.1325" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 43.3013L25 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M75 43.3013L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 43.3013L50 56.6987L75 43.3013" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 56.6987L50 43.3013L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-
-    {/* Thick "G" shape lines */}
     <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
-
-    {/* Circles at vertices */}
     <circle cx="75" cy="25" r="5" fill="currentColor"/>
     <circle cx="50" cy="10" r="5" fill="currentColor"/>
     <circle cx="25" cy="25" r="5" fill="currentColor"/>
     <circle cx="25" cy="75" r="5" fill="currentColor"/>
     <circle cx="50" cy="90" r="5" fill="currentColor"/>
     <circle cx="75" cy="75" r="5" fill="currentColor"/>
-    <circle cx="75" cy="50" r="5" fill="currentColor"/> {/* Added this circle */}
+    <circle cx="75" cy="50" r="5" fill="currentColor"/>
     <circle cx="50" cy="50" r="5" fill="currentColor"/>
   </svg>
 );
@@ -79,13 +66,12 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   useEffect(() => {
     setIsClient(true);
-    // Set class name after mount to ensure styles are applied correctly
     setLoadingDivClassName("flex items-center justify-center min-h-screen bg-background text-foreground");
   }, []);
   
   useEffect(() => {
       const applyTheme = () => {
-          if (!isClient) return; // Only run on client
+          if (!isClient) return; 
           const root = document.documentElement;
           let currentTheme = theme;
 
@@ -96,12 +82,11 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
           root.classList.remove('dark', 'light');
           root.classList.add(currentTheme);
-          root.style.colorScheme = currentTheme; // Important for native elements
+          root.style.colorScheme = currentTheme; 
       };
 
       applyTheme(); 
 
-      // Listen for system theme changes if 'system' is selected
       if (theme === 'system' && typeof window !== 'undefined') {
           const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
           const handleChange = () => applyTheme();
@@ -128,8 +113,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     
     if(typeof window !== 'undefined') {
         const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
-        // Check if preferences are loaded and specifically if the theme is set.
-        // This implies preferences have been fetched at least once.
         const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
 
         if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
@@ -157,10 +140,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   
   if (firebaseError && !isFirebaseActive) {
      if (pathname !== '/login' && pathname !== '/signup') {
-         router.push('/login'); // Redirect to login if firebase is critically broken and not on auth pages
+         router.push('/login'); 
          return <div className={loadingDivClassName}>Firebase not available. Redirecting...</div>;
      }
-     // Allow login/signup pages to render with the firebase error message handled within them
   }
 
 
@@ -177,7 +159,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   }
 
   if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup'))) {
-     // If firebase is inactive but we are on login/signup, allow those pages to render
      if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup')) {
          return <LoginPage />;
      }
@@ -194,7 +175,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                 <LogoIcon />
                 <span className="text-lg font-semibold text-primary">GoldQuest</span>
                 </div>
-                <SidebarTrigger className="md:hidden" />
+                {/* SidebarTrigger was here, moved to GlobalHeader for mobile */}
             </SidebarHeader>
             <SidebarContent>
                 <SidebarMenu>
@@ -208,7 +189,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-
+                
                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
@@ -234,7 +215,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             isActive={isAnyTransactionRouteActive}
                         >
                             <div className="flex items-center gap-2">
-                            <ArrowLeftRight />
+                            <FileText /> {/* Changed icon */}
                             <span>Transactions</span>
                             </div>
                             <ChevronDown
@@ -350,8 +331,5 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
-  // Fallback for any unhandled state, though ideally one of the above conditions should always be met.
   return <div className={loadingDivClassName}>Preparing application...</div>;
 }
-
-
