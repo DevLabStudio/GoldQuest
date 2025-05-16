@@ -1,7 +1,7 @@
 
 'use client';
 
-import { FC, useMemo, useEffect } from 'react';
+import { FC, useMemo, useEffect, useState } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,7 +19,7 @@ import type { Account } from '@/services/account-sync';
 import type { Category } from '@/services/categories';
 import type { Tag } from '@/services/tags';
 import type { Transaction } from '@/services/transactions';
-import { getCurrencySymbol, supportedCurrencies } from '@/lib/currency';
+import { getCurrencySymbol, supportedCurrencies, convertCurrency } from '@/lib/currency';
 import { toast } from "@/hooks/use-toast";
 
 const transactionTypes = ['expense', 'income', 'transfer'] as const;
@@ -50,8 +50,8 @@ const transferSchema = baseSchema.extend({
   toAccountCurrency: z.string().min(3, "Destination currency is required for transfers").refine(
       (val) => supportedCurrencies.includes(val.toUpperCase()),
       { message: "Unsupported destination currency" }
-  ).optional(),
-  exchangeRate: z.coerce.number({ invalid_type_error: "Exchange rate must be a number" }).positive("Exchange rate must be positive").optional(),
+  ).optional(), // Made optional, will be derived or required conditionally
+  toAccountAmount: z.coerce.number({ invalid_type_error: "Destination amount must be a number" }).positive("Destination amount must be positive").optional(),
 });
 
 const formSchema = z.discriminatedUnion('type', [
@@ -67,12 +67,12 @@ const formSchema = z.discriminatedUnion('type', [
     path: ['toAccountId'],
 }).refine(data => {
     if (data.type === 'transfer' && data.transactionCurrency && data.toAccountCurrency && data.transactionCurrency.toUpperCase() !== data.toAccountCurrency.toUpperCase()) {
-        return data.exchangeRate !== undefined && data.exchangeRate > 0;
+        return data.toAccountAmount !== undefined && data.toAccountAmount > 0;
     }
     return true;
 }, {
-    message: "Exchange rate is required and must be positive for cross-currency transfers.",
-    path: ['exchangeRate'],
+    message: "Destination amount is required and must be positive for cross-currency transfers.",
+    path: ['toAccountAmount'],
 });
 
 
@@ -95,7 +95,7 @@ interface AddTransactionFormProps {
       tags?: string[];
     }) => Promise<void> | void;
   isLoading: boolean;
-  initialType?: typeof transactionTypes[number] | null; // Allow null from parent
+  initialType?: typeof transactionTypes[number] | null;
   initialData?: Partial<AddTransactionFormData & { date: Date | string; id?: string }>;
 }
 
@@ -115,6 +115,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     initialData
 }) => {
   const resolvedInitialType = initialTypeFromParent ?? (initialData?.type || 'expense');
+  const [calculatedRate, setCalculatedRate] = useState<string | null>(null);
 
   const form = useForm<AddTransactionFormData>({
     resolver: zodResolver(formSchema),
@@ -125,8 +126,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         tags: initialData.tags || [],
         transactionCurrency: (initialData as Transaction)?.transactionCurrency || accounts.find(acc => acc.id === (initialData as any)?.accountId)?.currency || 'BRL',
         description: initialData.description || '',
-        toAccountCurrency: (initialData as any)?.toAccountCurrency || (initialData as any)?.transactionCurrency || (accounts.find(acc => acc.id === (initialData as any)?.toAccountId)?.currency),
-        exchangeRate: (initialData as any)?.exchangeRate,
+        toAccountCurrency: (initialData as any)?.toAccountCurrency || (accounts.find(acc => acc.id === (initialData as any)?.toAccountId)?.currency),
+        toAccountAmount: (initialData as any)?.toAccountAmount, // For editing existing transfers
     } : {
       type: resolvedInitialType,
       description: "",
@@ -139,7 +140,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
       tags: [],
       transactionCurrency: accounts.length > 0 ? accounts[0].currency : 'BRL',
       toAccountCurrency: accounts.length > 1 ? accounts[1].currency : (accounts.length > 0 ? accounts[0].currency : 'BRL'),
-      exchangeRate: undefined,
+      toAccountAmount: undefined,
     },
   });
 
@@ -147,8 +148,8 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
   const selectedAccountId = form.watch('accountId');
   const selectedFromAccountId = form.watch('fromAccountId');
   const selectedToAccountId = form.watch('toAccountId');
-  // const formTransactionCurrency = form.watch('transactionCurrency'); // We'll derive this more directly for display
-  // const formToAccountCurrency = form.watch('toAccountCurrency'); // We'll derive this more directly for display
+  const sourceAmount = form.watch('amount');
+  const destinationAmount = form.watch('toAccountAmount');
 
   const isEditingExisting = !!(initialData && 'id' in initialData && initialData.id);
 
@@ -162,6 +163,27 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
       }
       return singleAccountForDisplay?.currency || form.getValues('transactionCurrency') || 'BRL';
   }, [transactionType, fromAccountForDisplay, singleAccountForDisplay, form]);
+
+  const currentToAccountCurrencyForDisplay = useMemo(() => {
+      if (transactionType === 'transfer') {
+          return toAccountForDisplay?.currency || form.getValues('toAccountCurrency') || 'BRL';
+      }
+      return 'BRL'; // Default or not applicable for non-transfers
+  }, [transactionType, toAccountForDisplay, form]);
+
+
+  useEffect(() => {
+    if (transactionType === 'transfer' && fromAccountForDisplay && toAccountForDisplay && sourceAmount && destinationAmount && sourceAmount > 0 && destinationAmount > 0) {
+      if (fromAccountForDisplay.currency !== toAccountForDisplay.currency) {
+        const rate = destinationAmount / sourceAmount;
+        setCalculatedRate(`1 ${fromAccountForDisplay.currency} = ${rate.toFixed(4)} ${toAccountForDisplay.currency}`);
+      } else {
+        setCalculatedRate(null); // Same currency, no rate needed
+      }
+    } else {
+      setCalculatedRate(null);
+    }
+  }, [fromAccountForDisplay, toAccountForDisplay, sourceAmount, destinationAmount, transactionType]);
 
 
   async function onSubmit(values: AddTransactionFormData) {
@@ -179,24 +201,25 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
         const actualSourceCurrency = fromAccount.currency;
         const actualDestinationCurrency = toAccount.currency;
-        let finalToAccountAmount = values.amount;
-
-        if (actualSourceCurrency.toUpperCase() !== actualDestinationCurrency.toUpperCase()) {
-            if (!values.exchangeRate || values.exchangeRate <= 0) {
-                form.setError("exchangeRate", { type: "manual", message: "Exchange rate is required and must be positive for cross-currency transfers." });
-                toast({ title: "Error", description: "Exchange rate is required for cross-currency transfers.", variant: "destructive" });
+        
+        let finalToAccountAmount: number;
+        if (actualSourceCurrency.toUpperCase() === actualDestinationCurrency.toUpperCase()) {
+            finalToAccountAmount = values.amount; // Same currency, amount is the same
+        } else {
+            if (!values.toAccountAmount || values.toAccountAmount <= 0) {
+                form.setError("toAccountAmount", { type: "manual", message: "Destination amount is required and must be positive for cross-currency transfers." });
+                toast({ title: "Error", description: "Destination amount is required for cross-currency transfers.", variant: "destructive" });
                 return;
             }
-            finalToAccountAmount = values.amount * values.exchangeRate;
+            finalToAccountAmount = values.toAccountAmount;
         }
-
 
         await onTransferAdded({
             fromAccountId: values.fromAccountId,
             toAccountId: values.toAccountId,
-            amount: values.amount,
+            amount: values.amount, // This is the source amount
             transactionCurrency: actualSourceCurrency,
-            toAccountAmount: finalToAccountAmount,
+            toAccountAmount: finalToAccountAmount, // This is the user-provided or same-as-source amount
             toAccountCurrency: actualDestinationCurrency,
             date: values.date,
             description: values.description || `Transfer from ${fromAccount.name} to ${toAccount.name}`,
@@ -210,16 +233,21 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
              variant: "destructive",
          });
       }
-    } else {
+    } else { // Expense or Income
+      const account = accounts.find(acc => acc.id === values.accountId);
+      if (!account) {
+        toast({ title: "Error", description: "Selected account not found.", variant: "destructive"});
+        return;
+      }
       const transactionAmount = values.type === 'expense' ? -Math.abs(values.amount) : Math.abs(values.amount);
       const transactionData: Omit<Transaction, 'id'> | Transaction = {
         ...(initialData && (initialData as Transaction).id && { id: (initialData as Transaction).id }),
-        accountId: values.accountId!, // Assert accountId is present for expense/income
+        accountId: values.accountId!,
         amount: transactionAmount,
-        transactionCurrency: values.transactionCurrency,
+        transactionCurrency: account.currency, // Always use the selected account's currency for expense/income
         date: formatDateFns(values.date, 'yyyy-MM-dd'),
         description: values.description || values.category || 'Transaction',
-        category: values.category!, // Assert category is present for expense/income
+        category: values.category!,
         tags: finalTags,
       };
       await onTransactionAdded(transactionData);
@@ -241,7 +269,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                  form.setValue('transactionCurrency', fromAccount.currency);
             }
         } else {
-            form.setValue('transactionCurrency', undefined); // Clear if no fromAccount
+            form.setValue('transactionCurrency', undefined);
         }
 
         if (toAccount) {
@@ -249,23 +277,23 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 form.setValue('toAccountCurrency', toAccount.currency);
              }
         } else {
-            form.setValue('toAccountCurrency', undefined); // Clear if no toAccount
+            form.setValue('toAccountCurrency', undefined);
         }
         
-        if (fromAccount && toAccount) {
-            if (fromAccount.currency.toUpperCase() === toAccount.currency.toUpperCase()) {
-                if (form.getValues('exchangeRate') !== 1) {
-                    form.setValue('exchangeRate', 1, { shouldValidate: true });
-                }
-            } else {
-                // If currencies are different and rate is 1 (default for same currency) or undefined, clear it to prompt user or indicate it's needed
-                const currentRate = form.getValues('exchangeRate');
-                if (currentRate === 1 || currentRate === undefined) {
-                    form.setValue('exchangeRate', undefined, { shouldValidate: true });
-                }
+        // Auto-fill destination amount if currencies are the same
+        if (fromAccount && toAccount && fromAccount.currency.toUpperCase() === toAccount.currency.toUpperCase()) {
+            const sourceAmt = form.getValues('amount');
+            if (sourceAmt && form.getValues('toAccountAmount') !== sourceAmt) {
+                 form.setValue('toAccountAmount', sourceAmt, { shouldValidate: true });
             }
-        } else { // If one or both accounts are not selected, clear exchange rate
-            form.setValue('exchangeRate', undefined);
+        } else if (fromAccount && toAccount && fromAccount.currency.toUpperCase() !== toAccount.currency.toUpperCase()) {
+            // If currencies are different and toAccountAmount was set for same currency, clear it or leave as is for user input.
+            // Optionally, clear toAccountAmount if it was previously auto-filled to match sourceAmount
+            // if (form.getValues('toAccountAmount') === form.getValues('amount')) {
+            //      form.setValue('toAccountAmount', undefined, { shouldValidate: true });
+            // }
+        } else { // If one or both accounts are not selected, clear toAccountAmount
+            form.setValue('toAccountAmount', undefined);
         }
     }
   }, [selectedAccountId, selectedFromAccountId, selectedToAccountId, transactionType, accounts, form]);
@@ -299,31 +327,28 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
               <Select
                   onValueChange={(value) => {
                     field.onChange(value);
-                    // Reset relevant fields when type changes
                     if (value === 'transfer') {
                         form.setValue('accountId', undefined);
-                        form.setValue('category', undefined); // Transfers don't have categories in this context
+                        form.setValue('category', undefined);
                         const fromAcc = accounts.find(a => a.id === form.getValues('fromAccountId'));
                         form.setValue('transactionCurrency', fromAcc?.currency || 'BRL');
                         const toAcc = accounts.find(a => a.id === form.getValues('toAccountId'));
                         form.setValue('toAccountCurrency', toAcc?.currency || 'BRL');
-                         if (fromAcc?.currency === toAcc?.currency) {
-                            form.setValue('exchangeRate', 1);
+                        if(fromAcc?.currency === toAcc?.currency) {
+                            form.setValue('toAccountAmount', form.getValues('amount'));
                         } else {
-                            form.setValue('exchangeRate', undefined); // Clear if currencies might be different
+                            form.setValue('toAccountAmount', undefined);
                         }
-                    } else { // expense or income
+                    } else {
                         form.setValue('fromAccountId', undefined);
                         form.setValue('toAccountId', undefined);
                         form.setValue('toAccountCurrency', undefined);
-                        form.setValue('exchangeRate', undefined);
+                        form.setValue('toAccountAmount', undefined);
                         const acc = accounts.find(a => a.id === form.getValues('accountId'));
                         form.setValue('transactionCurrency', acc?.currency || 'BRL');
                     }
                   }}
                   defaultValue={field.value}
-                  // Disable type change if editing an existing transaction, especially transfers
-                  // because changing type from/to transfer has significant schema implications.
                   disabled={isEditingExisting}
               >
                 <FormControl>
@@ -375,14 +400,14 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         form.setValue('transactionCurrency', acc.currency);
                                         const toAccCurrency = form.getValues('toAccountCurrency');
                                         if (toAccCurrency && acc.currency.toUpperCase() === toAccCurrency.toUpperCase()) {
-                                            form.setValue('exchangeRate', 1);
-                                        } else if (toAccCurrency) { // if toAccCurrency is set and different
-                                            form.setValue('exchangeRate', undefined);
+                                             form.setValue('toAccountAmount', form.getValues('amount'));
+                                        } else if (toAccCurrency) {
+                                            form.setValue('toAccountAmount', undefined);
                                         }
                                     }
                                 }}
                                 defaultValue={field.value}
-                                disabled={isEditingExisting}
+                                disabled={isEditingExisting && initialData?.type === 'transfer'}
                             >
                             <FormControl>
                                 <SelectTrigger>
@@ -415,14 +440,14 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         form.setValue('toAccountCurrency', acc.currency);
                                         const fromAccCurrency = form.getValues('transactionCurrency');
                                         if (fromAccCurrency && acc.currency.toUpperCase() === fromAccCurrency.toUpperCase()) {
-                                            form.setValue('exchangeRate', 1);
-                                        } else if (fromAccCurrency) { // if fromAccCurrency is set and different
-                                            form.setValue('exchangeRate', undefined);
+                                            form.setValue('toAccountAmount', form.getValues('amount'));
+                                        } else if (fromAccCurrency) {
+                                            form.setValue('toAccountAmount', undefined);
                                         }
                                     }
                                 }}
                                 defaultValue={field.value}
-                                disabled={isEditingExisting}
+                                disabled={isEditingExisting && initialData?.type === 'transfer'}
                             >
                             <FormControl>
                                 <SelectTrigger>
@@ -530,117 +555,28 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     </FormItem>
                     )}
                 />
-                <FormField
-                    control={form.control}
-                    name="transactionCurrency"
-                    render={({ field }) => (
+                {transactionType === 'transfer' && fromAccountForDisplay && toAccountForDisplay && fromAccountForDisplay.currency !== toAccountForDisplay.currency && (
+                    <FormField
+                        control={form.control}
+                        name="toAccountAmount"
+                        render={({ field }) => (
                         <FormItem>
-                        <FormLabel>
-                            {transactionType === 'transfer' ? "From Account Currency" : "Transaction Currency"}
-                        </FormLabel>
-                        <Select
-                            onValueChange={(value) => {
-                                field.onChange(value);
-                                if (transactionType === 'transfer') {
-                                    const toAccCurrency = form.getValues('toAccountCurrency');
-                                    if (toAccCurrency && value.toUpperCase() === toAccCurrency.toUpperCase()) {
-                                        form.setValue('exchangeRate', 1);
-                                    } else if (toAccCurrency) {
-                                        form.setValue('exchangeRate', undefined);
-                                    }
-                                }
-                            }}
-                            value={field.value || ''} // Ensure value is not undefined for Select
-                            // Disable if currency is determined by a selected account
-                            disabled={
-                                (transactionType !== 'transfer' && !!selectedAccountId && !!accounts.find(a=>a.id === selectedAccountId)) ||
-                                (transactionType === 'transfer' && !!selectedFromAccountId && !!accounts.find(a=>a.id === selectedFromAccountId))
-                            }
-                        >
+                            <FormLabel>Amount in Destination Account ({getCurrencySymbol(currentToAccountCurrencyForDisplay)})</FormLabel>
                             <FormControl>
-                            <SelectTrigger>
-                                <SelectValue placeholder="Select transaction currency" />
-                            </SelectTrigger>
+                            <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''}/>
                             </FormControl>
-                            <SelectContent>
-                            {supportedCurrencies.map((curr) => (
-                                <SelectItem key={curr} value={curr}>
-                                {curr} ({getCurrencySymbol(curr)})
-                                </SelectItem>
-                            ))}
-                            </SelectContent>
-                        </Select>
-                        <FormDescription>
-                            {transactionType === 'transfer' ?
-                                "Usually determined by 'From Account'." :
-                                "Usually determined by selected Account."
-                            }
-                        </FormDescription>
-                        <FormMessage />
+                            <FormDescription>Enter the exact amount that arrived in the destination account.</FormDescription>
+                            <FormMessage />
                         </FormItem>
-                    )}
-                />
-
-                {transactionType === 'transfer' && (
-                    <>
-                        <FormField
-                            control={form.control}
-                            name="toAccountCurrency"
-                            render={({ field }) => (
-                                <FormItem>
-                                <FormLabel>To Account Currency</FormLabel>
-                                <Select
-                                    onValueChange={(value) => {
-                                        field.onChange(value);
-                                        if (transactionType === 'transfer') {
-                                            const fromAccCurrency = form.getValues('transactionCurrency');
-                                            if (fromAccCurrency && value.toUpperCase() === fromAccCurrency.toUpperCase()) {
-                                                form.setValue('exchangeRate', 1);
-                                            } else if (fromAccCurrency){
-                                                form.setValue('exchangeRate', undefined);
-                                            }
-                                        }
-                                    }}
-                                    value={field.value || ''} // Ensure value is not undefined for Select
-                                    disabled={!!selectedToAccountId && !!accounts.find(a=>a.id === selectedToAccountId)}
-                                >
-                                    <FormControl>
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select destination currency" />
-                                    </SelectTrigger>
-                                    </FormControl>
-                                    <SelectContent>
-                                    {supportedCurrencies.map((curr) => (
-                                        <SelectItem key={curr} value={curr}>
-                                        {curr} ({getCurrencySymbol(curr)})
-                                        </SelectItem>
-                                    ))}
-                                    </SelectContent>
-                                </Select>
-                                 <FormDescription>Usually determined by 'To Account'.</FormDescription>
-                                <FormMessage />
-                                </FormItem>
-                            )}
-                        />
-                        {/* Conditionally render Exchange Rate field */}
-                        {fromAccountForDisplay?.currency && toAccountForDisplay?.currency && fromAccountForDisplay.currency.toUpperCase() !== toAccountForDisplay.currency.toUpperCase() && (
-                            <FormField
-                                control={form.control}
-                                name="exchangeRate"
-                                render={({ field }) => (
-                                    <FormItem>
-                                    <FormLabel>Exchange Rate (1 {fromAccountForDisplay.currency} = ? {toAccountForDisplay.currency})</FormLabel>
-                                    <FormControl>
-                                        <Input type="number" placeholder="e.g., 0.92" step="0.000001" {...field} value={field.value ?? ''}/>
-                                    </FormControl>
-                                    <FormDescription>Required for cross-currency transfer.</FormDescription>
-                                    <FormMessage />
-                                    </FormItem>
-                                )}
-                            />
                         )}
-                    </>
+                    />
                 )}
+                 {calculatedRate && transactionType === 'transfer' && (
+                    <div className="text-sm text-muted-foreground p-2 border rounded-md">
+                        Effective Rate: {calculatedRate}
+                    </div>
+                )}
+
 
                 {transactionType !== 'transfer' && (
                     <FormField
@@ -657,7 +593,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                 </FormControl>
                                 <SelectContent>
                                 {categories
-                                    .filter(cat => cat.name.toLowerCase() !== 'transfer') // Exclude 'Transfer' category for non-transfer types
+                                    .filter(cat => cat.name.toLowerCase() !== 'transfer') 
                                     .sort((a, b) => a.name.localeCompare(b.name))
                                     .map((cat) => (
                                     <SelectItem key={cat.id} value={cat.name}>

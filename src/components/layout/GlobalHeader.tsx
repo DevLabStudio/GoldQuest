@@ -6,7 +6,7 @@ import DateRangePicker from '@/components/dashboard/date-range-picker';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, PanelLeft } from 'lucide-react'; // Added PanelLeft for consistency if needed, but SidebarTrigger has its own
+import { PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, PanelLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { Transaction } from '@/services/transactions';
@@ -18,7 +18,7 @@ import { useState, useEffect } from 'react';
 import { format as formatDateFns } from 'date-fns';
 import { addTransaction } from '@/services/transactions';
 import { Skeleton } from '@/components/ui/skeleton';
-import { SidebarTrigger } from '@/components/ui/sidebar'; // Import SidebarTrigger
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 
 const GlobalHeader: FC = () => {
@@ -110,7 +110,7 @@ const GlobalHeader: FC = () => {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -Math.abs(data.amount), // Amount from source account's perspective
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -120,7 +120,7 @@ const GlobalHeader: FC = () => {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: Math.abs(data.toAccountAmount), // Amount for destination account
+        amount: Math.abs(data.toAccountAmount),
         transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
@@ -140,10 +140,8 @@ const GlobalHeader: FC = () => {
 
   return (
     <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background/95 px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 sm:py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      {/* Mobile Menu Trigger */}
       <SidebarTrigger className="md:hidden" />
       
-      {/* Existing content pushed to the right */}
       <div className="ml-auto flex items-center gap-2">
         <DateRangePicker
           initialRange={selectedDateRange}
@@ -198,7 +196,7 @@ const GlobalHeader: FC = () => {
               onTransferAdded={handleTransferAdded}
               isLoading={false} 
               initialType={transactionTypeToAdd}
-              initialData={{date: new Date()}} // Ensure initialData is always an object
+              initialData={{date: new Date()}}
             />
           ) : (
             <div className="py-4 text-center text-muted-foreground">
@@ -217,3 +215,4 @@ const GlobalHeader: FC = () => {
 };
 
 export default GlobalHeader;
+

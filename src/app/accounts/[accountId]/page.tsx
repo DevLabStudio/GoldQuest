@@ -113,7 +113,7 @@ export default function AccountDetailPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -187,7 +187,6 @@ export default function AccountDetailPage() {
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -207,7 +206,6 @@ export default function AccountDetailPage() {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -224,7 +222,6 @@ export default function AccountDetailPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
@@ -233,8 +230,6 @@ export default function AccountDetailPage() {
 
    const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string;}) => {
     try {
-      const fromAmount = -Math.abs(data.amount);
-      const toAmount = Math.abs(data.toAccountAmount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       
       const currentAccounts = await getAccounts();
@@ -244,7 +239,7 @@ export default function AccountDetailPage() {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: fromAmount,
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -254,7 +249,7 @@ export default function AccountDetailPage() {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: toAmount,
+        amount: Math.abs(data.toAccountAmount),
         transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
@@ -266,7 +261,6 @@ export default function AccountDetailPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -575,7 +569,7 @@ export default function AccountDetailPage() {
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
-              onTransferAdded={handleTransferAdded}
+              onTransferAdded={handleTransferAdded} // Ensure this is passed for consistency, though less likely used in single-account edit
               isLoading={isLoading}
               initialData={{
                 ...selectedTransaction,
@@ -616,9 +610,9 @@ export default function AccountDetailPage() {
                 clonedTransactionData ||
                 (transactionTypeToAdd !== 'transfer' && account
                     ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                    : (transactionTypeToAdd === 'transfer' && account
-                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date(), toAccountCurrency: account.currency, exchangeRate: 1 }
-                        : {date: new Date()})
+                    : (transactionTypeToAdd === 'transfer' && account // If adding a transfer and current account exists
+                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date(), toAccountCurrency: accounts.find(a => a.id !== account.id)?.currency || account.currency }
+                        : {date: new Date()}) // Fallback for other cases or if account not found
                 )
               }
             />
