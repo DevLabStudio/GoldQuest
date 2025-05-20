@@ -27,9 +27,6 @@ function downloadBlob(blob: Blob, filename: string) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } else {
-    // Fallback for browsers that don't support the download attribute
-    // This might open the blob in a new tab depending on the browser and blob type
-    // For a zip file, it usually still triggers a download or prompts the user.
     const newWindow = window.open(URL.createObjectURL(blob), '_blank');
     if (!newWindow) {
         alert('File download is not fully supported by your browser or was blocked. Please check your pop-up blocker settings.');
@@ -40,46 +37,39 @@ function downloadBlob(blob: Blob, filename: string) {
 const formatDateForExport = (dateInput: object | string | undefined | null): string => {
     if (!dateInput) return '';
     if (typeof dateInput === 'string') {
-        // Attempt to parse if it looks like an ISO string already, otherwise return as is
         const parsed = parseISO(dateInput);
         return isValid(parsed) ? formatDateFns(parsed, "yyyy-MM-dd'T'HH:mm:ssXXX") : dateInput;
     }
-    // Check for Firebase ServerTimestamp placeholder object which is an object with no direct date properties.
-    // A common way to check is if it's an object and doesn't have typical Date methods.
-    // For robust handling, if you expect specific Firebase Timestamp objects, you might check for `toDate` method.
     if (typeof dateInput === 'object' && dateInput !== null) {
         if ('toDate' in dateInput && typeof (dateInput as any).toDate === 'function') {
              return formatDateFns((dateInput as any).toDate(), "yyyy-MM-dd'T'HH:mm:ssXXX");
         }
-        // For Firebase serverTimestamp placeholder object, or other objects, convert to a placeholder or empty string
-        // In a real scenario, this would be handled by ensuring data is read after server resolves it
-        // For export, if it's a placeholder, it's better to represent it as such or empty
-        return 'SERVER_TIMESTAMP_PLACEHOLDER'; // Or return an empty string or a specific string indicating it's a server value
+        return 'SERVER_TIMESTAMP_PLACEHOLDER';
     }
-    if (typeof dateInput === 'number') { // Assuming it's a Unix timestamp (milliseconds)
+    if (typeof dateInput === 'number') {
         return formatDateFns(new Date(dateInput), "yyyy-MM-dd'T'HH:mm:ssXXX");
     }
-    return String(dateInput); // Fallback for other types
+    return String(dateInput);
 };
 
 
 interface ExportableTransaction extends Omit<Transaction, 'tags' | 'originalImportData' | 'createdAt' | 'updatedAt'> {
-    tags?: string; // Pipe-separated
-    originalImportData?: string; // JSON string
-    createdAt?: string; // ISO Timestamp
-    updatedAt?: string; // ISO Timestamp
+    tags?: string;
+    originalImportData?: string;
+    createdAt?: string;
+    updatedAt?: string;
 }
 interface ExportableSubscription extends Omit<Subscription, 'tags' | 'createdAt' | 'updatedAt'> {
-    tags?: string; // Pipe-separated
+    tags?: string;
     createdAt?: string;
     updatedAt?: string;
 }
 
 interface ExportableGroup extends Omit<Group, 'categoryIds'> {
-    categoryIds?: string; // Pipe-separated
+    categoryIds?: string;
 }
 interface ExportableBudget extends Omit<Budget, 'selectedIds' | 'createdAt' | 'updatedAt'> {
-    selectedIds?: string; // Pipe-separated
+    selectedIds?: string;
     createdAt?: string;
     updatedAt?: string;
 }

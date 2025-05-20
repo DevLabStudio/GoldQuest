@@ -1,3 +1,4 @@
+
 import { database, auth } from '@/lib/firebase';
 import { ref, set, get, push, remove, update, serverTimestamp } from 'firebase/database';
 import type { User } from 'firebase/auth';
@@ -8,6 +9,9 @@ import { getCategoriesRefPath } from './categories';
 import { getTagsRefPath } from './tags';
 import { getGroupsRefPath } from './groups';
 import { getSubscriptionsRefPath } from './subscriptions';
+import { getLoansRefPath } from './loans';
+import { getCreditCardsRefPath } from './credit-cards';
+import { getBudgetsRefPath } from './budgets';
 
 
 export interface Transaction {
@@ -112,7 +116,7 @@ export async function getTransactions(
   const storageKey = `transactions-${accountId}-${currentUser.uid}`;
   const data = localStorage.getItem(storageKey);
 
-  console.log("Fetching transactions for account:", accountId, "from localStorage key:", storageKey);
+  // console.log("Fetching transactions for account:", accountId, "from localStorage key:", storageKey);
 
   if (data) {
       try {
@@ -158,8 +162,8 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     originalImportData: {
-        foreignAmount: transactionData.originalImportData?.foreignAmount ?? null,
-        foreignCurrency: transactionData.originalImportData?.foreignCurrency ?? null,
+        foreignAmount: transactionData.originalImportData?.foreignAmount === undefined ? null : transactionData.originalImportData.foreignAmount,
+        foreignCurrency: transactionData.originalImportData?.foreignCurrency === undefined ? null : transactionData.originalImportData.foreignCurrency,
     }
   };
 
@@ -167,7 +171,7 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
   delete dataToSave.id;
 
 
-  console.log("Adding transaction to Firebase RTDB:", newTransaction);
+  // console.log("Adding transaction to Firebase RTDB:", newTransaction);
   try {
     await set(newTransactionRef, dataToSave);
     if (category?.toLowerCase() !== 'opening balance') {
@@ -208,14 +212,14 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
     ...updatedTransaction,
     updatedAt: serverTimestamp(),
     originalImportData: {
-        foreignAmount: updatedTransaction.originalImportData?.foreignAmount ?? null,
-        foreignCurrency: updatedTransaction.originalImportData?.foreignCurrency ?? null,
+        foreignAmount: updatedTransaction.originalImportData?.foreignAmount === undefined ? null : updatedTransaction.originalImportData.foreignAmount,
+        foreignCurrency: updatedTransaction.originalImportData?.foreignCurrency === undefined ? null : updatedTransaction.originalImportData.foreignCurrency,
     }
   } as any;
   delete dataToUpdateFirebase.id;
 
 
-  console.log("Updating transaction in Firebase RTDB:", id, dataToUpdateFirebase);
+  // console.log("Updating transaction in Firebase RTDB:", id, dataToUpdateFirebase);
   try {
     await update(transactionRef, dataToUpdateFirebase); // Update DB
 
@@ -266,7 +270,7 @@ export async function deleteTransaction(transactionId: string, accountId: string
   const allAppAccounts = await getAllAccounts();
   const txCurrency = transactionToDelete.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
 
-  console.log("Deleting transaction from Firebase RTDB:", transactionRefPath);
+  // console.log("Deleting transaction from Firebase RTDB:", transactionRefPath);
   try {
     await remove(transactionRef); // Remove from DB
     // Use the currency from the transaction being deleted for accurate balance reversal
@@ -293,12 +297,15 @@ export async function clearAllSessionTransactions(): Promise<void> {
   console.warn("Attempting to clear ALL user data for user:", currentUser.uid);
   try {
     // Get paths for all data types
-    const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`;
+    const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`; // Base path for all account transactions
     const categoriesPath = getCategoriesRefPath(currentUser);
     const tagsPath = getTagsRefPath(currentUser);
     const groupsPath = getGroupsRefPath(currentUser);
     const subscriptionsPath = getSubscriptionsRefPath(currentUser);
-    const accountsPath = `users/${currentUser.uid}/accounts`; // Directly use path
+    const loansPath = getLoansRefPath(currentUser);
+    const creditCardsPath = getCreditCardsRefPath(currentUser);
+    const budgetsPath = getBudgetsRefPath(currentUser);
+    const accountsPath = `users/${currentUser.uid}/accounts`; // Base path for all accounts
 
     // Clear from Firebase DB
     await Promise.all([
@@ -307,22 +314,31 @@ export async function clearAllSessionTransactions(): Promise<void> {
         remove(ref(database, tagsPath)),
         remove(ref(database, groupsPath)),
         remove(ref(database, subscriptionsPath)),
-        remove(ref(database, accountsPath)) // Clear accounts from DB
+        remove(ref(database, loansPath)),
+        remove(ref(database, creditCardsPath)),
+        remove(ref(database, budgetsPath)),
+        remove(ref(database, accountsPath)) // Clear all accounts from DB
     ]);
 
     // Clear from localStorage
-    const accounts = await getAllAccounts(); // This will now be empty if DB clear was first, or from old cache
-    for (const acc of accounts) { // If accounts were cleared from DB first, this loop might not run for transactions
-      const storageKey = `transactions-${acc.id}-${currentUser.uid}`;
-      localStorage.removeItem(storageKey);
-    }
-    // Clear other localStorage items
+    // Since accounts are cleared, we don't need to iterate through them for transaction keys
+    // but we should clear any general keys if they existed.
+    const allKeys = Object.keys(localStorage);
+    allKeys.forEach(key => {
+        if (key.startsWith(`transactions-`) && key.endsWith(`-${currentUser.uid}`)) {
+            localStorage.removeItem(key);
+        }
+    });
+
     localStorage.removeItem(`userAccounts-${currentUser.uid}`);
     localStorage.removeItem(`userCategories-${currentUser.uid}`);
     localStorage.removeItem(`userTags-${currentUser.uid}`);
     localStorage.removeItem(`userGroups-${currentUser.uid}`);
     localStorage.removeItem(`userSubscriptions-${currentUser.uid}`);
-    localStorage.removeItem(`userPreferences-${currentUser.uid}`); // Also clear preferences
+    localStorage.removeItem(`userLoans-${currentUser.uid}`);
+    localStorage.removeItem(`userCreditCards-${currentUser.uid}`);
+    localStorage.removeItem(`userBudgets-${currentUser.uid}`);
+    localStorage.removeItem(`userPreferences-${currentUser.uid}`);
 
 
     console.log("All user data cleared from Firebase and localStorage for user:", currentUser.uid);
