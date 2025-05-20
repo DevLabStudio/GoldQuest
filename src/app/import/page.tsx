@@ -1,6 +1,7 @@
+
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa, { ParseResult } from 'papaparse';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -21,10 +22,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency, convertCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
-import { AlertCircle, Trash2 } from 'lucide-react';
+import { AlertCircle, Trash2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
+import { exportAllUserDataToCsvs } from '@/services/export';
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -48,19 +50,19 @@ type MappedTransaction = {
   csvDestinationType?: string | null;
 
   date: string;
-  amount: number; 
+  amount: number;
   description: string;
   category: string;
-  currency: string; 
-  foreignAmount?: number | null; 
-  foreignCurrency?: string | null; 
+  currency: string;
+  foreignAmount?: number | null;
+  foreignCurrency?: string | null;
   tags?: string[];
   originalRecord: Record<string, string | null>;
   importStatus: 'pending' | 'success' | 'error' | 'skipped';
   errorMessage?: string | null;
 
-  appSourceAccountId?: string | null; 
-  appDestinationAccountId?: string | null; 
+  appSourceAccountId?: string | null;
+  appDestinationAccountId?: string | null;
   originalImportData?: {
     foreignAmount?: number | null;
     foreignCurrency?: string | null;
@@ -74,7 +76,7 @@ interface AccountPreview {
     initialBalance: number;
     action: 'create' | 'update' | 'no change';
     existingId?: string;
-    category: 'asset' | 'crypto'; 
+    category: 'asset' | 'crypto';
 }
 
 
@@ -101,24 +103,21 @@ const parseAmount = (amountStr: string | undefined): number => {
         cleaned = cleaned.replace(',', '.');
     }
     
-    // Handle cases like "1.234.56" by removing all but last dot if it's a decimal separator
     const dotMatches = cleaned.match(/\./g);
     if (dotMatches && dotMatches.length > 1) {
         const lastDotIndex = cleaned.lastIndexOf('.');
         const partAfterLastDot = cleaned.substring(lastDotIndex + 1);
-        if (partAfterLastDot.length < 3 || partAfterLastDot.match(/^\d+$/) ) { // Assume last dot is decimal if few digits follow
+        if (partAfterLastDot.length < 3 || partAfterLastDot.match(/^\d+$/) ) { 
              cleaned = cleaned.substring(0, lastDotIndex).replace(/\./g, '') + '.' + partAfterLastDot;
-        } else { // Assume all dots are thousand separators
+        } else { 
             cleaned = cleaned.replace(/\./g, '');
         }
     }
-
 
     if (cleaned.endsWith('.') || cleaned.endsWith(',')) {
         cleaned += '0';
     }
     cleaned = cleaned.replace(/^[,.]+|[,.]+$/g, '');
-
 
     const parsed = parseFloat(cleaned);
     return parsed;
@@ -128,7 +127,6 @@ const parseAmount = (amountStr: string | undefined): number => {
 const parseDate = (dateStr: string | undefined): string => {
     if (!dateStr) return format(new Date(), 'yyyy-MM-dd');
     try {
-        // Prioritize ISO with or without time/timezone
         let parsedDate = parseISO(dateStr);
         if (isValid(parsedDate)) {
             return format(parsedDate, 'yyyy-MM-dd');
@@ -145,11 +143,9 @@ const parseDate = (dateStr: string | undefined): string => {
 
         for (const fmt of commonFormats) {
             try {
-                // Try parsing with the full format first
                 parsedDate = parseDateFns(dateStr, fmt, new Date());
                 if (isValid(parsedDate)) return format(parsedDate, 'yyyy-MM-dd');
 
-                // If it has a time component, try parsing just the date part
                 const datePartOnly = dateStr.split('T')[0].split(' ')[0];
                 const dateFormatOnly = fmt.split('T')[0].split(' ')[0];
                 if (datePartOnly !== dateStr && dateFormatOnly !== fmt) {
@@ -159,7 +155,6 @@ const parseDate = (dateStr: string | undefined): string => {
             } catch { /* ignore parse error for this format, try next */ }
         }
         
-        // Final attempt with Date constructor as a broad fallback
         parsedDate = new Date(dateStr);
         if (isValid(parsedDate)) {
             return format(parsedDate, 'yyyy-MM-dd');
@@ -174,19 +169,18 @@ const parseDate = (dateStr: string | undefined): string => {
 
 const parseNameFromDescriptiveString = (text: string | undefined): string | undefined => {
     if (!text) return undefined;
-    // Matches "Account Name" from 'Initial balance for "Account Name"' or 'Saldo inicial para "Account Name"' or 'Saldo inicial da conta Account Name'
     const match = text.match(/(?:Initial balance for |Saldo inicial para(?: d[aeo] conta)?)\s*["']?([^"':]+)(?:["']?|$)/i);
     return match ? match[1]?.trim() : undefined;
 };
 
 
-export default function ImportDataPage() {
+export default function DataManagementPage() {
   const { user, isLoadingAuth } = useAuthContext();
   const [file, setFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [rawData, setRawData] = useState<CsvRecord[]>([]);
   const [parsedData, setParsedData] = useState<MappedTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true); 
   const [importProgress, setImportProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -197,18 +191,23 @@ export default function ImportDataPage() {
   const [isMappingDialogOpen, setIsMappingDialogOpen] = useState(false);
   const [columnMappings, setColumnMappings] = useState<ColumnMapping>({});
   const [isClearing, setIsClearing] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
 
   useEffect(() => {
-    if (isLoadingAuth || !user) return;
+    if (isLoadingAuth || !user) {
+        setIsLoading(false);
+        return;
+    }
 
     let isMounted = true;
     const fetchData = async () => {
-        if (isMounted) setIsLoading(true);
-        if (isMounted) setError(null);
+        if (!isMounted) return;
+        setIsLoading(true); 
+        setError(null);
         try {
-            const [fetchedAccounts, fetchedCategories, fetchedTags] = await Promise.all([
+            const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
                 getAccounts(),
                 getCategories(),
                 getTags()
@@ -217,22 +216,24 @@ export default function ImportDataPage() {
             if (isMounted) {
                 setAccounts(fetchedAccounts);
                 setCategories(fetchedCategories);
-                setTags(fetchedTags);
+                setTags(fetchedTagsList);
             }
-        } catch (err) {
-            console.error("Failed to fetch initial data for import:", err);
+        } catch (err: any) {
+            console.error("Failed to fetch initial data for Data Management page:", err);
             if (isMounted) {
-                setError("Could not load accounts, categories, or tags from database.");
-                toast({ title: "Initialization Error", description: "Failed to load data from database.", variant: "destructive" });
+                setError("Could not load essential page data. Please try refreshing. Details: " + err.message);
+                toast({ title: "Page Load Error", description: "Failed to load initial data (accounts, categories, or tags). " + err.message, variant: "destructive" });
             }
         } finally {
-            if (isMounted) setIsLoading(false);
+            if (isMounted) {
+                setIsLoading(false);
+            }
         }
     };
 
     fetchData();
     return () => { isMounted = false; };
-  }, [toast, user, isLoadingAuth]);
+  }, [user, isLoadingAuth]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -259,7 +260,7 @@ export default function ImportDataPage() {
       return;
     }
 
-    setIsLoading(true);
+    setIsLoading(true); 
     setError(null);
     setParsedData([]);
     setAccountPreviewData([]);
@@ -280,7 +281,6 @@ export default function ImportDataPage() {
               console.warn("Minor CSV parsing errors encountered:", results.errors);
               toast({ title: "CSV Parsing Warning", description: `Some rows might have issues: ${results.errors.map(e=>e.message).slice(0,2).join('; ')}`, variant:"default", duration: 7000});
           }
-
 
          if (!results.data || results.data.length === 0) {
             setError("CSV file is empty or doesn't contain valid data rows.");
@@ -337,12 +337,10 @@ export default function ImportDataPage() {
         setColumnMappings(confirmedMappings);
         setFinalAccountMapForImport({});
 
-
         const coreRequiredFields: AppField[] = ['date', 'amount', 'currency_code', 'transaction_type'];
         let missingFieldLabels = coreRequiredFields
             .filter(field => !confirmedMappings[field])
             .map(field => APP_FIELDS_VALUES.find(val => val === field) || field);
-
 
         if (confirmedMappings.transaction_type) {
             if (!confirmedMappings.source_name) missingFieldLabels.push('source_name (e.g., Firefly \'source_name\')');
@@ -360,22 +358,19 @@ export default function ImportDataPage() {
             return;
         }
 
-
         const currentAccounts = await getAccounts();
         setAccounts(currentAccounts);
 
-
         const { preview } = await previewAccountChanges(
              rawData,
-             confirmedMappings, // Pass all mappings
-             currentAccounts // Pass current accounts
+             confirmedMappings,
+             currentAccounts
          );
          setAccountPreviewData(preview);
          console.log("Account preview generated:", preview);
 
-
         const mapped: MappedTransaction[] = rawData.map((record, index) => {
-          const rowNumber = index + 2; 
+          const rowNumber = index + 2;
 
           const dateCol = confirmedMappings.date!;
           const amountCol = confirmedMappings.amount!;
@@ -384,7 +379,7 @@ export default function ImportDataPage() {
           const categoryCol = confirmedMappings.category;
           const tagsCol = confirmedMappings.tags;
           const notesCol = confirmedMappings.notes;
-          const typeCol = confirmedMappings.transaction_type!; 
+          const typeCol = confirmedMappings.transaction_type!;
           const sourceNameCol = confirmedMappings.source_name!;
           const destNameCol = confirmedMappings.destination_name!;
           const foreignAmountCol = confirmedMappings.foreign_amount;
@@ -393,7 +388,6 @@ export default function ImportDataPage() {
           const destTypeCol = confirmedMappings.destination_type;
           const initialBalanceCol = confirmedMappings.initialBalance;
 
-
           const sanitizedRecord: Record<string, string | null> = {};
             for (const key in record) {
                 if (Object.prototype.hasOwnProperty.call(record, key)) {
@@ -401,13 +395,12 @@ export default function ImportDataPage() {
                 }
             }
 
-
           try {
               const csvTypeRaw = record[typeCol];
               const csvType = csvTypeRaw?.trim().toLowerCase();
 
               const dateValue = record[dateCol];
-              let amountValue = record[amountCol]; 
+              let amountValue = record[amountCol];
               const currencyValue = record[currencyCol];
               const foreignAmountValue = foreignAmountCol ? record[foreignAmountCol] : undefined;
               const foreignCurrencyValue = foreignCurrencyCol ? record[foreignCurrencyCol] : undefined;
@@ -422,37 +415,32 @@ export default function ImportDataPage() {
               let rawSourceType = sourceTypeCol ? record[sourceTypeCol]?.trim().toLowerCase() : undefined;
               let rawDestType = destTypeCol ? record[destTypeCol]?.trim().toLowerCase() : undefined;
 
-
               if (!dateValue) throw new Error(`Row ${rowNumber}: Missing mapped 'Date' data.`);
               if (amountValue === undefined || amountValue.trim() === '') throw new Error(`Row ${rowNumber}: Missing or empty 'Amount' data.`);
               if (!currencyValue || currencyValue.trim() === '') throw new Error(`Row ${rowNumber}: Missing or empty 'Currency Code' data.`);
               if (!csvType) throw new Error(`Row ${rowNumber}: Missing or empty 'Transaction Type' (Firefly 'type') data.`);
 
-
               if (csvType === 'withdrawal' || csvType === 'transfer') {
-                if (!rawSourceName) throw new Error(`Row ${rowNumber}: Missing 'Source Name' for type '${csvType}'. Source name column mapped to: '${sourceNameCol}', value: '${record[sourceNameCol!]}'.`);
+                if (!rawSourceName) throw new Error(`Row ${rowNumber}: Missing 'Source Name' for type '${csvType}'.`);
               }
               if (csvType === 'deposit' || csvType === 'transfer') {
-                 if (!rawDestName) throw new Error(`Row ${rowNumber}: Missing 'Destination Name' for type '${csvType}'. Destination name column mapped to: '${destNameCol}', value: '${record[destNameCol!]}'.`);
+                 if (!rawDestName) throw new Error(`Row ${rowNumber}: Missing 'Destination Name' for type '${csvType}'.`);
               }
               if (csvType === 'transfer' && rawSourceName && rawDestName && rawSourceName.toLowerCase() === rawDestName.toLowerCase()) {
-                  if (rawSourceType?.includes('asset') && rawDestType?.includes('asset')) { // Both are asset accounts
+                  if (rawSourceType?.includes('asset') && rawDestType?.includes('asset')) { 
                     throw new Error(`Row ${rowNumber}: Transfer source and destination asset accounts are the same ('${rawSourceName}').`);
-                  } else {
-                    console.warn(`Row ${rowNumber}: Firefly 'transfer' type row with same source and destination name ('${rawSourceName}') but different account types (Source: ${rawSourceType}, Dest: ${rawDestType}). This is likely an internal adjustment or error in data that will be skipped as a specific transfer.`);
                   }
               }
 
-
-              const parsedAmount = parseAmount(amountValue); 
+              const parsedAmount = parseAmount(amountValue);
               if (isNaN(parsedAmount)) throw new Error(`Row ${rowNumber}: Could not parse amount "${amountValue}".`);
 
               let tempParsedForeignAmount: number | null = null;
               if (foreignAmountValue !== undefined && foreignAmountValue.trim() !== "") {
                   const tempAmount = parseAmount(foreignAmountValue);
                   if (!Number.isNaN(tempAmount)) {
-                      tempParsedForeignAmount = tempAmount; 
-                  } else if (foreignAmountValue.trim() !== '') { 
+                      tempParsedForeignAmount = tempAmount;
+                  } else if (foreignAmountValue.trim() !== '') {
                       console.warn(`Row ${rowNumber}: Could not parse foreign amount "${foreignAmountValue}". It will be ignored.`);
                   }
               }
@@ -464,10 +452,8 @@ export default function ImportDataPage() {
               }
               if (finalParsedForeignCurrency === "") finalParsedForeignCurrency = null;
 
-
               const parsedDate = parseDate(dateValue);
               const parsedTags = tagsValue.split(',').map(tag => tag.trim()).filter(tag => tag.length > 0);
-
 
               let finalDescription = descriptionValue.trim();
               if (notesValue.trim()) {
@@ -479,7 +465,6 @@ export default function ImportDataPage() {
               if (!finalDescription && csvType === 'transfer') finalDescription = `Transfer: ${rawSourceName} to ${rawDestName}`;
               if (!finalDescription) finalDescription = 'Imported Transaction';
 
-
               if (csvType === 'opening balance') {
                    let actualAccountNameForOB: string | undefined;
                    let initialBalanceValue = initialBalanceCol ? record[initialBalanceCol] : amountValue;
@@ -489,22 +474,18 @@ export default function ImportDataPage() {
                         throw new Error(`Row ${rowNumber}: Could not parse initial balance for 'opening balance'. Value was: '${initialBalanceValue}'.`)
                    }
                    
-                   // Prefer name from the side that IS an asset account, if types are clear
                     if (rawDestType === "asset account" && rawDestName) {
                         actualAccountNameForOB = rawDestName;
                     } else if (rawSourceType === "asset account" && rawSourceName) {
                         actualAccountNameForOB = rawSourceName;
                     } else {
-                        // Fallback: try parsing from descriptive strings if types aren't "asset account"
-                        // Firefly stores the "destination_name" for opening balances as something like: 'Initial balance for "My Checking Account"'
                         const parsedFromNameInDest = parseNameFromDescriptiveString(rawDestName);
                         const parsedFromNameInSource = parseNameFromDescriptiveString(rawSourceName);
 
                         if (parsedFromNameInDest) actualAccountNameForOB = parsedFromNameInDest;
                         else if (parsedFromNameInSource) actualAccountNameForOB = parsedFromNameInSource;
-                        else actualAccountNameForOB = rawDestName || rawSourceName; // Broadest fallback
+                        else actualAccountNameForOB = rawDestName || rawSourceName; 
                     }
-
 
                    if (!actualAccountNameForOB) {
                        throw new Error(`Row ${rowNumber}: Could not determine account name for 'opening balance'. Source: ${rawSourceName}, Dest: ${rawDestName}, SourceType: ${rawSourceType}, DestType: ${rawDestType}`);
@@ -512,12 +493,12 @@ export default function ImportDataPage() {
 
                    return {
                        csvRawSourceName: rawSourceName ?? null,
-                       csvRawDestinationName: actualAccountNameForOB ?? null, 
+                       csvRawDestinationName: actualAccountNameForOB ?? null,
                        csvTransactionType: csvType,
                        csvSourceType: rawSourceType,
                        csvDestinationType: rawDestType,
                        date: parsedDate,
-                       amount: parsedInitialBalance, // Use the correctly parsed initial balance
+                       amount: parsedInitialBalance,
                        currency: currencyValue.trim().toUpperCase(),
                        foreignAmount: finalParsedForeignAmount,
                        foreignCurrency: finalParsedForeignCurrency,
@@ -533,7 +514,6 @@ export default function ImportDataPage() {
                    };
               }
 
-              // For regular transactions (withdrawal, deposit, transfer from Firefly CSV)
               return {
                   csvRawSourceName: rawSourceName ?? null,
                   csvRawDestinationName: rawDestName ?? null,
@@ -541,9 +521,9 @@ export default function ImportDataPage() {
                   csvSourceType: rawSourceType,
                   csvDestinationType: rawDestType,
                   date: parsedDate,
-                  amount: parsedAmount, 
+                  amount: parsedAmount,
                   currency: currencyValue.trim().toUpperCase(),
-                  foreignAmount: finalParsedForeignAmount, 
+                  foreignAmount: finalParsedForeignAmount,
                   foreignCurrency: finalParsedForeignCurrency,
                   description: finalDescription,
                   category: categoryValue.trim(),
@@ -565,9 +545,9 @@ export default function ImportDataPage() {
                      }
                  }
                  return {
-                    date: parseDate(record[dateCol!]), 
+                    date: parseDate(record[dateCol!]),
                     amount: 0,
-                    currency: record[currencyCol!]?.trim().toUpperCase() || 'N/A', 
+                    currency: record[currencyCol!]?.trim().toUpperCase() || 'N/A',
                     description: `Error Processing Row ${index + 2}`,
                     category: 'Uncategorized',
                     tags: [],
@@ -609,7 +589,6 @@ export default function ImportDataPage() {
     ): Promise<{ preview: AccountPreview[] }> => {
         
         const mappedTransactions = csvData.map(record => {
-            // Simplified mapping just for account detection for preview
             const type = record[mappings.transaction_type!]?.trim().toLowerCase();
             const sourceName = record[mappings.source_name!]?.trim();
             const destName = record[mappings.destination_name!]?.trim();
@@ -618,7 +597,6 @@ export default function ImportDataPage() {
             const currency = record[mappings.currency_code!]?.trim().toUpperCase();
             const amount = parseAmount(record[mappings.amount!]);
             const initialBalance = parseAmount(record[mappings.initialBalance!] || record[mappings.amount!]);
-
 
             return {
                 csvTransactionType: type,
@@ -636,7 +614,6 @@ export default function ImportDataPage() {
         const preview: AccountPreview[] = [];
         const processedAccountNames = new Set<string>();
 
-
         accountDetailsMap.forEach((details, normalizedName) => {
             const existingAccount = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
             let action: AccountPreview['action'] = 'no change';
@@ -647,25 +624,24 @@ export default function ImportDataPage() {
                     action = 'update';
                 }
                 preview.push({
-                    name: details.name, 
+                    name: details.name,
                     currency: details.currency,
                     initialBalance: finalBalance,
                     action: action,
                     existingId: existingAccount.id,
-                    category: existingAccount.category, 
+                    category: existingAccount.category,
                 });
             } else {
                 preview.push({
-                    name: details.name, 
+                    name: details.name,
                     currency: details.currency,
-                    initialBalance: finalBalance, 
+                    initialBalance: finalBalance,
                     action: 'create',
                     category: details.category || 'asset',
                 });
             }
             processedAccountNames.add(normalizedName);
         });
-
 
         existingAccountsParam.forEach(acc => {
             if (!processedAccountNames.has(acc.name.toLowerCase())) {
@@ -683,7 +659,6 @@ export default function ImportDataPage() {
     };
 
 
-
     const buildAccountUpdateMap = async (
         mappedCsvData: Partial<MappedTransaction>[],
         existingAccountsParam: Account[]
@@ -696,7 +671,6 @@ export default function ImportDataPage() {
                 const recordCurrency = item.currency;
                 const recordAmount = item.amount;
 
-                // Determine the actual account name from the descriptive "destination_name" or "source_name"
                 const descriptiveDestName = item.csvRawDestinationName;
                 const descriptiveSourceName = item.csvRawSourceName;
 
@@ -704,18 +678,16 @@ export default function ImportDataPage() {
                 const parsedNameFromSource = parseNameFromDescriptiveString(descriptiveSourceName);
 
                 if (item.csvDestinationType === "asset account" && descriptiveDestName && !parseNameFromDescriptiveString(descriptiveDestName) ) {
-                    accountNameForOB = descriptiveDestName; // It's already a direct account name
+                    accountNameForOB = descriptiveDestName;
                 } else if (item.csvSourceType === "asset account" && descriptiveSourceName && !parseNameFromDescriptiveString(descriptiveSourceName)) {
-                    accountNameForOB = descriptiveSourceName; // It's already a direct account name
+                    accountNameForOB = descriptiveSourceName;
                 } else if (parsedNameFromDest) {
                     accountNameForOB = parsedNameFromDest;
                 } else if (parsedNameFromSource) {
                      accountNameForOB = parsedNameFromSource;
                 } else {
-                    // Fallback if names are not descriptive as expected for OB
                     accountNameForOB = descriptiveDestName || descriptiveSourceName;
                 }
-
 
                 if (accountNameForOB && recordCurrency && recordAmount !== undefined && !isNaN(recordAmount)) {
                     const normalizedName = accountNameForOB.toLowerCase().trim();
@@ -725,7 +697,6 @@ export default function ImportDataPage() {
                     const sourceIsDescriptive = item.csvRawSourceName && parseNameFromDescriptiveString(item.csvRawSourceName);
                     const destIsDescriptive = item.csvRawDestinationName && parseNameFromDescriptiveString(item.csvRawDestinationName);
 
-
                     if (item.csvDestinationType === "asset account" && !destIsDescriptive && item.csvRawDestinationName?.toLowerCase().includes('crypto')) {
                         accountCategory = 'crypto';
                     } else if (item.csvSourceType === "asset account" && !sourceIsDescriptive && item.csvRawSourceName?.toLowerCase().includes('crypto')) {
@@ -733,7 +704,6 @@ export default function ImportDataPage() {
                     } else if (item.csvDestinationType?.includes('crypto') || item.csvSourceType?.includes('crypto') || accountNameForOB.toLowerCase().includes('crypto') || accountNameForOB.toLowerCase().includes('wallet')) {
                         accountCategory = 'crypto';
                     }
-
 
                     accountMap.set(normalizedName, {
                         name: accountNameForOB,
@@ -757,9 +727,8 @@ export default function ImportDataPage() {
                     (value, index, self) => value.name && self.findIndex(t => t.name?.toLowerCase().trim() === value.name?.toLowerCase().trim()) === index
                 );
 
-
                 for (const accInfo of uniqueAccountNamesAndCurrencies) {
-                     if (accInfo.name && accInfo.currency) { 
+                     if (accInfo.name && accInfo.currency) {
                         const normalizedName = accInfo.name.toLowerCase().trim();
                         let category: 'asset' | 'crypto' = 'asset';
                         if (accInfo.name.toLowerCase().includes('crypto') || 
@@ -772,11 +741,11 @@ export default function ImportDataPage() {
                              const existingAppAccount = existingAccountsParam.find(a => a.name.toLowerCase() === normalizedName);
                              accountMap.set(normalizedName, {
                                 name: accInfo.name,
-                                currency: existingAppAccount?.currency || accInfo.currency, 
+                                currency: existingAppAccount?.currency || accInfo.currency,
                                 initialBalance: existingAppAccount?.balance,
                                 category: existingAppAccount?.category || category,
                             });
-                        } else { 
+                        } else {
                             const currentDetails = accountMap.get(normalizedName)!;
                             if (!currentDetails.currency && accInfo.currency) currentDetails.currency = accInfo.currency;
                             if (currentDetails.category === 'asset' && category === 'crypto') {
@@ -790,18 +759,16 @@ export default function ImportDataPage() {
         return accountMap;
     };
 
-
     const createOrUpdateAccountsAndGetMap = async (
         isPreviewOnly: boolean = false
     ): Promise<{ success: boolean; map: { [key: string]: string }, updatedAccountsList: Account[] }> => {
         let success = true;
-        let currentAppAccounts = [...accounts]; 
+        let currentAppAccounts = [...accounts];
 
         const workingMap = currentAppAccounts.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
              return map;
         }, {} as { [key: string]: string });
-
 
         if (accountPreviewData.length === 0 && !isPreviewOnly) {
             return { success: true, map: workingMap, updatedAccountsList: currentAppAccounts };
@@ -818,42 +785,42 @@ export default function ImportDataPage() {
                     } else if (accPreview.action === 'create') {
                         workingMap[normalizedName] = `preview_create_${normalizedName.replace(/\s+/g, '_')}`;
                     }
-                    continue; 
+                    continue;
                 }
 
                 if (accPreview.action === 'create') {
                     const newAccountData: NewAccountData = {
                         name: accPreview.name,
-                        type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'), 
-                        balance: accPreview.initialBalance, 
+                        type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'),
+                        balance: accPreview.initialBalance,
                         currency: accPreview.currency,
-                        providerName: 'Imported - ' + accPreview.name, 
-                        category: accPreview.category, 
+                        providerName: 'Imported - ' + accPreview.name,
+                        category: accPreview.category,
                         isActive: true,
                         lastActivity: new Date().toISOString(),
                         balanceDifference: 0,
-                        includeInNetWorth: true, 
+                        includeInNetWorth: true,
                     };
                     const createdAccount = await addAccount(newAccountData);
-                    workingMap[normalizedName] = createdAccount.id; 
-                    currentAppAccounts.push(createdAccount); 
+                    workingMap[normalizedName] = createdAccount.id;
+                    currentAppAccounts.push(createdAccount);
                     accountsProcessedCount++;
                 } else if (accPreview.action === 'update' && accPreview.existingId) {
                     const existingAccountForUpdate = currentAppAccounts.find(a => a.id === accPreview.existingId);
                     if (existingAccountForUpdate) {
                         const updatedAccountData: Account = {
                             ...existingAccountForUpdate,
-                            balance: accPreview.initialBalance, 
-                            currency: accPreview.currency, 
-                            lastActivity: new Date().toISOString(), 
-                            category: accPreview.category, 
-                            includeInNetWorth: existingAccountForUpdate.includeInNetWorth ?? true, 
+                            balance: accPreview.initialBalance,
+                            currency: accPreview.currency,
+                            lastActivity: new Date().toISOString(),
+                            category: accPreview.category,
+                            includeInNetWorth: existingAccountForUpdate.includeInNetWorth ?? true,
                         };
                         const savedUpdatedAccount = await updateAccount(updatedAccountData);
                         accountsProcessedCount++;
                         const idx = currentAppAccounts.findIndex(a => a.id === savedUpdatedAccount.id);
                         if (idx !== -1) currentAppAccounts[idx] = savedUpdatedAccount;
-                        else currentAppAccounts.push(savedUpdatedAccount); 
+                        else currentAppAccounts.push(savedUpdatedAccount);
 
                         workingMap[normalizedName] = savedUpdatedAccount.id;
                     }
@@ -864,7 +831,7 @@ export default function ImportDataPage() {
             } catch (err: any) {
                 console.error(`Failed to process account "${accPreview.name}":`, err);
                 toast({ title: "Account Processing Error", description: `Could not process account "${accPreview.name}". Error: ${err.message}`, variant: "destructive", duration: 7000 });
-                success = false; 
+                success = false;
             }
         }
 
@@ -874,7 +841,7 @@ export default function ImportDataPage() {
 
         if (!isPreviewOnly && accountsProcessedCount > 0) {
              const finalFetchedAccounts = await getAccounts();
-             setAccounts(finalFetchedAccounts); 
+             setAccounts(finalFetchedAccounts);
              const finalMap = finalFetchedAccounts.reduce((map, acc) => {
                  map[acc.name.toLowerCase().trim()] = acc.id;
                  return map;
@@ -898,7 +865,7 @@ export default function ImportDataPage() {
       let success = true;
 
       transactionsToProcess.forEach(tx => {
-          if (tx.importStatus === 'pending') { 
+          if (tx.importStatus === 'pending') {
               if (tx.category && !['Uncategorized', 'Initial Balance', 'Transfer', 'Skipped', 'Opening Balance'].includes(tx.category)) {
                   const categoryName = tx.category.trim();
                   if (categoryName && !existingCategoryNames.has(categoryName.toLowerCase())) {
@@ -921,10 +888,10 @@ export default function ImportDataPage() {
           let categoriesAddedCount = 0;
           const addCatPromises = Array.from(categoriesToAdd).map(async (catName) => {
               try {
-                  await addCategoryToDb(catName); 
+                  await addCategoryToDb(catName);
                   categoriesAddedCount++;
               } catch (err: any) {
-                  if (!err.message?.includes('already exists')) { 
+                  if (!err.message?.includes('already exists')) {
                       console.error(`Failed to add category "${catName}":`, err);
                       toast({ title: "Category Add Error", description: `Could not add category "${catName}". Error: ${err.message}`, variant: "destructive" });
                       success = false;
@@ -979,25 +946,23 @@ export default function ImportDataPage() {
       setError(null);
       let overallError = false;
 
-
       let finalMapForTxImport: { [key: string]: string };
       let latestAccountsList: Account[];
       try {
-        const accountMapResult = await createOrUpdateAccountsAndGetMap(false); 
+        const accountMapResult = await createOrUpdateAccountsAndGetMap(false);
         if (!accountMapResult.success) {
             setError("Error processing some accounts during import. Some accounts might not have been created/updated correctly. Review account preview and transaction statuses.");
         }
         finalMapForTxImport = accountMapResult.map;
-        latestAccountsList = accountMapResult.updatedAccountsList; 
-        setAccounts(latestAccountsList); 
-        setFinalAccountMapForImport(finalMapForTxImport); 
+        latestAccountsList = accountMapResult.updatedAccountsList;
+        setAccounts(latestAccountsList);
+        setFinalAccountMapForImport(finalMapForTxImport);
       } catch (finalAccountMapError) {
           console.error("Critical error during account finalization before import.", finalAccountMapError);
           toast({ title: "Account Sync Error", description: "Could not synchronize accounts with the database before starting transaction import. Please try again.", variant: "destructive"});
           setIsLoading(false);
           return;
       }
-
 
       const metadataSuccess = await addMissingCategoriesAndTags(recordsToImport);
       if (!metadataSuccess) {
@@ -1006,36 +971,31 @@ export default function ImportDataPage() {
          return;
       }
 
-      const currentCategoriesList = await getCategories(); 
-      const currentTagsList = await getTags(); 
-
+      const currentCategoriesList = await getCategories();
+      const currentTagsList = await getTags();
 
       const totalToImport = recordsToImport.length;
       let importedCount = 0;
       let errorCount = 0;
-      const updatedDataForDisplay = [...parsedData]; 
-
+      const updatedDataForDisplay = [...parsedData];
 
       const transactionPayloads: (Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & { originalMappedTx: MappedTransaction })[] = [];
 
-
       for (const item of recordsToImport) {
-          const rowNumber = rawData.indexOf(item.originalRecord) + 2; 
+          const rowNumber = rawData.indexOf(item.originalRecord) + 2;
           const itemIndexInDisplay = updatedDataForDisplay.findIndex(d => d.originalRecord === item.originalRecord && d.description === item.description && d.amount === item.amount && d.date === item.date);
-
 
           if (item.csvTransactionType === 'opening balance') {
               if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'skipped', errorMessage: 'Opening Balance (handled via account balance creation/update)' };
-              continue; 
+              continue;
           }
 
           const transactionCategory = currentCategoriesList.find(c => c.name.toLowerCase() === item.category.toLowerCase())?.name || 'Uncategorized';
           const transactionTags = item.tags?.map(tName => currentTagsList.find(t => t.name.toLowerCase() === tName.toLowerCase())?.name || tName).filter(Boolean) || [];
 
-
             if (item.csvTransactionType === 'transfer') {
-                const csvAmount = item.amount; // Primary amount from CSV 'amount' column
-                const csvCurrency = item.currency; // Primary currency from CSV 'currency_code'
+                const csvAmount = item.amount; 
+                const csvCurrency = item.currency; 
                 const csvForeignAmount = item.originalImportData?.foreignAmount;
                 const csvForeignCurrency = item.originalImportData?.foreignCurrency;
                 
@@ -1068,20 +1028,16 @@ export default function ImportDataPage() {
 
                 const transferDesc = item.description || `Transfer from ${fromAccountDetails.name} to ${toAccountDetails.name}`;
                 
-                let debitAmount = -Math.abs(csvAmount); // Amount leaving source_name
-                let debitCurrency = csvCurrency;       // Currency of source_name transaction
-                let creditAmount = Math.abs(csvAmount);  // Amount arriving at destination_name
-                let creditCurrency = csvCurrency;     // Currency of destination_name transaction
+                let debitAmount = -Math.abs(csvAmount); 
+                let debitCurrency = csvCurrency;       
+                let creditAmount = Math.abs(csvAmount);  
+                let creditCurrency = csvCurrency;     
 
-                // If foreign values are present, it signals a cross-currency transfer
                 if (csvForeignAmount != null && csvForeignCurrency && csvForeignCurrency.trim() !== '') {
-                    // Assume Firefly's primary 'amount' & 'currency_code' are for the source,
-                    // and 'foreign_amount' & 'foreign_currency_code' are for the destination.
                     creditAmount = Math.abs(csvForeignAmount);
                     creditCurrency = csvForeignCurrency;
                 }
 
-                // Ensure debitAmount and creditAmount are numbers and signed correctly.
                 transactionPayloads.push({ 
                     accountId: fromAccountId,
                     date: item.date,
@@ -1108,7 +1064,7 @@ export default function ImportDataPage() {
             } else if (item.csvTransactionType === 'withdrawal' || item.csvTransactionType === 'deposit') {
                 let accountNameForTx: string | undefined | null;
                 let accountIdForTx: string | undefined;
-                let payloadAmount = item.amount; // Already signed from Firefly CSV
+                let payloadAmount = item.amount; 
                 let payloadCurrency = item.currency;
 
                 if (item.csvTransactionType === 'withdrawal') {
@@ -1117,7 +1073,7 @@ export default function ImportDataPage() {
                          if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'error', errorMessage: `Row ${rowNumber}: Withdrawal from non-asset account type '${item.csvSourceType}' for source '${accountNameForTx}'. Skipping.` };
                          errorCount++; overallError = true; continue;
                     }
-                } else { // deposit
+                } else { 
                     accountNameForTx = item.csvRawDestinationName;
                      if (item.csvDestinationType !== 'asset account' && item.csvDestinationType !== 'default asset account') {
                          if(itemIndexInDisplay !== -1) updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'error', errorMessage: `Row ${rowNumber}: Deposit to non-asset account type '${item.csvDestinationType}' for destination '${accountNameForTx}'. Skipping.` };
@@ -1141,10 +1097,6 @@ export default function ImportDataPage() {
                     errorCount++; overallError = true; continue;
                 }
                 
-                // For withdrawals/deposits with foreign currency, Firefly's 'amount' is in 'currency_code'.
-                // 'foreign_amount' in 'foreign_currency_code' is informational.
-                // We will store the primary amount and currency. The foreign details are in originalImportData.
-
                 transactionPayloads.push({
                     accountId: accountIdForTx,
                     date: item.date,
@@ -1161,7 +1113,6 @@ export default function ImportDataPage() {
                errorCount++; overallError = true;
           }
       }
-
 
       transactionPayloads.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
@@ -1200,7 +1151,6 @@ export default function ImportDataPage() {
           setParsedData([...updatedDataForDisplay]); 
       }
 
-
       setIsLoading(false);
       const finalMessage = `Import finished. Successfully processed transaction entries: ${importedCount}. Failed/Skipped rows (from preview): ${errorCount + parsedData.filter(d => d.importStatus === 'skipped').length}.`;
       toast({
@@ -1234,7 +1184,6 @@ export default function ImportDataPage() {
         try {
             await clearAllSessionTransactions();
 
-
             setAccounts([]);
             setCategories([]);
             setTags([]);
@@ -1246,7 +1195,6 @@ export default function ImportDataPage() {
             setColumnMappings({});
             setImportProgress(0);
             setFinalAccountMapForImport({});
-
 
             const fileInput = document.getElementById('csv-file') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
@@ -1270,7 +1218,6 @@ export default function ImportDataPage() {
         setParsedData(prevData => {
             const newData = [...prevData];
             let transactionToUpdate = { ...newData[originalIndexInData] }; 
-
 
             if (transactionToUpdate.importStatus !== 'pending') {
                 toast({ title: "Edit Blocked", description: "Cannot edit transactions that are not pending import.", variant: "destructive" });
@@ -1335,7 +1282,6 @@ export default function ImportDataPage() {
     if (!parsedData || parsedData.length === 0) return {};
     const grouped: { [accountDisplayName: string]: MappedTransaction[] } = {};
 
-
     const getDisplayableAccountName = (csvName?: string | null, csvType?: string | null): string => {
         if (!csvName) return "Unknown / External";
         const lowerCsvName = csvName.toLowerCase().trim();
@@ -1353,9 +1299,8 @@ export default function ImportDataPage() {
         const previewAccount = accountPreviewData.find(ap => ap.name.toLowerCase().trim() === lowerCsvName);
         if (previewAccount) return previewAccount.name; 
 
-        return csvName; // Fallback to raw CSV name if no match found
+        return csvName; 
     };
-
 
     parsedData.forEach(item => {
         let accountKeyForGrouping = "Unknown / Skipped / Error";
@@ -1380,14 +1325,12 @@ export default function ImportDataPage() {
             accountKeyForGrouping = `account-${accountDisplayName}-deposit`;
         }
 
-
         if (!grouped[accountKeyForGrouping]) {
             grouped[accountKeyForGrouping] = [];
         }
         (item as any)._accountDisplayNameForGroupHeader = accountDisplayName;
         grouped[accountKeyForGrouping].push(item);
     });
-
 
     return Object.entries(grouped)
       .sort(([keyA], [keyB]) => {
@@ -1404,17 +1347,16 @@ export default function ImportDataPage() {
   }, [parsedData, accountPreviewData, finalAccountMapForImport, accounts]);
 
 
-
   if (isLoadingAuth) {
       return <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 text-center"><p>Loading authentication...</p></div>;
   }
   if (!user && !isLoadingAuth) {
-      return <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 text-center"><p>Please <Link href="/login" className="text-primary underline">login</Link> to import data.</p></div>;
+      return <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 text-center"><p>Please <Link href="/login" className="text-primary underline">login</Link> to manage data.</p></div>;
   }
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Import Data</h1>
+      <h1 className="text-3xl font-bold mb-6">Data Management</h1>
 
       <Card className="mb-8">
         <CardHeader>
@@ -1426,7 +1368,7 @@ export default function ImportDataPage() {
         <CardContent className="space-y-6">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="csv-file">Select CSV File</Label>
-            <Input id="csv-file" type="file" accept=".csv,text/csv" onChange={handleFileChange} disabled={isLoading}/>
+            <Input id="csv-file" type="file" accept=".csv,text/csv" onChange={handleFileChange} disabled={isLoading && !isMappingDialogOpen}/>
           </div>
 
           {error && (
@@ -1437,18 +1379,20 @@ export default function ImportDataPage() {
              </Alert>
           )}
 
-
           <div className="flex flex-wrap gap-4">
-             <Button onClick={handleParseAndMap} disabled={!file || isLoading}>
-                {isLoading && !isMappingDialogOpen ? "Parsing..." : "Parse & Map Columns"}
+             <Button onClick={handleParseAndMap} disabled={!file || (isLoading && !isMappingDialogOpen)}>
+                {isLoading && !isMappingDialogOpen && !importProgress ? "Parsing..." : "Parse & Map Columns"}
              </Button>
-             <Button onClick={handleImport} disabled={isLoading || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
+             <Button onClick={handleImport} disabled={(isLoading && !isMappingDialogOpen) || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
                {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Transactions"}
              </Button>
-
+              <Button onClick={handleExportData} disabled={isExporting || (isLoading && !isMappingDialogOpen)}>
+                <Download className="mr-2 h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export All Data"}
+              </Button>
                <AlertDialog>
                    <AlertDialogTrigger asChild>
-                       <Button variant="destructive" disabled={isLoading || isClearing}>
+                       <Button variant="destructive" disabled={(isLoading && !isMappingDialogOpen) || isClearing}>
                            <Trash2 className="mr-2 h-4 w-4" />
                            {isClearing ? "Clearing..." : "Clear All User Data (DB)"}
                        </Button>
@@ -1476,7 +1420,6 @@ export default function ImportDataPage() {
         </CardContent>
       </Card>
 
-
         <Dialog open={isMappingDialogOpen} onOpenChange={setIsMappingDialogOpen}>
             <DialogContent className="sm:max-w-3xl">
                 <DialogHeader>
@@ -1493,8 +1436,6 @@ export default function ImportDataPage() {
                 />
             </DialogContent>
         </Dialog>
-
-
 
        {accountPreviewData.length > 0 && !isLoading && (
             <Card className="mb-8">
@@ -1533,8 +1474,6 @@ export default function ImportDataPage() {
                 </CardContent>
             </Card>
         )}
-
-
 
       {parsedData.length > 0 && (
         <Card>

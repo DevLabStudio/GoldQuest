@@ -26,7 +26,7 @@ import { AlertCircle, Trash2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { exportAllUserDataToCsvs } from '@/services/export'; // Import the export function
+import { exportAllUserDataToCsvs } from '@/services/export';
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -180,7 +180,7 @@ export default function DataManagementPage() {
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [rawData, setRawData] = useState<CsvRecord[]>([]);
   const [parsedData, setParsedData] = useState<MappedTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true); // Start with true for initial data load
+  const [isLoading, setIsLoading] = useState(true); 
   const [importProgress, setImportProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -204,7 +204,7 @@ export default function DataManagementPage() {
     let isMounted = true;
     const fetchData = async () => {
         if (!isMounted) return;
-        setIsLoading(true); // Set loading true at the start of data fetching
+        setIsLoading(true); 
         setError(null);
         try {
             const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
@@ -233,7 +233,7 @@ export default function DataManagementPage() {
 
     fetchData();
     return () => { isMounted = false; };
-  }, [user, isLoadingAuth]); // Only depend on user and isLoadingAuth
+  }, [user, isLoadingAuth]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -260,7 +260,7 @@ export default function DataManagementPage() {
       return;
     }
 
-    setIsLoading(true); // For file parsing specifically
+    setIsLoading(true); 
     setError(null);
     setParsedData([]);
     setAccountPreviewData([]);
@@ -1558,4 +1558,3 @@ export default function DataManagementPage() {
     </div>
   );
 }
-
