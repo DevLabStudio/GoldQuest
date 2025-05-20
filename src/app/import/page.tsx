@@ -16,7 +16,7 @@ import { getAccounts, addAccount, type Account, type NewAccountData, updateAccou
 import { getCategories, addCategory as addCategoryToDb, type Category } from '@/services/categories';
 import { getTags, addTag as addTagToDb, type Tag } from '@/services/tags';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
@@ -1209,6 +1209,24 @@ export default function DataManagementPage() {
         }
     };
 
+    const handleExportData = async () => {
+        if (!user) {
+        toast({ title: "Error", description: "User not authenticated.", variant: "destructive" });
+        return;
+        }
+        setIsExporting(true);
+        toast({ title: "Exporting Data", description: "Preparing your data for download. This may take a moment..." });
+        try {
+        await exportAllUserDataToCsvs();
+        toast({ title: "Export Complete", description: "Your data files should be downloading now. Please check your browser's download folder." });
+        } catch (error) {
+        console.error("Export failed:", error);
+        toast({ title: "Export Failed", description: "Could not export your data. Please try again.", variant: "destructive" });
+        } finally {
+        setIsExporting(false);
+        }
+    };
+
 
     const handleTransactionFieldChange = (
         originalIndexInData: number, 
@@ -1405,7 +1423,7 @@ export default function DataManagementPage() {
                            </AlertDialogDescription>
                        </AlertDialogHeader>
                        <AlertDialogFooter>
-                           <AlertDialogCancel disabled={isClearing}>Cancel</AlertDialogCancel>
+                           <AlertDialogCancel onClick={() => setIsClearing(false)} disabled={isClearing}>Cancel</AlertDialogCancel>
                            <AlertDialogAction onClick={handleClearData} disabled={isClearing} className="bg-destructive hover:bg-destructive/90">
                                {isClearing ? "Clearing..." : "Yes, Clear All My Data"}
                            </AlertDialogAction>
@@ -1558,3 +1576,4 @@ export default function DataManagementPage() {
     </div>
   );
 }
+
