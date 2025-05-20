@@ -130,6 +130,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control';
   const isOrganizationActive = isClient && (pathname === '/organization' || pathname.startsWith('/categories/') || pathname.startsWith('/tags/') || pathname.startsWith('/groups/'));
   const isAccountsActive = isClient && (pathname === '/accounts' || pathname.startsWith('/accounts/'));
+  const isDataManagementActive = isClient && pathname === '/data-management';
 
 
   if (!isClient || isLoadingAuth) {
@@ -294,10 +295,10 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                        <Link href="/import" passHref>
-                        <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
-                            <Upload />
-                            <span>Import Data</span>
+                        <Link href="/data-management" passHref>
+                        <SidebarMenuButton tooltip="Data Management" isActive={isDataManagementActive}>
+                            <ArchiveIcon />
+                            <span>Data Management</span>
                         </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
