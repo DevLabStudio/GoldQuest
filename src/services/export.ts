@@ -12,11 +12,12 @@ import { getLoans, type Loan } from './loans';
 import { getCreditCards, type CreditCard } from './credit-cards';
 import { getBudgets, type Budget } from './budgets';
 import { getUserPreferences, type UserPreferences } from '@/lib/preferences';
+import { format as formatDateFns, isValid, parseISO } from 'date-fns';
 
 function downloadCsv(csvString: string, filename: string) {
   const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
   const link = document.createElement('a');
-  if (link.download !== undefined) { // feature detection
+  if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
     link.setAttribute('href', url);
     link.setAttribute('download', filename);
@@ -26,10 +27,28 @@ function downloadCsv(csvString: string, filename: string) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } else {
-    // Fallback for browsers that don't support HTML5 download attribute
     alert('CSV download is not supported by your browser. Please try a different browser.');
   }
 }
+
+const formatDateForExport = (dateInput: object | string | undefined | null): string => {
+    if (!dateInput) return '';
+    if (typeof dateInput === 'string') {
+        const parsed = parseISO(dateInput);
+        return isValid(parsed) ? formatDateFns(parsed, "yyyy-MM-dd'T'HH:mm:ssXXX") : dateInput;
+    }
+    // Assuming serverTimestamp object will be a number (timestamp) when fetched,
+    // but Firebase often returns it as an object initially. If it's already a string, use it.
+    // For actual numeric timestamps from Firebase, you'd convert new Date(timestamp)
+    // This simplistic approach assumes it's either a parsable string or we return a placeholder.
+    // A more robust solution would handle Firebase serverTimestamps correctly after they resolve.
+    if (typeof dateInput === 'object') {
+        // Placeholder for unresolved serverTimestamp. Real value needs server-side conversion or client-side handling post-fetch.
+        return new Date().toISOString(); // Fallback for unresolved server timestamps
+    }
+    return String(dateInput); // Fallback for other types
+};
+
 
 interface ExportableTransaction extends Omit<Transaction, 'tags' | 'originalImportData' | 'createdAt' | 'updatedAt'> {
     tags?: string; // Pipe-separated
@@ -54,117 +73,137 @@ interface ExportableBudget extends Omit<Budget, 'selectedIds' | 'createdAt' | 'u
 
 
 export async function exportAllUserDataToCsvs(): Promise<void> {
+  let combinedCsvString = "";
+  const sectionSeparator = "\n\n"; // Add a couple of newlines between sections
+
   try {
+    const appendToCombinedCsv = (header: string, data: any[]) => {
+        if (data && data.length > 0) {
+            combinedCsvString += `### ${header} ###\n`;
+            combinedCsvString += Papa.unparse(data);
+            combinedCsvString += sectionSeparator;
+            console.log(`Appended ${header} to CSV export.`);
+        } else {
+            combinedCsvString += `### ${header} ###\n(No data)\n`;
+            combinedCsvString += sectionSeparator;
+            console.log(`No data to append for ${header}.`);
+        }
+    };
+
     // 1. User Preferences
+    console.log("Exporting: Fetching User Preferences...");
     const preferences = await getUserPreferences();
-    if (preferences) {
-      const preferencesCsv = Papa.unparse([preferences]);
-      downloadCsv(preferencesCsv, 'user_preferences.csv');
+    if (preferences) { // Ensure preferences is not null/undefined
+        appendToCombinedCsv("USER PREFERENCES", [preferences]);
+    } else {
+        appendToCombinedCsv("USER PREFERENCES", []);
     }
 
     // 2. Categories
+    console.log("Exporting: Fetching Categories...");
     const categories = await getCategories();
-    if (categories.length > 0) {
-      const categoriesCsv = Papa.unparse(categories);
-      downloadCsv(categoriesCsv, 'categories.csv');
-    }
+    appendToCombinedCsv("CATEGORIES", categories);
 
     // 3. Tags
+    console.log("Exporting: Fetching Tags...");
     const tags = await getTags();
-    if (tags.length > 0) {
-      const tagsCsv = Papa.unparse(tags);
-      downloadCsv(tagsCsv, 'tags.csv');
-    }
+    appendToCombinedCsv("TAGS", tags);
 
     // 4. Groups
+    console.log("Exporting: Fetching Groups...");
     const groups = await getGroups();
-    if (groups.length > 0) {
-      const exportableGroups: ExportableGroup[] = groups.map(g => ({
+    const exportableGroups: ExportableGroup[] = groups.map(g => ({
         ...g,
-        categoryIds: g.categoryIds.join('|'),
-      }));
-      const groupsCsv = Papa.unparse(exportableGroups);
-      downloadCsv(groupsCsv, 'groups.csv');
-    }
+        categoryIds: g.categoryIds ? g.categoryIds.join('|') : '',
+    }));
+    appendToCombinedCsv("GROUPS", exportableGroups);
 
     // 5. Accounts
+    console.log("Exporting: Fetching Accounts...");
     const accounts = await getAccounts();
-    if (accounts.length > 0) {
-      const accountsCsv = Papa.unparse(accounts);
-      downloadCsv(accountsCsv, 'accounts.csv');
+    appendToCombinedCsv("ACCOUNTS", accounts);
 
-      // 6. Transactions (fetch per account, then combine)
-      let allTransactions: Transaction[] = [];
-      for (const account of accounts) {
-        const accountTransactions = await getTransactions(account.id);
-        allTransactions = allTransactions.concat(accountTransactions);
-      }
-      if (allTransactions.length > 0) {
-        const exportableTransactions: ExportableTransaction[] = allTransactions.map(tx => ({
-          ...tx,
-          tags: tx.tags?.join('|') || '',
-          originalImportData: tx.originalImportData ? JSON.stringify(tx.originalImportData) : '',
-          createdAt: typeof tx.createdAt === 'object' ? new Date().toISOString() : tx.createdAt, // Placeholder for serverTimestamp
-          updatedAt: typeof tx.updatedAt === 'object' ? new Date().toISOString() : tx.updatedAt, // Placeholder for serverTimestamp
-        }));
-        const transactionsCsv = Papa.unparse(exportableTransactions);
-        downloadCsv(transactionsCsv, 'transactions.csv');
-      }
+    // 6. Transactions (fetch per account, then combine)
+    if (accounts.length > 0) {
+        console.log("Exporting: Fetching Transactions...");
+        let allTransactions: Transaction[] = [];
+        for (const account of accounts) {
+            try {
+                const accountTransactions = await getTransactions(account.id);
+                allTransactions = allTransactions.concat(accountTransactions);
+            } catch (accTxError) {
+                console.error(`Error fetching transactions for account ${account.id}:`, accTxError);
+            }
+        }
+        if (allTransactions.length > 0) {
+            const exportableTransactions: ExportableTransaction[] = allTransactions.map(tx => ({
+              ...tx,
+              tags: tx.tags ? tx.tags.join('|') : '',
+              originalImportData: tx.originalImportData ? JSON.stringify(tx.originalImportData) : '',
+              createdAt: formatDateForExport(tx.createdAt),
+              updatedAt: formatDateForExport(tx.updatedAt),
+            }));
+            appendToCombinedCsv("TRANSACTIONS", exportableTransactions);
+        } else {
+             appendToCombinedCsv("TRANSACTIONS", []);
+        }
+    } else {
+        appendToCombinedCsv("TRANSACTIONS", []);
     }
+
 
     // 7. Subscriptions
+    console.log("Exporting: Fetching Subscriptions...");
     const subscriptions = await getSubscriptions();
-    if (subscriptions.length > 0) {
-      const exportableSubscriptions: ExportableSubscription[] = subscriptions.map(sub => ({
+    const exportableSubscriptions: ExportableSubscription[] = subscriptions.map(sub => ({
         ...sub,
-        tags: sub.tags?.join('|') || '',
-        createdAt: typeof sub.createdAt === 'object' ? new Date().toISOString() : sub.createdAt,
-        updatedAt: typeof sub.updatedAt === 'object' ? new Date().toISOString() : sub.updatedAt,
-      }));
-      const subscriptionsCsv = Papa.unparse(exportableSubscriptions);
-      downloadCsv(subscriptionsCsv, 'subscriptions.csv');
-    }
+        tags: sub.tags ? sub.tags.join('|') : '',
+        createdAt: formatDateForExport(sub.createdAt),
+        updatedAt: formatDateForExport(sub.updatedAt),
+    }));
+    appendToCombinedCsv("SUBSCRIPTIONS", exportableSubscriptions);
 
     // 8. Loans
+    console.log("Exporting: Fetching Loans...");
     const loans = await getLoans();
-    if (loans.length > 0) {
-       const exportableLoans = loans.map(loan => ({
+    const exportableLoans = loans.map(loan => ({
         ...loan,
-        createdAt: typeof loan.createdAt === 'object' ? new Date().toISOString() : loan.createdAt,
-        updatedAt: typeof loan.updatedAt === 'object' ? new Date().toISOString() : loan.updatedAt,
-      }));
-      const loansCsv = Papa.unparse(exportableLoans);
-      downloadCsv(loansCsv, 'loans.csv');
-    }
+        createdAt: formatDateForExport(loan.createdAt),
+        updatedAt: formatDateForExport(loan.updatedAt),
+    }));
+    appendToCombinedCsv("LOANS", exportableLoans);
 
     // 9. Credit Cards
+    console.log("Exporting: Fetching Credit Cards...");
     const creditCards = await getCreditCards();
-    if (creditCards.length > 0) {
-      const exportableCreditCards = creditCards.map(card => ({
+    const exportableCreditCards = creditCards.map(card => ({
         ...card,
-        createdAt: typeof card.createdAt === 'object' ? new Date().toISOString() : card.createdAt,
-        updatedAt: typeof card.updatedAt === 'object' ? new Date().toISOString() : card.updatedAt,
-      }));
-      const creditCardsCsv = Papa.unparse(exportableCreditCards);
-      downloadCsv(creditCardsCsv, 'credit_cards.csv');
-    }
+        createdAt: formatDateForExport(card.createdAt),
+        updatedAt: formatDateForExport(card.updatedAt),
+    }));
+    appendToCombinedCsv("CREDIT CARDS", exportableCreditCards);
 
     // 10. Budgets
+    console.log("Exporting: Fetching Budgets...");
     const budgets = await getBudgets();
-    if (budgets.length > 0) {
-      const exportableBudgets: ExportableBudget[] = budgets.map(b => ({
+    const exportableBudgets: ExportableBudget[] = budgets.map(b => ({
         ...b,
-        selectedIds: b.selectedIds.join('|'),
-        createdAt: typeof b.createdAt === 'object' ? new Date().toISOString() : b.createdAt,
-        updatedAt: typeof b.updatedAt === 'object' ? new Date().toISOString() : b.updatedAt,
-      }));
-      const budgetsCsv = Papa.unparse(exportableBudgets);
-      downloadCsv(budgetsCsv, 'budgets.csv');
+        selectedIds: b.selectedIds ? b.selectedIds.join('|') : '',
+        createdAt: formatDateForExport(b.createdAt),
+        updatedAt: formatDateForExport(b.updatedAt),
+    }));
+    appendToCombinedCsv("BUDGETS", exportableBudgets);
+
+    // Download the combined CSV
+    if (combinedCsvString.trim() !== "") {
+        downloadCsv(combinedCsvString, 'goldquest_full_backup.csv');
+        console.log('Combined CSV data prepared for download.');
+    } else {
+        console.log('No data found to export.');
     }
 
-    console.log('All user data prepared for download.');
   } catch (error) {
-    console.error("Error exporting user data:", error);
+    console.error("Error exporting all user data:", error);
     throw error;
   }
 }
