@@ -2,6 +2,7 @@
 'use client';
 
 import Papa from 'papaparse';
+import JSZip from 'jszip';
 import { getAccounts, type Account } from './account-sync';
 import { getCategories, type Category } from './categories';
 import { getTags, type Tag } from './tags';
@@ -14,8 +15,7 @@ import { getBudgets, type Budget } from './budgets';
 import { getUserPreferences, type UserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, isValid, parseISO } from 'date-fns';
 
-function downloadCsv(csvString: string, filename: string) {
-  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+function downloadBlob(blob: Blob, filename: string) {
   const link = document.createElement('a');
   if (link.download !== undefined) {
     const url = URL.createObjectURL(blob);
@@ -27,32 +27,25 @@ function downloadCsv(csvString: string, filename: string) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } else {
-    alert('CSV download is not supported by your browser. Please try a different browser.');
+    alert('File download is not supported by your browser.');
   }
 }
 
 const formatDateForExport = (dateInput: object | string | undefined | null): string => {
     if (!dateInput) return '';
     if (typeof dateInput === 'string') {
-        // Check if it's already a fully qualified ISO string (e.g., from serverTimestamp or new Date().toISOString())
-        // or a simple YYYY-MM-DD date.
-        const parsed = parseISO(dateInput); // parseISO is robust
+        const parsed = parseISO(dateInput);
         return isValid(parsed) ? formatDateFns(parsed, "yyyy-MM-dd'T'HH:mm:ssXXX") : dateInput;
     }
-    // This case is tricky for Firebase serverTimestamp, which is an object initially.
-    // For simplicity, if it's an object here, it means it wasn't resolved to a number/string.
-    // A proper solution would handle the Firebase ServerValue.TIMESTAMP object correctly,
-    // or ensure data is fetched *after* timestamps are resolved.
-    // For now, returning an empty string or a placeholder for unresolved objects.
     if (typeof dateInput === 'object' && dateInput !== null) {
-        // If it has a toDate method (like a Firebase Timestamp object *after* conversion client-side)
         if ('toDate' in dateInput && typeof (dateInput as any).toDate === 'function') {
              return formatDateFns((dateInput as any).toDate(), "yyyy-MM-dd'T'HH:mm:ssXXX");
         }
-        // Fallback for other objects or unresolved serverTimestamps
-        return new Date().toISOString(); // Or consider '' or a placeholder
+        // For Firebase serverTimestamp placeholder object, convert to current date as an example
+        // In a real scenario, this would be handled by ensuring data is read after server resolves it
+        return new Date().toISOString();
     }
-    if (typeof dateInput === 'number') { // Assuming numeric timestamp
+    if (typeof dateInput === 'number') {
         return formatDateFns(new Date(dateInput), "yyyy-MM-dd'T'HH:mm:ssXXX");
     }
     return String(dateInput);
@@ -60,57 +53,51 @@ const formatDateForExport = (dateInput: object | string | undefined | null): str
 
 
 interface ExportableTransaction extends Omit<Transaction, 'tags' | 'originalImportData' | 'createdAt' | 'updatedAt'> {
-    tags?: string; // Pipe-separated
-    originalImportData?: string; // JSON string
+    tags?: string;
+    originalImportData?: string;
     createdAt?: string;
     updatedAt?: string;
 }
 interface ExportableSubscription extends Omit<Subscription, 'tags' | 'createdAt' | 'updatedAt'> {
-    tags?: string; // Pipe-separated
+    tags?: string;
     createdAt?: string;
     updatedAt?: string;
 }
 
 interface ExportableGroup extends Omit<Group, 'categoryIds'> {
-    categoryIds?: string; // Pipe-separated
+    categoryIds?: string;
 }
 interface ExportableBudget extends Omit<Budget, 'selectedIds' | 'createdAt' | 'updatedAt'> {
-    selectedIds?: string; // Pipe-separated
+    selectedIds?: string;
     createdAt?: string;
     updatedAt?: string;
 }
 
 
-export async function exportAllUserDataToCsvs(): Promise<void> {
+export async function exportAllUserDataToZip(): Promise<void> {
+  const zip = new JSZip();
+  const timestamp = formatDateFns(new Date(), 'yyyyMMdd_HHmmss');
+  const zipFilename = `goldquest_backup_${timestamp}.zip`;
+
   try {
-    // 1. User Preferences
     console.log("Exporting: Fetching User Preferences...");
     const preferences = await getUserPreferences();
     if (preferences) {
-      downloadCsv(Papa.unparse([preferences]), 'goldquest_preferences.csv');
-    } else {
-      console.log("No preferences data to export.");
+      zip.file('goldquest_preferences.csv', Papa.unparse([preferences]));
     }
 
-    // 2. Categories
     console.log("Exporting: Fetching Categories...");
     const categories = await getCategories();
     if (categories.length > 0) {
-        downloadCsv(Papa.unparse(categories), 'goldquest_categories.csv');
-    } else {
-        console.log("No categories data to export.");
+        zip.file('goldquest_categories.csv', Papa.unparse(categories));
     }
 
-    // 3. Tags
     console.log("Exporting: Fetching Tags...");
     const tags = await getTags();
      if (tags.length > 0) {
-        downloadCsv(Papa.unparse(tags), 'goldquest_tags.csv');
-    } else {
-        console.log("No tags data to export.");
+        zip.file('goldquest_tags.csv', Papa.unparse(tags));
     }
 
-    // 4. Groups
     console.log("Exporting: Fetching Groups...");
     const groups = await getGroups();
     if (groups.length > 0) {
@@ -118,22 +105,15 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
             ...g,
             categoryIds: g.categoryIds ? g.categoryIds.join('|') : '',
         }));
-        downloadCsv(Papa.unparse(exportableGroups), 'goldquest_groups.csv');
-    } else {
-        console.log("No groups data to export.");
+        zip.file('goldquest_groups.csv', Papa.unparse(exportableGroups));
     }
 
-
-    // 5. Accounts
     console.log("Exporting: Fetching Accounts...");
     const accounts = await getAccounts();
      if (accounts.length > 0) {
-        downloadCsv(Papa.unparse(accounts), 'goldquest_accounts.csv');
-    } else {
-        console.log("No accounts data to export.");
+        zip.file('goldquest_accounts.csv', Papa.unparse(accounts));
     }
 
-    // 6. Transactions (fetch per account, then combine)
     if (accounts.length > 0) {
         console.log("Exporting: Fetching Transactions...");
         let allTransactions: Transaction[] = [];
@@ -153,16 +133,10 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
               createdAt: formatDateForExport(tx.createdAt),
               updatedAt: formatDateForExport(tx.updatedAt),
             }));
-            downloadCsv(Papa.unparse(exportableTransactions), 'goldquest_transactions.csv');
-        } else {
-             console.log("No transactions data to export.");
+            zip.file('goldquest_transactions.csv', Papa.unparse(exportableTransactions));
         }
-    } else {
-        console.log("No accounts found, skipping transaction export.");
     }
 
-
-    // 7. Subscriptions
     console.log("Exporting: Fetching Subscriptions...");
     const subscriptions = await getSubscriptions();
     if (subscriptions.length > 0) {
@@ -172,13 +146,9 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
             createdAt: formatDateForExport(sub.createdAt),
             updatedAt: formatDateForExport(sub.updatedAt),
         }));
-        downloadCsv(Papa.unparse(exportableSubscriptions), 'goldquest_subscriptions.csv');
-    } else {
-        console.log("No subscriptions data to export.");
+        zip.file('goldquest_subscriptions.csv', Papa.unparse(exportableSubscriptions));
     }
 
-
-    // 8. Loans
     console.log("Exporting: Fetching Loans...");
     const loans = await getLoans();
     if (loans.length > 0) {
@@ -187,12 +157,9 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
             createdAt: formatDateForExport(loan.createdAt),
             updatedAt: formatDateForExport(loan.updatedAt),
         }));
-        downloadCsv(Papa.unparse(exportableLoans), 'goldquest_loans.csv');
-    } else {
-        console.log("No loans data to export.");
+        zip.file('goldquest_loans.csv', Papa.unparse(exportableLoans));
     }
 
-    // 9. Credit Cards
     console.log("Exporting: Fetching Credit Cards...");
     const creditCards = await getCreditCards();
     if (creditCards.length > 0) {
@@ -201,13 +168,9 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
             createdAt: formatDateForExport(card.createdAt),
             updatedAt: formatDateForExport(card.updatedAt),
         }));
-        downloadCsv(Papa.unparse(exportableCreditCards), 'goldquest_credit_cards.csv');
-    } else {
-        console.log("No credit cards data to export.");
+        zip.file('goldquest_credit_cards.csv', Papa.unparse(exportableCreditCards));
     }
 
-
-    // 10. Budgets
     console.log("Exporting: Fetching Budgets...");
     const budgets = await getBudgets();
     if (budgets.length > 0) {
@@ -217,15 +180,16 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
             createdAt: formatDateForExport(b.createdAt),
             updatedAt: formatDateForExport(b.updatedAt),
         }));
-        downloadCsv(Papa.unparse(exportableBudgets), 'goldquest_budgets.csv');
-    } else {
-        console.log("No budgets data to export.");
+        zip.file('goldquest_budgets.csv', Papa.unparse(exportableBudgets));
     }
 
-    console.log('Individual CSV data files prepared for download.');
+    const zipContent = await zip.generateAsync({ type: "blob" });
+    downloadBlob(zipContent, zipFilename);
+
+    console.log(`Data export complete. ${zipFilename} prepared for download.`);
 
   } catch (error) {
-    console.error("Error exporting all user data:", error);
+    console.error("Error exporting all user data to ZIP:", error);
     throw error;
   }
 }

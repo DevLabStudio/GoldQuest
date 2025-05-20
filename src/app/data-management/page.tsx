@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa, { ParseResult } from 'papaparse';
+import JSZip from 'jszip'; // Import JSZip
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -22,11 +23,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency, convertCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
-import { AlertCircle, Trash2, Download } from 'lucide-react';
+import { AlertCircle, Trash2, Download, FileZip } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { exportAllUserDataToCsvs } from '@/services/export';
+import { exportAllUserDataToZip } from '@/services/export'; // Updated import
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -249,9 +250,72 @@ export default function DataManagementPage() {
     }
   };
 
-  const handleParseAndMap = () => {
+  const processCsvData = (csvString: string, fileName: string) => {
+    Papa.parse<CsvRecord>(csvString, {
+      header: true,
+      skipEmptyLines: true,
+      complete: (results: ParseResult<CsvRecord>) => {
+        if (results.errors.length > 0 && !results.data.length) {
+          const criticalError = results.errors.find(e => e.code !== 'TooManyFields' && e.code !== 'TooFewFields') || results.errors[0];
+          setError(`CSV Parsing Error from ${fileName}: ${criticalError.message}. Code: ${criticalError.code}. Ensure headers are correct and file encoding is UTF-8.`);
+          setIsLoading(false);
+          return;
+        }
+        if (results.errors.length > 0) {
+          console.warn(`Minor CSV parsing errors encountered in ${fileName}:`, results.errors);
+          toast({ title: "CSV Parsing Warning", description: `Some rows in ${fileName} might have issues: ${results.errors.map(e=>e.message).slice(0,2).join('; ')}`, variant:"default", duration: 7000});
+        }
+
+        if (!results.data || results.data.length === 0) {
+          setError(`CSV file ${fileName} is empty or doesn't contain valid data rows.`);
+          setIsLoading(false);
+          return;
+        }
+
+        const headers = results.meta.fields;
+        if (!headers || headers.length === 0) {
+          setError(`Could not read CSV headers from ${fileName}. Ensure the first row contains column names.`);
+          setIsLoading(false);
+          return;
+        }
+
+        setCsvHeaders(headers.filter(h => h != null) as string[]);
+        setRawData(results.data); // This rawData will be used by processAndMapData
+
+        const detectedHeaders = headers.filter(h => h != null) as string[];
+        const initialMappings: ColumnMapping = {};
+
+        // Auto-detect common Firefly III CSV headers
+        initialMappings.date = findColumnName(detectedHeaders, 'date');
+        initialMappings.amount = findColumnName(detectedHeaders, 'amount');
+        initialMappings.description = findColumnName(detectedHeaders, 'description');
+        initialMappings.source_name = findColumnName(detectedHeaders, 'source_name');
+        initialMappings.destination_name = findColumnName(detectedHeaders, 'destination_name');
+        initialMappings.currency_code = findColumnName(detectedHeaders, 'currency_code') || findColumnName(detectedHeaders, 'currency');
+        initialMappings.category = findColumnName(detectedHeaders, 'category');
+        initialMappings.tags = findColumnName(detectedHeaders, 'tags');
+        initialMappings.transaction_type = findColumnName(detectedHeaders, 'type');
+        initialMappings.notes = findColumnName(detectedHeaders, 'notes');
+        initialMappings.foreign_amount = findColumnName(detectedHeaders, 'foreign_amount');
+        initialMappings.foreign_currency_code = findColumnName(detectedHeaders, 'foreign_currency_code');
+        initialMappings.source_type = findColumnName(detectedHeaders, 'source_type');
+        initialMappings.destination_type = findColumnName(detectedHeaders, 'destination_type');
+        initialMappings.initialBalance = findColumnName(detectedHeaders, 'initial_balance') || findColumnName(detectedHeaders, 'opening_balance');
+        
+        setColumnMappings(initialMappings);
+        setIsMappingDialogOpen(true); // Open mapping dialog
+        setIsLoading(false);
+      },
+      error: (err: Error) => {
+        setError(`Failed to read or parse CSV string from ${fileName}: ${err.message}.`);
+        setIsLoading(false);
+      }
+    });
+  };
+
+  const handleParseAndMap = async () => {
     if (!file) {
-      setError("Please select a CSV file first.");
+      setError("Please select a CSV or ZIP file first.");
       return;
     }
     if (!user) {
@@ -260,74 +324,78 @@ export default function DataManagementPage() {
       return;
     }
 
-    setIsLoading(true); 
+    setIsLoading(true);
     setError(null);
     setParsedData([]);
     setAccountPreviewData([]);
     setRawData([]);
     setCsvHeaders([]);
 
-    Papa.parse<CsvRecord>(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (results: ParseResult<CsvRecord>) => {
-         if (results.errors.length > 0 && !results.data.length) {
-             const criticalError = results.errors.find(e => e.code !== 'TooManyFields' && e.code !== 'TooFewFields') || results.errors[0];
-             setError(`CSV Parsing Error: ${criticalError.message}. Code: ${criticalError.code}. Ensure headers are correct and file encoding is UTF-8.`);
-             setIsLoading(false);
-             return;
-         }
-          if (results.errors.length > 0) {
-              console.warn("Minor CSV parsing errors encountered:", results.errors);
-              toast({ title: "CSV Parsing Warning", description: `Some rows might have issues: ${results.errors.map(e=>e.message).slice(0,2).join('; ')}`, variant:"default", duration: 7000});
-          }
+    if (file.name.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
+        try {
+            const zip = await JSZip.loadAsync(file);
+            let primaryCsvFile: JSZip.JSZipObject | null = null;
+            
+            // Heuristic: Look for common "main" CSV file names from Firefly or our own export
+            const commonPrimaryNames = ['transactions.csv', 'firefly_iii_export.csv', 'default.csv'];
+            for (const name of commonPrimaryNames) {
+                const foundFile = zip.file(name);
+                if (foundFile) {
+                    primaryCsvFile = foundFile;
+                    break;
+                }
+            }
 
-         if (!results.data || results.data.length === 0) {
-            setError("CSV file is empty or doesn't contain valid data rows.");
+            // Fallback: find the largest CSV file in the zip if no common name is found
+            if (!primaryCsvFile) {
+                let largestSize = 0;
+                zip.forEach((relativePath, zipEntry) => {
+                    if (zipEntry.name.toLowerCase().endsWith('.csv') && !zipEntry.dir) {
+                        // A more robust size check might be needed if _data is not reliable
+                        // For simplicity, using a placeholder for uncompressed size if available
+                        const uncompressedSize = (zipEntry as any)._data?.uncompressedSize || 0;
+                        if (uncompressedSize > largestSize) {
+                            largestSize = uncompressedSize;
+                            primaryCsvFile = zipEntry;
+                        }
+                    }
+                });
+            }
+
+            if (primaryCsvFile) {
+                toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from the archive.`, duration: 4000});
+                const csvString = await primaryCsvFile.async("string");
+                processCsvData(csvString, primaryCsvFile.name);
+            } else {
+                setError("No suitable CSV file found within the ZIP archive to process for mapping. Expected names like 'transactions.csv' or 'firefly_iii_export.csv'.");
+                setIsLoading(false);
+            }
+        } catch (zipError: any) {
+            setError(`Failed to process ZIP file: ${zipError.message}`);
             setIsLoading(false);
-            return;
-         }
-
-         const headers = results.meta.fields;
-         if (!headers || headers.length === 0) {
-             setError("Could not read CSV headers. Ensure the first row contains column names.");
-             setIsLoading(false);
-             return;
-         }
-
-         setCsvHeaders(headers.filter(h => h != null) as string[]);
-         setRawData(results.data);
-
-         const detectedHeaders = headers.filter(h => h != null) as string[];
-         const initialMappings: ColumnMapping = {};
-
-         initialMappings.date = findColumnName(detectedHeaders, 'date');
-         initialMappings.amount = findColumnName(detectedHeaders, 'amount');
-         initialMappings.description = findColumnName(detectedHeaders, 'description');
-         initialMappings.source_name = findColumnName(detectedHeaders, 'source_name');
-         initialMappings.destination_name = findColumnName(detectedHeaders, 'destination_name');
-         initialMappings.currency_code = findColumnName(detectedHeaders, 'currency_code') || findColumnName(detectedHeaders, 'currency');
-         initialMappings.category = findColumnName(detectedHeaders, 'category');
-         initialMappings.tags = findColumnName(detectedHeaders, 'tags');
-         initialMappings.transaction_type = findColumnName(detectedHeaders, 'type');
-         initialMappings.notes = findColumnName(detectedHeaders, 'notes');
-         initialMappings.foreign_amount = findColumnName(detectedHeaders, 'foreign_amount');
-         initialMappings.foreign_currency_code = findColumnName(detectedHeaders, 'foreign_currency_code');
-         initialMappings.source_type = findColumnName(detectedHeaders, 'source_type');
-         initialMappings.destination_type = findColumnName(detectedHeaders, 'destination_type');
-         initialMappings.initialBalance = findColumnName(detectedHeaders, 'initial_balance') || findColumnName(detectedHeaders, 'opening_balance');
-
-
-         setColumnMappings(initialMappings);
-         setIsMappingDialogOpen(true);
-         setIsLoading(false);
-      },
-      error: (err: Error) => {
-         setError(`Failed to read or parse CSV file: ${err.message}.`);
+        }
+    } else if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+        // It's a CSV file, process it directly
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            if (event.target?.result && typeof event.target.result === 'string') {
+                processCsvData(event.target.result, file.name);
+            } else {
+                setError("Failed to read CSV file content.");
+                setIsLoading(false);
+            }
+        };
+        reader.onerror = () => {
+            setError("Error reading CSV file.");
+            setIsLoading(false);
+        };
+        reader.readAsText(file);
+    } else {
+        setError("Unsupported file type. Please upload a CSV or a ZIP file containing CSVs.");
         setIsLoading(false);
-      }
-    });
+    }
   };
+
 
    const processAndMapData = async (confirmedMappings: ColumnMapping) => {
         setIsLoading(true);
@@ -359,12 +427,12 @@ export default function DataManagementPage() {
         }
 
         const currentAccounts = await getAccounts();
-        setAccounts(currentAccounts);
+        setAccounts(currentAccounts); // Update local state for use in preview/import
 
-        const { preview } = await previewAccountChanges(
+         const { preview } = await previewAccountChanges(
              rawData,
              confirmedMappings,
-             currentAccounts
+             currentAccounts 
          );
          setAccountPreviewData(preview);
          console.log("Account preview generated:", preview);
@@ -597,6 +665,7 @@ export default function DataManagementPage() {
             const currency = record[mappings.currency_code!]?.trim().toUpperCase();
             const amount = parseAmount(record[mappings.amount!]);
             const initialBalance = parseAmount(record[mappings.initialBalance!] || record[mappings.amount!]);
+            const foreignCurrencyVal = record[mappings.foreign_currency_code!]?.trim().toUpperCase();
 
             return {
                 csvTransactionType: type,
@@ -605,6 +674,7 @@ export default function DataManagementPage() {
                 csvSourceType: sourceType,
                 csvDestinationType: destType,
                 currency: currency,
+                foreignCurrency: foreignCurrencyVal,
                 amount: type === 'opening balance' ? initialBalance : amount,
             };
         }) as Partial<MappedTransaction>[];
@@ -719,7 +789,10 @@ export default function DataManagementPage() {
                     accountsToConsiderRaw.push({name: item.csvRawSourceName, type: item.csvSourceType, currency: item.currency});
                 }
                 if (item.csvRawDestinationName && (item.csvDestinationType === 'asset account' || item.csvDestinationType === 'default asset account')) {
-                    const destCurrency = (item.csvTransactionType === 'transfer' && item.originalImportData?.foreignCurrency) ? item.originalImportData.foreignCurrency : item.currency;
+                    // For transfers, the destination account might use the foreign currency specified in the CSV
+                    const destCurrency = (item.csvTransactionType === 'transfer' && item.foreignCurrency) 
+                                          ? item.foreignCurrency 
+                                          : item.currency;
                     accountsToConsiderRaw.push({name: item.csvRawDestinationName, type: item.csvDestinationType, currency: destCurrency});
                 }
                 
@@ -742,15 +815,16 @@ export default function DataManagementPage() {
                              accountMap.set(normalizedName, {
                                 name: accInfo.name,
                                 currency: existingAppAccount?.currency || accInfo.currency,
-                                initialBalance: existingAppAccount?.balance,
+                                initialBalance: existingAppAccount?.balance, // Keep existing balance if account already there
                                 category: existingAppAccount?.category || category,
                             });
                         } else {
                             const currentDetails = accountMap.get(normalizedName)!;
-                            if (!currentDetails.currency && accInfo.currency) currentDetails.currency = accInfo.currency;
-                            if (currentDetails.category === 'asset' && category === 'crypto') {
+                            if (!currentDetails.currency && accInfo.currency) currentDetails.currency = accInfo.currency; // Set currency if not already set
+                            if (currentDetails.category === 'asset' && category === 'crypto') { // Update category if more specific
                                 currentDetails.category = 'crypto';
                             }
+                            // Do not override initialBalance if it's already set by an "opening balance" row
                         }
                     }
                 }
@@ -763,7 +837,7 @@ export default function DataManagementPage() {
         isPreviewOnly: boolean = false
     ): Promise<{ success: boolean; map: { [key: string]: string }, updatedAccountsList: Account[] }> => {
         let success = true;
-        let currentAppAccounts = [...accounts];
+        let currentAppAccounts = [...accounts]; // Use the state version
 
         const workingMap = currentAppAccounts.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
@@ -810,7 +884,7 @@ export default function DataManagementPage() {
                     if (existingAccountForUpdate) {
                         const updatedAccountData: Account = {
                             ...existingAccountForUpdate,
-                            balance: accPreview.initialBalance,
+                            balance: accPreview.initialBalance, // This balance IS the initial balance from Firefly or calculated for preview
                             currency: accPreview.currency,
                             lastActivity: new Date().toISOString(),
                             category: accPreview.category,
@@ -840,8 +914,8 @@ export default function DataManagementPage() {
         }
 
         if (!isPreviewOnly && accountsProcessedCount > 0) {
-             const finalFetchedAccounts = await getAccounts();
-             setAccounts(finalFetchedAccounts);
+             const finalFetchedAccounts = await getAccounts(); // Re-fetch to get the true state from DB
+             setAccounts(finalFetchedAccounts); // Update main page state
              const finalMap = finalFetchedAccounts.reduce((map, acc) => {
                  map[acc.name.toLowerCase().trim()] = acc.id;
                  return map;
@@ -888,7 +962,7 @@ export default function DataManagementPage() {
           let categoriesAddedCount = 0;
           const addCatPromises = Array.from(categoriesToAdd).map(async (catName) => {
               try {
-                  await addCategoryToDb(catName);
+                  await addCategoryToDb(catName); // Assuming addCategoryToDb adds to Firebase
                   categoriesAddedCount++;
               } catch (err: any) {
                   if (!err.message?.includes('already exists')) {
@@ -909,7 +983,7 @@ export default function DataManagementPage() {
             let tagsAddedCount = 0;
             const addTagPromises = Array.from(tagsToAdd).map(async (tagName) => {
                 try {
-                    await addTagToDb(tagName);
+                    await addTagToDb(tagName); // Assuming addTagToDb adds to Firebase
                     tagsAddedCount++;
                 } catch (err: any) {
                      if (!err.message?.includes('already exists')) {
@@ -954,8 +1028,8 @@ export default function DataManagementPage() {
             setError("Error processing some accounts during import. Some accounts might not have been created/updated correctly. Review account preview and transaction statuses.");
         }
         finalMapForTxImport = accountMapResult.map;
-        latestAccountsList = accountMapResult.updatedAccountsList;
-        setAccounts(latestAccountsList);
+        latestAccountsList = accountMapResult.updatedAccountsList; // Use the updated list which includes newly created/updated accounts
+        setAccounts(latestAccountsList); // Ensure the main page state is also updated
         setFinalAccountMapForImport(finalMapForTxImport);
       } catch (finalAccountMapError) {
           console.error("Critical error during account finalization before import.", finalAccountMapError);
@@ -1033,6 +1107,7 @@ export default function DataManagementPage() {
                 let creditAmount = Math.abs(csvAmount);  
                 let creditCurrency = csvCurrency;     
 
+                // If foreign amount/currency are present in Firefly for transfers, it means the destination received a different amount/currency
                 if (csvForeignAmount != null && csvForeignCurrency && csvForeignCurrency.trim() !== '') {
                     creditAmount = Math.abs(csvForeignAmount);
                     creditCurrency = csvForeignCurrency;
@@ -1114,6 +1189,7 @@ export default function DataManagementPage() {
           }
       }
 
+      // Ensure transactions are sorted by date before processing to correctly update account balances chronologically
       transactionPayloads.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       for (const payload of transactionPayloads) {
@@ -1134,7 +1210,7 @@ export default function DataManagementPage() {
                   category: payload.category,
                   tags: payload.tags,
                   originalImportData: payload.originalImportData,
-              });
+              }); // This will now also update the account balance inside addTransaction
               if(itemIndexInDisplay !== -1) {
                 updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'success', errorMessage: undefined };
               }
@@ -1166,6 +1242,7 @@ export default function DataManagementPage() {
          setError(null); 
          window.dispatchEvent(new Event('storage')); 
       }
+      // Final refetch of accounts to ensure balances displayed on other pages (like Accounts page) are fully up-to-date
       setAccounts(await getAccounts());
    };
 
@@ -1217,8 +1294,8 @@ export default function DataManagementPage() {
         setIsExporting(true);
         toast({ title: "Exporting Data", description: "Preparing your data for download. This may take a moment..." });
         try {
-        await exportAllUserDataToCsvs();
-        toast({ title: "Export Complete", description: "Your data files should be downloading now. Please check your browser's download folder." });
+        await exportAllUserDataToZip(); // Use the new ZIP export function
+        toast({ title: "Export Complete", description: "Your data backup ZIP file should be downloading now. Please check your browser's download folder." });
         } catch (error) {
         console.error("Export failed:", error);
         toast({ title: "Export Failed", description: "Could not export your data. Please try again.", variant: "destructive" });
@@ -1378,15 +1455,15 @@ export default function DataManagementPage() {
 
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Step 1: Upload CSV File</CardTitle>
+          <CardTitle>Step 1: Upload CSV or ZIP File</CardTitle>
           <CardDescription>
-            Select your CSV file. Firefly III export format is best supported. Map columns carefully in the next step. Ensure file is UTF-8 encoded.
+            Select your CSV file (Firefly III export is best supported) or a GoldQuest backup ZIP file. Map columns carefully in the next step. Ensure file is UTF-8 encoded.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
           <div className="grid w-full max-w-sm items-center gap-1.5">
-            <Label htmlFor="csv-file">Select CSV File</Label>
-            <Input id="csv-file" type="file" accept=".csv,text/csv" onChange={handleFileChange} disabled={isLoading && !isMappingDialogOpen}/>
+            <Label htmlFor="csv-file">Select File</Label>
+            <Input id="csv-file" type="file" accept=".csv,text/csv,application/zip,application/x-zip-compressed" onChange={handleFileChange} disabled={isLoading && !isMappingDialogOpen}/>
           </div>
 
           {error && (
@@ -1399,14 +1476,14 @@ export default function DataManagementPage() {
 
           <div className="flex flex-wrap gap-4">
              <Button onClick={handleParseAndMap} disabled={!file || (isLoading && !isMappingDialogOpen)}>
-                {isLoading && !isMappingDialogOpen && !importProgress ? "Parsing..." : "Parse & Map Columns"}
+                {isLoading && !isMappingDialogOpen && !importProgress ? "Processing File..." : "Parse & Map Columns"}
              </Button>
              <Button onClick={handleImport} disabled={(isLoading && !isMappingDialogOpen) || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
                {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Transactions"}
              </Button>
               <Button onClick={handleExportData} disabled={isExporting || (isLoading && !isMappingDialogOpen)}>
-                <Download className="mr-2 h-4 w-4" />
-                {isExporting ? "Exporting..." : "Export All Data"}
+                <FileZip className="mr-2 h-4 w-4" />
+                {isExporting ? "Exporting..." : "Export All Data (ZIP)"}
               </Button>
                <AlertDialog>
                    <AlertDialogTrigger asChild>
@@ -1443,7 +1520,7 @@ export default function DataManagementPage() {
                 <DialogHeader>
                     <DialogTitle>Step 2: Map CSV Columns</DialogTitle>
                     <DialogDescription>
-                        Match CSV columns (right) to application fields (left). For Firefly III CSVs, ensure 'type', 'amount', 'currency_code', 'date', 'source_name', and 'destination_name' are correctly mapped.
+                        Match CSV columns (right) to application fields (left). For Firefly III CSVs, ensure 'type', 'amount', 'currency_code', 'date', 'source_name', and 'destination_name' are correctly mapped. If importing a GoldQuest backup, mapping should be automatic for supported files.
                     </DialogDescription>
                 </DialogHeader>
                 <CsvMappingForm
