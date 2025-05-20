@@ -189,7 +189,7 @@ export default function DataManagementPage() {
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [rawData, setRawData] = useState<CsvRecord[]>([]);
   const [parsedData, setParsedData] = useState<MappedTransaction[]>([]);
-  const [isLoading, setIsLoading] = useState(true); 
+  const [isLoading, setIsLoading] = useState(false); 
   const [importProgress, setImportProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -210,7 +210,7 @@ export default function DataManagementPage() {
 
   const fetchData = useCallback(async () => {
     let isMounted = true;
-    if (isMounted) setIsLoading(true); 
+    if (isMounted && !isLoading) setIsLoading(true); 
 
     if (typeof window === 'undefined' || !user || isLoadingAuth) {
       if(isMounted) setIsLoading(false);
@@ -242,11 +242,11 @@ export default function DataManagementPage() {
       }
     }
     return () => { isMounted = false; };
-  }, [user, isLoadingAuth, toast]); // Added toast to dependency array as it's used in error handling
+  }, [user, isLoadingAuth]); // Removed toast, added isLoading to prevent re-trigger if already loading
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+  }, [fetchData]); // fetchData is memoized, so this runs once on mount / when user/auth status changes.
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -768,10 +768,13 @@ export default function DataManagementPage() {
 
                 const parsedNameFromDest = parseNameFromDescriptiveString(descriptiveDestName);
                 const parsedNameFromSource = parseNameFromDescriptiveString(descriptiveSourceName);
+                const sourceIsDescriptive = !!parsedNameFromSource;
+                const destIsDescriptive = !!parsedNameFromDest;
 
-                if (item.csvDestinationType === "asset account" && descriptiveDestName && !parseNameFromDescriptiveString(descriptiveDestName) ) {
+
+                if (item.csvDestinationType === "asset account" && descriptiveDestName && !destIsDescriptive ) {
                     accountNameForOB = descriptiveDestName;
-                } else if (item.csvSourceType === "asset account" && descriptiveSourceName && !parseNameFromDescriptiveString(descriptiveSourceName)) {
+                } else if (item.csvSourceType === "asset account" && descriptiveSourceName && !sourceIsDescriptive) {
                     accountNameForOB = descriptiveSourceName;
                 } else if (parsedNameFromDest) {
                     accountNameForOB = parsedNameFromDest;
@@ -786,9 +789,6 @@ export default function DataManagementPage() {
                     const existingDetailsInMap = accountMap.get(normalizedName);
                     let accountCategory: 'asset' | 'crypto' = 'asset';
                     
-                    const sourceIsDescriptive = item.csvRawSourceName && parseNameFromDescriptiveString(item.csvRawSourceName);
-                    const destIsDescriptive = item.csvRawDestinationName && parseNameFromDescriptiveString(item.csvRawDestinationName);
-
                     if (item.csvDestinationType === "asset account" && !destIsDescriptive && item.csvRawDestinationName?.toLowerCase().includes('crypto')) {
                         accountCategory = 'crypto';
                     } else if (item.csvSourceType === "asset account" && !sourceIsDescriptive && item.csvRawSourceName?.toLowerCase().includes('crypto')) {
@@ -1293,7 +1293,7 @@ export default function DataManagementPage() {
             const fileInput = document.getElementById('csv-file') as HTMLInputElement;
             if (fileInput) fileInput.value = '';
 
-            toast({ title: "Data Cleared", description: "All user data (accounts, categories, tags, groups, subscriptions, transactions) has been removed." });
+            toast({ title: "Data Cleared", description: "All user data (accounts, categories, tags, groups, subscriptions, transactions, loans, credit cards, and budgets) has been removed." });
             window.dispatchEvent(new Event('storage'));
         } catch (err) {
             console.error("Failed to clear data:", err);
@@ -1557,11 +1557,11 @@ export default function DataManagementPage() {
         const accountsCsv = await accountsFile.async('text');
         const parsedAccounts = Papa.parse<Account>(accountsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
         for (const acc of parsedAccounts) {
-          if(acc.id && acc.name && acc.currency && acc.type && acc.balance !== undefined) {
+          if(acc.id && acc.name && acc.currency && acc.type ) { // Balance is no longer required for initial setup
             const newAccData: NewAccountData = {
                 name: acc.name,
                 type: acc.type,
-                balance: typeof acc.balance === 'string' ? parseFloat(acc.balance) : acc.balance,
+                balance: 0, // Initialize with ZERO balance for restore
                 currency: acc.currency,
                 providerName: acc.providerName || 'Restored',
                 category: acc.category || 'asset',
@@ -1621,6 +1621,8 @@ export default function DataManagementPage() {
       if (transactionsFile) {
           const transactionsCsv = await transactionsFile.async('text');
           const parsedTransactions = Papa.parse<Transaction & { tags?: string, originalImportData?: string }>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+          parsedTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date to process in order
+
           for (const tx of parsedTransactions) {
               if (tx.id && tx.accountId && tx.date && tx.amount !== undefined && tx.transactionCurrency && tx.category) {
                   const newAccountId = oldAccountIdToNewIdMap[tx.accountId];
@@ -1636,6 +1638,8 @@ export default function DataManagementPage() {
                           originalImportData: tx.originalImportData ? JSON.parse(tx.originalImportData as string) : undefined,
                       };
                       try {
+                          // During restore, addTransaction will call modifyAccountBalance which will
+                          // build up the balance from 0, as set during account creation in this function.
                           await addTransaction(newTxData);
                       } catch (e: any) {
                           console.error(`Error restoring transaction ${tx.description}: ${e.message}`);
@@ -1953,4 +1957,3 @@ export default function DataManagementPage() {
     </div>
   );
 }
-
