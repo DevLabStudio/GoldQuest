@@ -23,11 +23,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency, convertCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
-import { AlertCircle, Trash2, Download, FileZip } from 'lucide-react';
+import { AlertCircle, Trash2, Download } from 'lucide-react'; // Removed FileZip
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { exportAllUserDataToZip } from '@/services/export'; // Updated import
+import { exportAllUserDataToZip } from '@/services/export';
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -196,45 +196,44 @@ export default function DataManagementPage() {
   const { toast } = useToast();
 
 
-  useEffect(() => {
-    if (isLoadingAuth || !user) {
-        setIsLoading(false);
-        return;
+  const fetchData = useCallback(async () => {
+    if (typeof window === 'undefined' || !user || isLoadingAuth) {
+      setIsLoading(false);
+      return;
     }
-
     let isMounted = true;
-    const fetchData = async () => {
-        if (!isMounted) return;
-        setIsLoading(true); 
-        setError(null);
-        try {
-            const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
-                getAccounts(),
-                getCategories(),
-                getTags()
-            ]);
+    setIsLoading(true);
+    setError(null);
 
-            if (isMounted) {
-                setAccounts(fetchedAccounts);
-                setCategories(fetchedCategories);
-                setTags(fetchedTagsList);
-            }
-        } catch (err: any) {
-            console.error("Failed to fetch initial data for Data Management page:", err);
-            if (isMounted) {
-                setError("Could not load essential page data. Please try refreshing. Details: " + err.message);
-                toast({ title: "Page Load Error", description: "Failed to load initial data (accounts, categories, or tags). " + err.message, variant: "destructive" });
-            }
-        } finally {
-            if (isMounted) {
-                setIsLoading(false);
-            }
-        }
-    };
+    try {
+      const [fetchedAccounts, fetchedCategories, fetchedTagsList] = await Promise.all([
+        getAccounts(),
+        getCategories(),
+        getTags()
+      ]);
 
-    fetchData();
+      if (isMounted) {
+        setAccounts(fetchedAccounts);
+        setCategories(fetchedCategories);
+        setTags(fetchedTagsList);
+      }
+    } catch (err: any) {
+      console.error("Failed to fetch initial data for Data Management page:", err);
+      if (isMounted) {
+        setError("Could not load essential page data. Please try refreshing. Details: " + err.message);
+        toast({ title: "Page Load Error", description: "Failed to load initial data (accounts, categories, or tags). " + err.message, variant: "destructive" });
+      }
+    } finally {
+      if (isMounted) {
+        setIsLoading(false);
+      }
+    }
     return () => { isMounted = false; };
   }, [user, isLoadingAuth]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -336,7 +335,6 @@ export default function DataManagementPage() {
             const zip = await JSZip.loadAsync(file);
             let primaryCsvFile: JSZip.JSZipObject | null = null;
             
-            // Heuristic: Look for common "main" CSV file names from Firefly or our own export
             const commonPrimaryNames = ['transactions.csv', 'firefly_iii_export.csv', 'default.csv'];
             for (const name of commonPrimaryNames) {
                 const foundFile = zip.file(name);
@@ -346,13 +344,10 @@ export default function DataManagementPage() {
                 }
             }
 
-            // Fallback: find the largest CSV file in the zip if no common name is found
             if (!primaryCsvFile) {
                 let largestSize = 0;
                 zip.forEach((relativePath, zipEntry) => {
                     if (zipEntry.name.toLowerCase().endsWith('.csv') && !zipEntry.dir) {
-                        // A more robust size check might be needed if _data is not reliable
-                        // For simplicity, using a placeholder for uncompressed size if available
                         const uncompressedSize = (zipEntry as any)._data?.uncompressedSize || 0;
                         if (uncompressedSize > largestSize) {
                             largestSize = uncompressedSize;
@@ -375,7 +370,6 @@ export default function DataManagementPage() {
             setIsLoading(false);
         }
     } else if (file.name.endsWith('.csv') || file.type === 'text/csv') {
-        // It's a CSV file, process it directly
         const reader = new FileReader();
         reader.onload = (event) => {
             if (event.target?.result && typeof event.target.result === 'string') {
@@ -427,7 +421,7 @@ export default function DataManagementPage() {
         }
 
         const currentAccounts = await getAccounts();
-        setAccounts(currentAccounts); // Update local state for use in preview/import
+        setAccounts(currentAccounts);
 
          const { preview } = await previewAccountChanges(
              rawData,
@@ -789,7 +783,6 @@ export default function DataManagementPage() {
                     accountsToConsiderRaw.push({name: item.csvRawSourceName, type: item.csvSourceType, currency: item.currency});
                 }
                 if (item.csvRawDestinationName && (item.csvDestinationType === 'asset account' || item.csvDestinationType === 'default asset account')) {
-                    // For transfers, the destination account might use the foreign currency specified in the CSV
                     const destCurrency = (item.csvTransactionType === 'transfer' && item.foreignCurrency) 
                                           ? item.foreignCurrency 
                                           : item.currency;
@@ -815,16 +808,15 @@ export default function DataManagementPage() {
                              accountMap.set(normalizedName, {
                                 name: accInfo.name,
                                 currency: existingAppAccount?.currency || accInfo.currency,
-                                initialBalance: existingAppAccount?.balance, // Keep existing balance if account already there
+                                initialBalance: existingAppAccount?.balance,
                                 category: existingAppAccount?.category || category,
                             });
                         } else {
                             const currentDetails = accountMap.get(normalizedName)!;
-                            if (!currentDetails.currency && accInfo.currency) currentDetails.currency = accInfo.currency; // Set currency if not already set
-                            if (currentDetails.category === 'asset' && category === 'crypto') { // Update category if more specific
+                            if (!currentDetails.currency && accInfo.currency) currentDetails.currency = accInfo.currency; 
+                            if (currentDetails.category === 'asset' && category === 'crypto') { 
                                 currentDetails.category = 'crypto';
                             }
-                            // Do not override initialBalance if it's already set by an "opening balance" row
                         }
                     }
                 }
@@ -837,7 +829,7 @@ export default function DataManagementPage() {
         isPreviewOnly: boolean = false
     ): Promise<{ success: boolean; map: { [key: string]: string }, updatedAccountsList: Account[] }> => {
         let success = true;
-        let currentAppAccounts = [...accounts]; // Use the state version
+        let currentAppAccounts = [...accounts]; 
 
         const workingMap = currentAppAccounts.reduce((map, acc) => {
              map[acc.name.toLowerCase().trim()] = acc.id;
@@ -884,7 +876,7 @@ export default function DataManagementPage() {
                     if (existingAccountForUpdate) {
                         const updatedAccountData: Account = {
                             ...existingAccountForUpdate,
-                            balance: accPreview.initialBalance, // This balance IS the initial balance from Firefly or calculated for preview
+                            balance: accPreview.initialBalance, 
                             currency: accPreview.currency,
                             lastActivity: new Date().toISOString(),
                             category: accPreview.category,
@@ -914,8 +906,8 @@ export default function DataManagementPage() {
         }
 
         if (!isPreviewOnly && accountsProcessedCount > 0) {
-             const finalFetchedAccounts = await getAccounts(); // Re-fetch to get the true state from DB
-             setAccounts(finalFetchedAccounts); // Update main page state
+             const finalFetchedAccounts = await getAccounts(); 
+             setAccounts(finalFetchedAccounts); 
              const finalMap = finalFetchedAccounts.reduce((map, acc) => {
                  map[acc.name.toLowerCase().trim()] = acc.id;
                  return map;
@@ -962,7 +954,7 @@ export default function DataManagementPage() {
           let categoriesAddedCount = 0;
           const addCatPromises = Array.from(categoriesToAdd).map(async (catName) => {
               try {
-                  await addCategoryToDb(catName); // Assuming addCategoryToDb adds to Firebase
+                  await addCategoryToDb(catName); 
                   categoriesAddedCount++;
               } catch (err: any) {
                   if (!err.message?.includes('already exists')) {
@@ -983,7 +975,7 @@ export default function DataManagementPage() {
             let tagsAddedCount = 0;
             const addTagPromises = Array.from(tagsToAdd).map(async (tagName) => {
                 try {
-                    await addTagToDb(tagName); // Assuming addTagToDb adds to Firebase
+                    await addTagToDb(tagName); 
                     tagsAddedCount++;
                 } catch (err: any) {
                      if (!err.message?.includes('already exists')) {
@@ -1028,8 +1020,8 @@ export default function DataManagementPage() {
             setError("Error processing some accounts during import. Some accounts might not have been created/updated correctly. Review account preview and transaction statuses.");
         }
         finalMapForTxImport = accountMapResult.map;
-        latestAccountsList = accountMapResult.updatedAccountsList; // Use the updated list which includes newly created/updated accounts
-        setAccounts(latestAccountsList); // Ensure the main page state is also updated
+        latestAccountsList = accountMapResult.updatedAccountsList; 
+        setAccounts(latestAccountsList); 
         setFinalAccountMapForImport(finalMapForTxImport);
       } catch (finalAccountMapError) {
           console.error("Critical error during account finalization before import.", finalAccountMapError);
@@ -1107,7 +1099,6 @@ export default function DataManagementPage() {
                 let creditAmount = Math.abs(csvAmount);  
                 let creditCurrency = csvCurrency;     
 
-                // If foreign amount/currency are present in Firefly for transfers, it means the destination received a different amount/currency
                 if (csvForeignAmount != null && csvForeignCurrency && csvForeignCurrency.trim() !== '') {
                     creditAmount = Math.abs(csvForeignAmount);
                     creditCurrency = csvForeignCurrency;
@@ -1189,7 +1180,6 @@ export default function DataManagementPage() {
           }
       }
 
-      // Ensure transactions are sorted by date before processing to correctly update account balances chronologically
       transactionPayloads.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
 
       for (const payload of transactionPayloads) {
@@ -1210,7 +1200,7 @@ export default function DataManagementPage() {
                   category: payload.category,
                   tags: payload.tags,
                   originalImportData: payload.originalImportData,
-              }); // This will now also update the account balance inside addTransaction
+              }); 
               if(itemIndexInDisplay !== -1) {
                 updatedDataForDisplay[itemIndexInDisplay] = { ...updatedDataForDisplay[itemIndexInDisplay], importStatus: 'success', errorMessage: undefined };
               }
@@ -1242,7 +1232,6 @@ export default function DataManagementPage() {
          setError(null); 
          window.dispatchEvent(new Event('storage')); 
       }
-      // Final refetch of accounts to ensure balances displayed on other pages (like Accounts page) are fully up-to-date
       setAccounts(await getAccounts());
    };
 
@@ -1294,7 +1283,7 @@ export default function DataManagementPage() {
         setIsExporting(true);
         toast({ title: "Exporting Data", description: "Preparing your data for download. This may take a moment..." });
         try {
-        await exportAllUserDataToZip(); // Use the new ZIP export function
+        await exportAllUserDataToZip(); 
         toast({ title: "Export Complete", description: "Your data backup ZIP file should be downloading now. Please check your browser's download folder." });
         } catch (error) {
         console.error("Export failed:", error);
@@ -1482,7 +1471,7 @@ export default function DataManagementPage() {
                {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Transactions"}
              </Button>
               <Button onClick={handleExportData} disabled={isExporting || (isLoading && !isMappingDialogOpen)}>
-                <FileZip className="mr-2 h-4 w-4" />
+                <Download className="mr-2 h-4 w-4" />
                 {isExporting ? "Exporting..." : "Export All Data (ZIP)"}
               </Button>
                <AlertDialog>
