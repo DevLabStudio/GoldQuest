@@ -34,19 +34,28 @@ function downloadCsv(csvString: string, filename: string) {
 const formatDateForExport = (dateInput: object | string | undefined | null): string => {
     if (!dateInput) return '';
     if (typeof dateInput === 'string') {
-        const parsed = parseISO(dateInput);
+        // Check if it's already a fully qualified ISO string (e.g., from serverTimestamp or new Date().toISOString())
+        // or a simple YYYY-MM-DD date.
+        const parsed = parseISO(dateInput); // parseISO is robust
         return isValid(parsed) ? formatDateFns(parsed, "yyyy-MM-dd'T'HH:mm:ssXXX") : dateInput;
     }
-    // Assuming serverTimestamp object will be a number (timestamp) when fetched,
-    // but Firebase often returns it as an object initially. If it's already a string, use it.
-    // For actual numeric timestamps from Firebase, you'd convert new Date(timestamp)
-    // This simplistic approach assumes it's either a parsable string or we return a placeholder.
-    // A more robust solution would handle Firebase serverTimestamps correctly after they resolve.
-    if (typeof dateInput === 'object') {
-        // Placeholder for unresolved serverTimestamp. Real value needs server-side conversion or client-side handling post-fetch.
-        return new Date().toISOString(); // Fallback for unresolved server timestamps
+    // This case is tricky for Firebase serverTimestamp, which is an object initially.
+    // For simplicity, if it's an object here, it means it wasn't resolved to a number/string.
+    // A proper solution would handle the Firebase ServerValue.TIMESTAMP object correctly,
+    // or ensure data is fetched *after* timestamps are resolved.
+    // For now, returning an empty string or a placeholder for unresolved objects.
+    if (typeof dateInput === 'object' && dateInput !== null) {
+        // If it has a toDate method (like a Firebase Timestamp object *after* conversion client-side)
+        if ('toDate' in dateInput && typeof (dateInput as any).toDate === 'function') {
+             return formatDateFns((dateInput as any).toDate(), "yyyy-MM-dd'T'HH:mm:ssXXX");
+        }
+        // Fallback for other objects or unresolved serverTimestamps
+        return new Date().toISOString(); // Or consider '' or a placeholder
     }
-    return String(dateInput); // Fallback for other types
+    if (typeof dateInput === 'number') { // Assuming numeric timestamp
+        return formatDateFns(new Date(dateInput), "yyyy-MM-dd'T'HH:mm:ssXXX");
+    }
+    return String(dateInput);
 };
 
 
@@ -73,55 +82,56 @@ interface ExportableBudget extends Omit<Budget, 'selectedIds' | 'createdAt' | 'u
 
 
 export async function exportAllUserDataToCsvs(): Promise<void> {
-  let combinedCsvString = "";
-  const sectionSeparator = "\n\n"; // Add a couple of newlines between sections
-
   try {
-    const appendToCombinedCsv = (header: string, data: any[]) => {
-        if (data && data.length > 0) {
-            combinedCsvString += `### ${header} ###\n`;
-            combinedCsvString += Papa.unparse(data);
-            combinedCsvString += sectionSeparator;
-            console.log(`Appended ${header} to CSV export.`);
-        } else {
-            combinedCsvString += `### ${header} ###\n(No data)\n`;
-            combinedCsvString += sectionSeparator;
-            console.log(`No data to append for ${header}.`);
-        }
-    };
-
     // 1. User Preferences
     console.log("Exporting: Fetching User Preferences...");
     const preferences = await getUserPreferences();
-    if (preferences) { // Ensure preferences is not null/undefined
-        appendToCombinedCsv("USER PREFERENCES", [preferences]);
+    if (preferences) {
+      downloadCsv(Papa.unparse([preferences]), 'goldquest_preferences.csv');
     } else {
-        appendToCombinedCsv("USER PREFERENCES", []);
+      console.log("No preferences data to export.");
     }
 
     // 2. Categories
     console.log("Exporting: Fetching Categories...");
     const categories = await getCategories();
-    appendToCombinedCsv("CATEGORIES", categories);
+    if (categories.length > 0) {
+        downloadCsv(Papa.unparse(categories), 'goldquest_categories.csv');
+    } else {
+        console.log("No categories data to export.");
+    }
 
     // 3. Tags
     console.log("Exporting: Fetching Tags...");
     const tags = await getTags();
-    appendToCombinedCsv("TAGS", tags);
+     if (tags.length > 0) {
+        downloadCsv(Papa.unparse(tags), 'goldquest_tags.csv');
+    } else {
+        console.log("No tags data to export.");
+    }
 
     // 4. Groups
     console.log("Exporting: Fetching Groups...");
     const groups = await getGroups();
-    const exportableGroups: ExportableGroup[] = groups.map(g => ({
-        ...g,
-        categoryIds: g.categoryIds ? g.categoryIds.join('|') : '',
-    }));
-    appendToCombinedCsv("GROUPS", exportableGroups);
+    if (groups.length > 0) {
+        const exportableGroups: ExportableGroup[] = groups.map(g => ({
+            ...g,
+            categoryIds: g.categoryIds ? g.categoryIds.join('|') : '',
+        }));
+        downloadCsv(Papa.unparse(exportableGroups), 'goldquest_groups.csv');
+    } else {
+        console.log("No groups data to export.");
+    }
+
 
     // 5. Accounts
     console.log("Exporting: Fetching Accounts...");
     const accounts = await getAccounts();
-    appendToCombinedCsv("ACCOUNTS", accounts);
+     if (accounts.length > 0) {
+        downloadCsv(Papa.unparse(accounts), 'goldquest_accounts.csv');
+    } else {
+        console.log("No accounts data to export.");
+    }
 
     // 6. Transactions (fetch per account, then combine)
     if (accounts.length > 0) {
@@ -143,64 +153,76 @@ export async function exportAllUserDataToCsvs(): Promise<void> {
               createdAt: formatDateForExport(tx.createdAt),
               updatedAt: formatDateForExport(tx.updatedAt),
             }));
-            appendToCombinedCsv("TRANSACTIONS", exportableTransactions);
+            downloadCsv(Papa.unparse(exportableTransactions), 'goldquest_transactions.csv');
         } else {
-             appendToCombinedCsv("TRANSACTIONS", []);
+             console.log("No transactions data to export.");
         }
     } else {
-        appendToCombinedCsv("TRANSACTIONS", []);
+        console.log("No accounts found, skipping transaction export.");
     }
 
 
     // 7. Subscriptions
     console.log("Exporting: Fetching Subscriptions...");
     const subscriptions = await getSubscriptions();
-    const exportableSubscriptions: ExportableSubscription[] = subscriptions.map(sub => ({
-        ...sub,
-        tags: sub.tags ? sub.tags.join('|') : '',
-        createdAt: formatDateForExport(sub.createdAt),
-        updatedAt: formatDateForExport(sub.updatedAt),
-    }));
-    appendToCombinedCsv("SUBSCRIPTIONS", exportableSubscriptions);
+    if (subscriptions.length > 0) {
+        const exportableSubscriptions: ExportableSubscription[] = subscriptions.map(sub => ({
+            ...sub,
+            tags: sub.tags ? sub.tags.join('|') : '',
+            createdAt: formatDateForExport(sub.createdAt),
+            updatedAt: formatDateForExport(sub.updatedAt),
+        }));
+        downloadCsv(Papa.unparse(exportableSubscriptions), 'goldquest_subscriptions.csv');
+    } else {
+        console.log("No subscriptions data to export.");
+    }
+
 
     // 8. Loans
     console.log("Exporting: Fetching Loans...");
     const loans = await getLoans();
-    const exportableLoans = loans.map(loan => ({
-        ...loan,
-        createdAt: formatDateForExport(loan.createdAt),
-        updatedAt: formatDateForExport(loan.updatedAt),
-    }));
-    appendToCombinedCsv("LOANS", exportableLoans);
+    if (loans.length > 0) {
+        const exportableLoans = loans.map(loan => ({
+            ...loan,
+            createdAt: formatDateForExport(loan.createdAt),
+            updatedAt: formatDateForExport(loan.updatedAt),
+        }));
+        downloadCsv(Papa.unparse(exportableLoans), 'goldquest_loans.csv');
+    } else {
+        console.log("No loans data to export.");
+    }
 
     // 9. Credit Cards
     console.log("Exporting: Fetching Credit Cards...");
     const creditCards = await getCreditCards();
-    const exportableCreditCards = creditCards.map(card => ({
-        ...card,
-        createdAt: formatDateForExport(card.createdAt),
-        updatedAt: formatDateForExport(card.updatedAt),
-    }));
-    appendToCombinedCsv("CREDIT CARDS", exportableCreditCards);
+    if (creditCards.length > 0) {
+        const exportableCreditCards = creditCards.map(card => ({
+            ...card,
+            createdAt: formatDateForExport(card.createdAt),
+            updatedAt: formatDateForExport(card.updatedAt),
+        }));
+        downloadCsv(Papa.unparse(exportableCreditCards), 'goldquest_credit_cards.csv');
+    } else {
+        console.log("No credit cards data to export.");
+    }
+
 
     // 10. Budgets
     console.log("Exporting: Fetching Budgets...");
     const budgets = await getBudgets();
-    const exportableBudgets: ExportableBudget[] = budgets.map(b => ({
-        ...b,
-        selectedIds: b.selectedIds ? b.selectedIds.join('|') : '',
-        createdAt: formatDateForExport(b.createdAt),
-        updatedAt: formatDateForExport(b.updatedAt),
-    }));
-    appendToCombinedCsv("BUDGETS", exportableBudgets);
-
-    // Download the combined CSV
-    if (combinedCsvString.trim() !== "") {
-        downloadCsv(combinedCsvString, 'goldquest_full_backup.csv');
-        console.log('Combined CSV data prepared for download.');
+    if (budgets.length > 0) {
+        const exportableBudgets: ExportableBudget[] = budgets.map(b => ({
+            ...b,
+            selectedIds: b.selectedIds ? b.selectedIds.join('|') : '',
+            createdAt: formatDateForExport(b.createdAt),
+            updatedAt: formatDateForExport(b.updatedAt),
+        }));
+        downloadCsv(Papa.unparse(exportableBudgets), 'goldquest_budgets.csv');
     } else {
-        console.log('No data found to export.');
+        console.log("No budgets data to export.");
     }
+
+    console.log('Individual CSV data files prepared for download.');
 
   } catch (error) {
     console.error("Error exporting all user data:", error);
