@@ -27,48 +27,59 @@ function downloadBlob(blob: Blob, filename: string) {
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
   } else {
-    alert('File download is not supported by your browser.');
+    // Fallback for browsers that don't support the download attribute
+    // This might open the blob in a new tab depending on the browser and blob type
+    // For a zip file, it usually still triggers a download or prompts the user.
+    const newWindow = window.open(URL.createObjectURL(blob), '_blank');
+    if (!newWindow) {
+        alert('File download is not fully supported by your browser or was blocked. Please check your pop-up blocker settings.');
+    }
   }
 }
 
 const formatDateForExport = (dateInput: object | string | undefined | null): string => {
     if (!dateInput) return '';
     if (typeof dateInput === 'string') {
+        // Attempt to parse if it looks like an ISO string already, otherwise return as is
         const parsed = parseISO(dateInput);
         return isValid(parsed) ? formatDateFns(parsed, "yyyy-MM-dd'T'HH:mm:ssXXX") : dateInput;
     }
+    // Check for Firebase ServerTimestamp placeholder object which is an object with no direct date properties.
+    // A common way to check is if it's an object and doesn't have typical Date methods.
+    // For robust handling, if you expect specific Firebase Timestamp objects, you might check for `toDate` method.
     if (typeof dateInput === 'object' && dateInput !== null) {
         if ('toDate' in dateInput && typeof (dateInput as any).toDate === 'function') {
              return formatDateFns((dateInput as any).toDate(), "yyyy-MM-dd'T'HH:mm:ssXXX");
         }
-        // For Firebase serverTimestamp placeholder object, convert to current date as an example
+        // For Firebase serverTimestamp placeholder object, or other objects, convert to a placeholder or empty string
         // In a real scenario, this would be handled by ensuring data is read after server resolves it
-        return new Date().toISOString();
+        // For export, if it's a placeholder, it's better to represent it as such or empty
+        return 'SERVER_TIMESTAMP_PLACEHOLDER'; // Or return an empty string or a specific string indicating it's a server value
     }
-    if (typeof dateInput === 'number') {
+    if (typeof dateInput === 'number') { // Assuming it's a Unix timestamp (milliseconds)
         return formatDateFns(new Date(dateInput), "yyyy-MM-dd'T'HH:mm:ssXXX");
     }
-    return String(dateInput);
+    return String(dateInput); // Fallback for other types
 };
 
 
 interface ExportableTransaction extends Omit<Transaction, 'tags' | 'originalImportData' | 'createdAt' | 'updatedAt'> {
-    tags?: string;
-    originalImportData?: string;
-    createdAt?: string;
-    updatedAt?: string;
+    tags?: string; // Pipe-separated
+    originalImportData?: string; // JSON string
+    createdAt?: string; // ISO Timestamp
+    updatedAt?: string; // ISO Timestamp
 }
 interface ExportableSubscription extends Omit<Subscription, 'tags' | 'createdAt' | 'updatedAt'> {
-    tags?: string;
+    tags?: string; // Pipe-separated
     createdAt?: string;
     updatedAt?: string;
 }
 
 interface ExportableGroup extends Omit<Group, 'categoryIds'> {
-    categoryIds?: string;
+    categoryIds?: string; // Pipe-separated
 }
 interface ExportableBudget extends Omit<Budget, 'selectedIds' | 'createdAt' | 'updatedAt'> {
-    selectedIds?: string;
+    selectedIds?: string; // Pipe-separated
     createdAt?: string;
     updatedAt?: string;
 }
@@ -79,26 +90,36 @@ export async function exportAllUserDataToZip(): Promise<void> {
   const timestamp = formatDateFns(new Date(), 'yyyyMMdd_HHmmss');
   const zipFilename = `goldquest_backup_${timestamp}.zip`;
 
+  const manifest = {
+    backupVersion: "1.0.0",
+    exportedAt: new Date().toISOString(),
+    appName: "GoldQuest",
+    contains: [] as string[],
+  };
+
   try {
-    console.log("Exporting: Fetching User Preferences...");
+    console.log("Exporting: User Preferences...");
     const preferences = await getUserPreferences();
     if (preferences) {
       zip.file('goldquest_preferences.csv', Papa.unparse([preferences]));
+      manifest.contains.push('preferences');
     }
 
-    console.log("Exporting: Fetching Categories...");
+    console.log("Exporting: Categories...");
     const categories = await getCategories();
     if (categories.length > 0) {
         zip.file('goldquest_categories.csv', Papa.unparse(categories));
+        manifest.contains.push('categories');
     }
 
-    console.log("Exporting: Fetching Tags...");
+    console.log("Exporting: Tags...");
     const tags = await getTags();
      if (tags.length > 0) {
         zip.file('goldquest_tags.csv', Papa.unparse(tags));
+        manifest.contains.push('tags');
     }
 
-    console.log("Exporting: Fetching Groups...");
+    console.log("Exporting: Groups...");
     const groups = await getGroups();
     if (groups.length > 0) {
         const exportableGroups: ExportableGroup[] = groups.map(g => ({
@@ -106,16 +127,18 @@ export async function exportAllUserDataToZip(): Promise<void> {
             categoryIds: g.categoryIds ? g.categoryIds.join('|') : '',
         }));
         zip.file('goldquest_groups.csv', Papa.unparse(exportableGroups));
+        manifest.contains.push('groups');
     }
 
-    console.log("Exporting: Fetching Accounts...");
+    console.log("Exporting: Accounts...");
     const accounts = await getAccounts();
      if (accounts.length > 0) {
-        zip.file('goldquest_accounts.csv', Papa.unparse(accounts));
+        zip.file('goldquest_accounts.csv', Papa.unparse(accounts.map(acc => ({...acc, includeInNetWorth: acc.includeInNetWorth ?? true}))));
+        manifest.contains.push('accounts');
     }
 
     if (accounts.length > 0) {
-        console.log("Exporting: Fetching Transactions...");
+        console.log("Exporting: Transactions...");
         let allTransactions: Transaction[] = [];
         for (const account of accounts) {
             try {
@@ -134,10 +157,11 @@ export async function exportAllUserDataToZip(): Promise<void> {
               updatedAt: formatDateForExport(tx.updatedAt),
             }));
             zip.file('goldquest_transactions.csv', Papa.unparse(exportableTransactions));
+            manifest.contains.push('transactions');
         }
     }
 
-    console.log("Exporting: Fetching Subscriptions...");
+    console.log("Exporting: Subscriptions...");
     const subscriptions = await getSubscriptions();
     if (subscriptions.length > 0) {
         const exportableSubscriptions: ExportableSubscription[] = subscriptions.map(sub => ({
@@ -147,9 +171,10 @@ export async function exportAllUserDataToZip(): Promise<void> {
             updatedAt: formatDateForExport(sub.updatedAt),
         }));
         zip.file('goldquest_subscriptions.csv', Papa.unparse(exportableSubscriptions));
+        manifest.contains.push('subscriptions');
     }
 
-    console.log("Exporting: Fetching Loans...");
+    console.log("Exporting: Loans...");
     const loans = await getLoans();
     if (loans.length > 0) {
         const exportableLoans = loans.map(loan => ({
@@ -158,9 +183,10 @@ export async function exportAllUserDataToZip(): Promise<void> {
             updatedAt: formatDateForExport(loan.updatedAt),
         }));
         zip.file('goldquest_loans.csv', Papa.unparse(exportableLoans));
+        manifest.contains.push('loans');
     }
 
-    console.log("Exporting: Fetching Credit Cards...");
+    console.log("Exporting: Credit Cards...");
     const creditCards = await getCreditCards();
     if (creditCards.length > 0) {
         const exportableCreditCards = creditCards.map(card => ({
@@ -169,9 +195,10 @@ export async function exportAllUserDataToZip(): Promise<void> {
             updatedAt: formatDateForExport(card.updatedAt),
         }));
         zip.file('goldquest_credit_cards.csv', Papa.unparse(exportableCreditCards));
+        manifest.contains.push('creditCards');
     }
 
-    console.log("Exporting: Fetching Budgets...");
+    console.log("Exporting: Budgets...");
     const budgets = await getBudgets();
     if (budgets.length > 0) {
         const exportableBudgets: ExportableBudget[] = budgets.map(b => ({
@@ -181,7 +208,10 @@ export async function exportAllUserDataToZip(): Promise<void> {
             updatedAt: formatDateForExport(b.updatedAt),
         }));
         zip.file('goldquest_budgets.csv', Papa.unparse(exportableBudgets));
+        manifest.contains.push('budgets');
     }
+    
+    zip.file('goldquest_manifest.json', JSON.stringify(manifest, null, 2));
 
     const zipContent = await zip.generateAsync({ type: "blob" });
     downloadBlob(zipContent, zipFilename);

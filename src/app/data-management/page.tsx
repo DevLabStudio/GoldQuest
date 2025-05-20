@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import Papa, { ParseResult } from 'papaparse';
-import JSZip from 'jszip'; // Import JSZip
+import JSZip from 'jszip';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -12,10 +12,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { addTransaction, type Transaction, clearAllSessionTransactions } from '@/services/transactions';
+import { addTransaction, type Transaction, clearAllSessionTransactions, type NewTransactionData } from '@/services/transactions';
 import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync';
-import { getCategories, addCategory as addCategoryToDb, type Category } from '@/services/categories';
+import { getCategories, addCategory as addCategoryToDb, type Category, updateCategory as updateCategoryInDb } from '@/services/categories';
 import { getTags, addTag as addTagToDb, type Tag } from '@/services/tags';
+import { getGroups, addGroup as addGroupToDb, updateGroup as updateGroupInDb, type Group } from '@/services/groups';
+import { getSubscriptions, addSubscription as addSubscriptionToDb, type Subscription } from '@/services/subscriptions';
+import { getLoans, addLoan as addLoanToDb, type Loan } from '@/services/loans';
+import { getCreditCards, addCreditCard as addCreditCardToDb, type CreditCard } from '@/services/credit-cards';
+import { getBudgets, addBudget as addBudgetToDb, type Budget } from '@/services/budgets';
+import { saveUserPreferences, type UserPreferences, getUserPreferences } from '@/lib/preferences';
+
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
@@ -23,7 +31,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency, convertCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
-import { AlertCircle, Trash2, Download } from 'lucide-react'; // Removed FileZip
+import { AlertCircle, Trash2, Download } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
@@ -176,7 +184,7 @@ const parseNameFromDescriptiveString = (text: string | undefined): string | unde
 
 
 export default function DataManagementPage() {
-  const { user, isLoadingAuth } = useAuthContext();
+  const { user, isLoadingAuth, refreshUserPreferences } = useAuthContext();
   const [file, setFile] = useState<File | null>(null);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
   const [rawData, setRawData] = useState<CsvRecord[]>([]);
@@ -195,6 +203,10 @@ export default function DataManagementPage() {
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
+  // New state for restore confirmation
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
+  const [zipFileForRestore, setZipFileForRestore] = useState<File | null>(null);
+
 
   const fetchData = useCallback(async () => {
     if (typeof window === 'undefined' || !user || isLoadingAuth) {
@@ -202,7 +214,7 @@ export default function DataManagementPage() {
       return;
     }
     let isMounted = true;
-    setIsLoading(true);
+    if(isMounted) setIsLoading(true); // Only set loading if mounted
     setError(null);
 
     try {
@@ -229,7 +241,7 @@ export default function DataManagementPage() {
       }
     }
     return () => { isMounted = false; };
-  }, [user, isLoadingAuth]);
+  }, [user, isLoadingAuth]); // Removed toast
 
   useEffect(() => {
     fetchData();
@@ -246,6 +258,8 @@ export default function DataManagementPage() {
       setImportProgress(0);
       setColumnMappings({});
       setFinalAccountMapForImport({});
+      setZipFileForRestore(null);
+      setIsRestoreConfirmOpen(false);
     }
   };
 
@@ -279,12 +293,11 @@ export default function DataManagementPage() {
         }
 
         setCsvHeaders(headers.filter(h => h != null) as string[]);
-        setRawData(results.data); // This rawData will be used by processAndMapData
+        setRawData(results.data);
 
         const detectedHeaders = headers.filter(h => h != null) as string[];
         const initialMappings: ColumnMapping = {};
 
-        // Auto-detect common Firefly III CSV headers
         initialMappings.date = findColumnName(detectedHeaders, 'date');
         initialMappings.amount = findColumnName(detectedHeaders, 'amount');
         initialMappings.description = findColumnName(detectedHeaders, 'description');
@@ -302,7 +315,7 @@ export default function DataManagementPage() {
         initialMappings.initialBalance = findColumnName(detectedHeaders, 'initial_balance') || findColumnName(detectedHeaders, 'opening_balance');
         
         setColumnMappings(initialMappings);
-        setIsMappingDialogOpen(true); // Open mapping dialog
+        setIsMappingDialogOpen(true);
         setIsLoading(false);
       },
       error: (err: Error) => {
@@ -329,12 +342,26 @@ export default function DataManagementPage() {
     setAccountPreviewData([]);
     setRawData([]);
     setCsvHeaders([]);
+    setZipFileForRestore(null);
 
     if (file.name.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
         try {
             const zip = await JSZip.loadAsync(file);
-            let primaryCsvFile: JSZip.JSZipObject | null = null;
+            const manifestFile = zip.file('goldquest_manifest.json');
             
+            if (manifestFile) {
+                const manifestContent = await manifestFile.async('string');
+                const manifest = JSON.parse(manifestContent);
+                if (manifest.appName === "GoldQuest") {
+                    setZipFileForRestore(file);
+                    setIsRestoreConfirmOpen(true);
+                    setIsLoading(false); // Stop general loading, dialog handles next step
+                    return;
+                }
+            }
+            
+            // If not a GoldQuest backup or no manifest, try to find a primary CSV
+            let primaryCsvFile: JSZip.JSZipObject | null = null;
             const commonPrimaryNames = ['transactions.csv', 'firefly_iii_export.csv', 'default.csv'];
             for (const name of commonPrimaryNames) {
                 const foundFile = zip.file(name);
@@ -343,7 +370,6 @@ export default function DataManagementPage() {
                     break;
                 }
             }
-
             if (!primaryCsvFile) {
                 let largestSize = 0;
                 zip.forEach((relativePath, zipEntry) => {
@@ -358,11 +384,11 @@ export default function DataManagementPage() {
             }
 
             if (primaryCsvFile) {
-                toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from the archive.`, duration: 4000});
+                toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from the archive for manual mapping.`, duration: 4000});
                 const csvString = await primaryCsvFile.async("string");
                 processCsvData(csvString, primaryCsvFile.name);
             } else {
-                setError("No suitable CSV file found within the ZIP archive to process for mapping. Expected names like 'transactions.csv' or 'firefly_iii_export.csv'.");
+                setError("No suitable CSV file found within the ZIP archive to process for mapping. If this is a GoldQuest backup, it might be missing a manifest.");
                 setIsLoading(false);
             }
         } catch (zipError: any) {
@@ -1430,6 +1456,266 @@ export default function DataManagementPage() {
       }, {} as typeof grouped);
   }, [parsedData, accountPreviewData, finalAccountMapForImport, accounts]);
 
+  // Full Restore Logic
+  const handleFullRestoreFromZip = async () => {
+    if (!zipFileForRestore || !user) {
+      toast({ title: "Error", description: "No backup file selected or user not authenticated.", variant: "destructive" });
+      setIsRestoreConfirmOpen(false);
+      return;
+    }
+    setIsLoading(true);
+    setImportProgress(0);
+    setError(null);
+    let overallSuccess = true;
+
+    try {
+      toast({ title: "Restore Started", description: "Clearing existing data...", duration: 2000 });
+      await clearAllSessionTransactions();
+      toast({ title: "Restore Progress", description: "Existing data cleared. Starting import...", duration: 2000 });
+
+      const zip = await JSZip.loadAsync(zipFileForRestore);
+      let progressCounter = 0;
+      const totalFilesToProcess = 10; // Approx count of CSV files
+
+      const updateProgress = () => {
+        progressCounter++;
+        setImportProgress(calculateProgress(progressCounter, totalFilesToProcess));
+      };
+      
+      const oldAccountIdToNewIdMap: Record<string, string> = {};
+      const oldCategoryIdToNewIdMap: Record<string, string> = {};
+      const oldGroupIdToNewIdMap: Record<string, string> = {};
+
+      // 1. Preferences
+      const prefsFile = zip.file('goldquest_preferences.csv');
+      if (prefsFile) {
+        const prefsCsv = await prefsFile.async('text');
+        const parsedPrefs = Papa.parse<UserPreferences>(prefsCsv, { header: true, skipEmptyLines: true }).data[0];
+        if (parsedPrefs) {
+          await saveUserPreferences(parsedPrefs);
+          await refreshUserPreferences(); // AuthContext function
+          toast({ title: "Restore Progress", description: "Preferences restored."});
+        }
+      }
+      updateProgress();
+
+      // 2. Categories
+      const categoriesFile = zip.file('goldquest_categories.csv');
+      if (categoriesFile) {
+        const categoriesCsv = await categoriesFile.async('text');
+        const parsedCategories = Papa.parse<Category>(categoriesCsv, { header: true, skipEmptyLines: true }).data;
+        for (const cat of parsedCategories) {
+          if(cat.id && cat.name) { // Ensure critical fields are present
+            try {
+              const newCategory = await addCategoryToDb(cat.name, cat.icon);
+              oldCategoryIdToNewIdMap[cat.id] = newCategory.id;
+            } catch (e: any) {
+              if (!e.message?.includes('already exists')) {
+                 console.warn(`Skipping category restore due to error: ${e.message}`, cat);
+                 overallSuccess = false;
+              } else { // If it already exists, try to find and map its ID
+                const existingCats = await getCategories();
+                const existing = existingCats.find(ec => ec.name.toLowerCase() === cat.name.toLowerCase());
+                if (existing) oldCategoryIdToNewIdMap[cat.id] = existing.id;
+              }
+            }
+          }
+        }
+        toast({ title: "Restore Progress", description: "Categories restored."});
+      }
+      updateProgress();
+      setCategories(await getCategories());
+
+
+      // 3. Tags
+      const tagsFile = zip.file('goldquest_tags.csv');
+      if (tagsFile) {
+        const tagsCsv = await tagsFile.async('text');
+        const parsedTags = Papa.parse<Tag>(tagsCsv, { header: true, skipEmptyLines: true }).data;
+        for (const tag of parsedTags) {
+          if (tag.name) {
+            try {
+              await addTagToDb(tag.name);
+            } catch (e: any) {
+              if (!e.message?.includes('already exists')) {
+                 console.warn(`Skipping tag restore due to error: ${e.message}`, tag);
+                 overallSuccess = false;
+              }
+            }
+          }
+        }
+        toast({ title: "Restore Progress", description: "Tags restored."});
+      }
+      updateProgress();
+      setTags(await getTags());
+
+      // 4. Accounts
+      const accountsFile = zip.file('goldquest_accounts.csv');
+      if (accountsFile) {
+        const accountsCsv = await accountsFile.async('text');
+        const parsedAccounts = Papa.parse<Account>(accountsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+        for (const acc of parsedAccounts) {
+          if(acc.id && acc.name && acc.currency && acc.type && acc.balance !== undefined) {
+            const newAccData: NewAccountData = {
+                name: acc.name,
+                type: acc.type,
+                balance: typeof acc.balance === 'string' ? parseFloat(acc.balance) : acc.balance,
+                currency: acc.currency,
+                providerName: acc.providerName || 'Restored',
+                category: acc.category || 'asset',
+                isActive: acc.isActive !== undefined ? acc.isActive : true,
+                lastActivity: acc.lastActivity || new Date().toISOString(),
+                balanceDifference: acc.balanceDifference || 0,
+                includeInNetWorth: acc.includeInNetWorth !== undefined ? acc.includeInNetWorth : true,
+            };
+            try {
+              const newAccount = await addAccount(newAccData);
+              oldAccountIdToNewIdMap[acc.id] = newAccount.id;
+            } catch (e: any) {
+              console.error(`Error restoring account ${acc.name}: ${e.message}`);
+              overallSuccess = false;
+            }
+          }
+        }
+        toast({ title: "Restore Progress", description: "Accounts restored."});
+      }
+      updateProgress();
+      setAccounts(await getAccounts());
+
+      // 5. Groups
+      const groupsFile = zip.file('goldquest_groups.csv');
+      if (groupsFile) {
+          const groupsCsv = await groupsFile.async('text');
+          const parsedGroups = Papa.parse<{ id: string; name: string; categoryIds: string }>(groupsCsv, { header: true, skipEmptyLines: true }).data;
+          for (const group of parsedGroups) {
+              if (group.id && group.name) {
+                  const oldCatIds = group.categoryIds ? group.categoryIds.split('|').filter(Boolean) : [];
+                  const newCatIds = oldCatIds.map(oldId => oldCategoryIdToNewIdMap[oldId]).filter(Boolean);
+                  try {
+                      const newGroup = await addGroupToDb(group.name);
+                      if (newCatIds.length > 0) {
+                          await updateGroupInDb({ ...newGroup, categoryIds: newCatIds });
+                      }
+                      oldGroupIdToNewIdMap[group.id] = newGroup.id;
+                  } catch (e: any) {
+                      if (!e.message?.includes('already exists')) {
+                          console.error(`Error restoring group ${group.name}: ${e.message}`);
+                          overallSuccess = false;
+                      } else {
+                          const existingGroups = await getGroups();
+                          const existing = existingGroups.find(eg => eg.name.toLowerCase() === group.name.toLowerCase());
+                          if(existing) oldGroupIdToNewIdMap[group.id] = existing.id;
+                      }
+                  }
+              }
+          }
+          toast({ title: "Restore Progress", description: "Groups restored." });
+      }
+      updateProgress();
+      // setGroups(await getGroups()); // Assuming getGroups updates local state
+
+      // 6. Transactions
+      const transactionsFile = zip.file('goldquest_transactions.csv');
+      if (transactionsFile) {
+          const transactionsCsv = await transactionsFile.async('text');
+          const parsedTransactions = Papa.parse<Transaction & { tags?: string, originalImportData?: string }>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+          for (const tx of parsedTransactions) {
+              if (tx.id && tx.accountId && tx.date && tx.amount !== undefined && tx.transactionCurrency && tx.category) {
+                  const newAccountId = oldAccountIdToNewIdMap[tx.accountId];
+                  if (newAccountId) {
+                      const newTxData: NewTransactionData = {
+                          date: typeof tx.date === 'string' ? tx.date : formatDateFns(new Date(tx.date as any), 'yyyy-MM-dd'),
+                          amount: typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount,
+                          transactionCurrency: tx.transactionCurrency,
+                          description: tx.description || 'Restored Transaction',
+                          category: tx.category,
+                          accountId: newAccountId,
+                          tags: tx.tags ? (tx.tags as string).split('|').filter(Boolean) : [],
+                          originalImportData: tx.originalImportData ? JSON.parse(tx.originalImportData as string) : undefined,
+                      };
+                      try {
+                          await addTransaction(newTxData);
+                      } catch (e: any) {
+                          console.error(`Error restoring transaction ${tx.description}: ${e.message}`);
+                          overallSuccess = false;
+                      }
+                  } else {
+                      console.warn(`Could not map old account ID ${tx.accountId} for transaction ${tx.description}`);
+                  }
+              }
+          }
+          toast({ title: "Restore Progress", description: "Transactions restored." });
+      }
+      updateProgress();
+
+      // Placeholders for other data types (Subscriptions, Loans, CreditCards, Budgets)
+      // For each, parse its CSV, remap IDs (accountId, categoryId, groupId etc.) and call its add service.
+      const dataTypesToRestore = [
+          { name: 'Subscriptions', file: 'goldquest_subscriptions.csv', addFn: addSubscriptionToDb, serviceName: 'subscription' },
+          { name: 'Loans', file: 'goldquest_loans.csv', addFn: addLoanToDb, serviceName: 'loan' },
+          { name: 'Credit Cards', file: 'goldquest_credit_cards.csv', addFn: addCreditCardToDb, serviceName: 'credit card' },
+          { name: 'Budgets', file: 'goldquest_budgets.csv', addFn: addBudgetToDb, serviceName: 'budget' },
+      ];
+
+      for (const dataType of dataTypesToRestore) {
+          const fileContent = zip.file(dataType.file);
+          if (fileContent) {
+              const csvData = await fileContent.async('text');
+              const parsedItems = Papa.parse<any>(csvData, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+              for (const item of parsedItems) {
+                  try {
+                      let itemData = { ...item };
+                      delete itemData.id; // Remove old ID
+                      if (itemData.accountId) itemData.accountId = oldAccountIdToNewIdMap[itemData.accountId] || itemData.accountId;
+                      if (itemData.groupId) itemData.groupId = oldGroupIdToNewIdMap[itemData.groupId] || itemData.groupId;
+                      
+                      if(dataType.serviceName === 'subscription' && itemData.tags && typeof itemData.tags === 'string') itemData.tags = itemData.tags.split('|').filter(Boolean);
+                      if(dataType.serviceName === 'budget' && itemData.selectedIds && typeof itemData.selectedIds === 'string') {
+                          const oldSelectedIds = itemData.selectedIds.split('|').filter(Boolean);
+                          itemData.selectedIds = oldSelectedIds.map((oldId: string) => 
+                            itemData.appliesTo === 'categories' ? oldCategoryIdToNewIdMap[oldId] : oldGroupIdToNewIdMap[oldId]
+                          ).filter(Boolean);
+                      }
+                      // Convert date strings if necessary
+                      if (itemData.startDate && typeof itemData.startDate !== 'string') itemData.startDate = formatDateFns(new Date(itemData.startDate), 'yyyy-MM-dd');
+                      if (itemData.nextPaymentDate && typeof itemData.nextPaymentDate !== 'string') itemData.nextPaymentDate = formatDateFns(new Date(itemData.nextPaymentDate), 'yyyy-MM-dd');
+                      if (itemData.endDate && typeof itemData.endDate !== 'string') itemData.endDate = formatDateFns(new Date(itemData.endDate), 'yyyy-MM-dd');
+                      if (itemData.paymentDueDate && typeof itemData.paymentDueDate !== 'string') itemData.paymentDueDate = formatDateFns(new Date(itemData.paymentDueDate), 'yyyy-MM-dd');
+
+
+                      await dataType.addFn(itemData);
+                  } catch (e: any) {
+                       console.error(`Error restoring ${dataType.name} item: ${e.message}`, item);
+                       overallSuccess = false;
+                  }
+              }
+              toast({ title: "Restore Progress", description: `${dataType.name} restored.` });
+          }
+          updateProgress();
+      }
+
+
+      if (overallSuccess) {
+        toast({ title: "Restore Complete", description: "All data restored successfully.", duration: 5000 });
+      } else {
+        toast({ title: "Restore Partially Complete", description: "Some data could not be restored. Check console for errors.", variant: "destructive", duration: 10000 });
+      }
+      await fetchData(); // Refresh page data
+      window.dispatchEvent(new Event('storage')); // Notify other components
+
+    } catch (restoreError: any) {
+      console.error("Full restore failed:", restoreError);
+      setError(`Full restore failed: ${restoreError.message}`);
+      toast({ title: "Restore Failed", description: restoreError.message || "An unknown error occurred during restore.", variant: "destructive" });
+    } finally {
+      setIsLoading(false);
+      setImportProgress(100);
+      setIsRestoreConfirmOpen(false);
+      setZipFileForRestore(null);
+    }
+  };
+
+
 
   if (isLoadingAuth) {
       return <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 text-center"><p>Loading authentication...</p></div>;
@@ -1444,9 +1730,9 @@ export default function DataManagementPage() {
 
       <Card className="mb-8">
         <CardHeader>
-          <CardTitle>Step 1: Upload CSV or ZIP File</CardTitle>
+          <CardTitle>Step 1: Upload CSV or GoldQuest Backup ZIP File</CardTitle>
           <CardDescription>
-            Select your CSV file (Firefly III export is best supported) or a GoldQuest backup ZIP file. Map columns carefully in the next step. Ensure file is UTF-8 encoded.
+            Select your CSV file (Firefly III export is best supported) or a GoldQuest backup ZIP file. Map columns if needed. Ensure file is UTF-8 encoded.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
@@ -1464,11 +1750,11 @@ export default function DataManagementPage() {
           )}
 
           <div className="flex flex-wrap gap-4">
-             <Button onClick={handleParseAndMap} disabled={!file || (isLoading && !isMappingDialogOpen)}>
-                {isLoading && !isMappingDialogOpen && !importProgress ? "Processing File..." : "Parse & Map Columns"}
+             <Button onClick={handleParseAndMap} disabled={!file || (isLoading && !isMappingDialogOpen && !isRestoreConfirmOpen)}>
+                {isLoading && !isMappingDialogOpen && !importProgress && !isRestoreConfirmOpen ? "Processing File..." : "Parse File & Map Columns"}
              </Button>
-             <Button onClick={handleImport} disabled={(isLoading && !isMappingDialogOpen) || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
-               {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Transactions"}
+             <Button onClick={handleImport} disabled={(isLoading && !isMappingDialogOpen) || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending') || isRestoreConfirmOpen}>
+               {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Mapped Data"}
              </Button>
               <Button onClick={handleExportData} disabled={isExporting || (isLoading && !isMappingDialogOpen)}>
                 <Download className="mr-2 h-4 w-4" />
@@ -1476,7 +1762,7 @@ export default function DataManagementPage() {
               </Button>
                <AlertDialog>
                    <AlertDialogTrigger asChild>
-                       <Button variant="destructive" disabled={(isLoading && !isMappingDialogOpen) || isClearing}>
+                       <Button variant="destructive" disabled={(isLoading && !isMappingDialogOpen) || isClearing || isRestoreConfirmOpen}>
                            <Trash2 className="mr-2 h-4 w-4" />
                            {isClearing ? "Clearing..." : "Clear All User Data (DB)"}
                        </Button>
@@ -1485,7 +1771,7 @@ export default function DataManagementPage() {
                        <AlertDialogHeader>
                            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
                            <AlertDialogDescription>
-                               This action cannot be undone. This will permanently delete ALL your accounts, categories, tags, groups, subscriptions and transactions from the database. This is intended for testing or resetting your data.
+                               This action cannot be undone. This will permanently delete ALL your accounts, categories, tags, groups, subscriptions, transactions, loans, credit cards, and budgets from the database. This is intended for testing or resetting your data.
                            </AlertDialogDescription>
                        </AlertDialogHeader>
                        <AlertDialogFooter>
@@ -1509,7 +1795,7 @@ export default function DataManagementPage() {
                 <DialogHeader>
                     <DialogTitle>Step 2: Map CSV Columns</DialogTitle>
                     <DialogDescription>
-                        Match CSV columns (right) to application fields (left). For Firefly III CSVs, ensure 'type', 'amount', 'currency_code', 'date', 'source_name', and 'destination_name' are correctly mapped. If importing a GoldQuest backup, mapping should be automatic for supported files.
+                        Match CSV columns (right) to application fields (left). For Firefly III CSVs, ensure 'type', 'amount', 'currency_code', 'date', 'source_name', and 'destination_name' are correctly mapped.
                     </DialogDescription>
                 </DialogHeader>
                 <CsvMappingForm
@@ -1520,8 +1806,31 @@ export default function DataManagementPage() {
                 />
             </DialogContent>
         </Dialog>
+        
+        <AlertDialog open={isRestoreConfirmOpen} onOpenChange={(open) => {
+            if (!open) setZipFileForRestore(null); // Clear file if dialog is cancelled
+            setIsRestoreConfirmOpen(open);
+        }}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Confirm Full Restore from Backup</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        You've uploaded a GoldQuest backup ZIP file.
+                        Restoring from this backup will <span className="font-bold text-destructive">clear all your current data</span> (accounts, transactions, categories, etc.) and replace it with the data from the backup.
+                        This action cannot be undone. Are you sure you want to proceed?
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => {setIsRestoreConfirmOpen(false); setZipFileForRestore(null);}} disabled={isLoading}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleFullRestoreFromZip} disabled={isLoading} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                        {isLoading ? "Restoring..." : "Yes, Restore from Backup"}
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
 
-       {accountPreviewData.length > 0 && !isLoading && (
+
+       {accountPreviewData.length > 0 && !isLoading && !isRestoreConfirmOpen && (
             <Card className="mb-8">
                 <CardHeader>
                     <CardTitle>Account Changes Preview</CardTitle>
@@ -1559,11 +1868,11 @@ export default function DataManagementPage() {
             </Card>
         )}
 
-      {parsedData.length > 0 && (
+      {parsedData.length > 0 && !isRestoreConfirmOpen && (
         <Card>
           <CardHeader>
             <CardTitle>Review &amp; Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
-            <CardDescription>Review transactions. Rows marked 'Error' or 'Skipped' (like Opening Balances) won't be imported as transactions. Edit fields if needed. Click "Import Transactions" above when ready.</CardDescription>
+            <CardDescription>Review transactions. Rows marked 'Error' or 'Skipped' (like Opening Balances) won't be imported as transactions. Edit fields if needed. Click "Import Mapped Data" above when ready.</CardDescription>
           </CardHeader>
           <CardContent>
            {Object.entries(groupedTransactionsForPreview).map(([accountGroupKey, transactionsInGroup]) => {
