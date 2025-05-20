@@ -2,22 +2,25 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import type { UserPreferences } from '@/lib/preferences';
-import { saveUserPreferences, getUserPreferences as fetchUserPreferencesFromLib } from '@/lib/preferences'; // Import saveUserPreferences directly
+import { saveUserPreferences } from '@/lib/preferences';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { exportAllUserDataToCsvs } from '@/services/export'; // Import the export function
+import { Download } from 'lucide-react';
 
 export default function PreferencesPage() {
-  const { user, isLoadingAuth, userPreferences, refreshUserPreferences } = useAuthContext(); // Removed setAppTheme as we'll save directly
+  const { user, isLoadingAuth, userPreferences, refreshUserPreferences } = useAuthContext();
   const [preferredCurrency, setPreferredCurrency] = useState(userPreferences?.preferredCurrency || 'BRL');
   const [selectedTheme, setSelectedTheme] = useState<UserPreferences['theme']>(userPreferences?.theme || 'system');
   const [isSaving, setIsSaving] = useState(false);
+  const [isExporting, setIsExporting] = useState(false); // New state for export loading
   const { toast } = useToast();
 
   useEffect(() => {
@@ -42,24 +45,17 @@ export default function PreferencesPage() {
     }
     setIsSaving(true);
     try {
-      // Construct the new preferences object with current selections from the page
       const newPreferencesToSave: UserPreferences = {
-        preferredCurrency: preferredCurrency, // This is from PreferencesPage's local state
-        theme: selectedTheme,                 // This is also from PreferencesPage's local state
+        preferredCurrency: preferredCurrency,
+        theme: selectedTheme,
       };
-
-      // Directly save the new preferences using the lib function
       await saveUserPreferences(newPreferencesToSave);
-
-      // Refresh the AuthContext's state so the rest of the app sees the changes
       await refreshUserPreferences();
-
       toast({
         title: "Preferences Saved",
         description: "Your preferences have been updated successfully.",
       });
-       // Trigger a global event to notify other components (like AuthWrapper for theme)
-       window.dispatchEvent(new Event('storage'));
+      window.dispatchEvent(new Event('storage'));
     } catch (error) {
       console.error("Failed to save preferences:", error);
       toast({
@@ -71,6 +67,25 @@ export default function PreferencesPage() {
       setIsSaving(false);
     }
   };
+
+  const handleExportData = async () => {
+    if (!user) {
+      toast({ title: "Error", description: "User not authenticated.", variant: "destructive" });
+      return;
+    }
+    setIsExporting(true);
+    toast({ title: "Exporting Data", description: "Preparing your data for download. This may take a moment..." });
+    try {
+      await exportAllUserDataToCsvs();
+      toast({ title: "Export Complete", description: "Your data files should be downloading now. Please check your browser's download folder." });
+    } catch (error) {
+      console.error("Export failed:", error);
+      toast({ title: "Export Failed", description: "Could not export your data. Please try again.", variant: "destructive" });
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
 
   if (isLoadingAuth || (!userPreferences && user)) {
     return (
@@ -98,8 +113,8 @@ export default function PreferencesPage() {
   }
 
   return (
-    <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
-      <h1 className="text-3xl font-bold mb-6">Preferences</h1>
+    <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 space-y-8">
+      <h1 className="text-3xl font-bold">Preferences</h1>
 
       <Card>
         <CardHeader>
@@ -163,6 +178,28 @@ export default function PreferencesPage() {
           )}
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Data Management</CardTitle>
+          <CardDescription>
+            Export all your application data to CSV files.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button onClick={handleExportData} disabled={!user || isExporting}>
+            <Download className="mr-2 h-4 w-4" />
+            {isExporting ? "Exporting..." : "Export All Data"}
+          </Button>
+        </CardContent>
+        <CardFooter>
+            <p className="text-xs text-muted-foreground">
+                This will download multiple CSV files, one for each data type (accounts, transactions, etc.).
+                These files can be used as a backup or for importing into other systems.
+            </p>
+        </CardFooter>
+      </Card>
+
     </div>
   );
 }
