@@ -14,8 +14,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { addTransaction, type Transaction, clearAllSessionTransactions, type NewTransactionData } from '@/services/transactions';
 import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync';
-import { getCategories, addCategory as addCategoryToDb, type Category, updateCategory as updateCategoryInDb } from '@/services/categories';
-import { getTags, addTag as addTagToDb, type Tag } from '@/services/tags';
+import { getCategories, addCategory as addCategoryToDb, type Category, updateCategory as updateCategoryInDb, getCategoryStyle } from '@/services/categories';
+import { getTags, addTag as addTagToDb, type Tag, getTagStyle } from '@/services/tags';
 import { getGroups, addGroup as addGroupToDb, updateGroup as updateGroupInDb, type Group } from '@/services/groups';
 import { getSubscriptions, addSubscription as addSubscriptionToDb, type Subscription } from '@/services/subscriptions';
 import { getLoans, addLoan as addLoanToDb, type Loan } from '@/services/loans';
@@ -209,12 +209,13 @@ export default function DataManagementPage() {
 
 
   const fetchData = useCallback(async () => {
+    let isMounted = true;
+    if (isMounted) setIsLoading(true); 
+
     if (typeof window === 'undefined' || !user || isLoadingAuth) {
-      setIsLoading(false);
+      if(isMounted) setIsLoading(false);
       return;
     }
-    let isMounted = true;
-    if(isMounted) setIsLoading(true); // Only set loading if mounted
     setError(null);
 
     try {
@@ -241,7 +242,7 @@ export default function DataManagementPage() {
       }
     }
     return () => { isMounted = false; };
-  }, [user, isLoadingAuth]); // Removed toast
+  }, [user, isLoadingAuth, toast]); // Added toast to dependency array as it's used in error handling
 
   useEffect(() => {
     fetchData();
@@ -315,7 +316,7 @@ export default function DataManagementPage() {
         initialMappings.initialBalance = findColumnName(detectedHeaders, 'initial_balance') || findColumnName(detectedHeaders, 'opening_balance');
         
         setColumnMappings(initialMappings);
-        setIsMappingDialogOpen(true);
+        setIsMappingDialogOpen(true); // Show mapping dialog for generic CSV or non-GoldQuest ZIP
         setIsLoading(false);
       },
       error: (err: Error) => {
@@ -343,24 +344,25 @@ export default function DataManagementPage() {
     setRawData([]);
     setCsvHeaders([]);
     setZipFileForRestore(null);
+    setIsMappingDialogOpen(false); // Reset mapping dialog state
 
     if (file.name.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
         try {
             const zip = await JSZip.loadAsync(file);
             const manifestFile = zip.file('goldquest_manifest.json');
             
-            if (manifestFile) {
+            if (manifestFile) { // Detected a GoldQuest backup
                 const manifestContent = await manifestFile.async('string');
                 const manifest = JSON.parse(manifestContent);
                 if (manifest.appName === "GoldQuest") {
                     setZipFileForRestore(file);
-                    setIsRestoreConfirmOpen(true);
-                    setIsLoading(false); // Stop general loading, dialog handles next step
-                    return;
+                    setIsRestoreConfirmOpen(true); // Go directly to restore confirmation
+                    setIsLoading(false);
+                    return; // Skip manual mapping
                 }
             }
             
-            // If not a GoldQuest backup or no manifest, try to find a primary CSV
+            // If not a GoldQuest backup or no manifest, try to find a primary CSV for manual mapping
             let primaryCsvFile: JSZip.JSZipObject | null = null;
             const commonPrimaryNames = ['transactions.csv', 'firefly_iii_export.csv', 'default.csv'];
             for (const name of commonPrimaryNames) {
@@ -370,7 +372,7 @@ export default function DataManagementPage() {
                     break;
                 }
             }
-            if (!primaryCsvFile) {
+            if (!primaryCsvFile) { // Fallback to largest CSV if common names not found
                 let largestSize = 0;
                 zip.forEach((relativePath, zipEntry) => {
                     if (zipEntry.name.toLowerCase().endsWith('.csv') && !zipEntry.dir) {
@@ -386,20 +388,20 @@ export default function DataManagementPage() {
             if (primaryCsvFile) {
                 toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from the archive for manual mapping.`, duration: 4000});
                 const csvString = await primaryCsvFile.async("string");
-                processCsvData(csvString, primaryCsvFile.name);
+                processCsvData(csvString, primaryCsvFile.name); // This will open mapping dialog
             } else {
-                setError("No suitable CSV file found within the ZIP archive to process for mapping. If this is a GoldQuest backup, it might be missing a manifest.");
+                setError("No suitable CSV file found within the ZIP archive to process for mapping. If this is a GoldQuest backup, it might be missing a manifest or CSV files.");
                 setIsLoading(false);
             }
         } catch (zipError: any) {
             setError(`Failed to process ZIP file: ${zipError.message}`);
             setIsLoading(false);
         }
-    } else if (file.name.endsWith('.csv') || file.type === 'text/csv') {
+    } else if (file.name.endsWith('.csv') || file.type === 'text/csv') { // Direct CSV upload
         const reader = new FileReader();
         reader.onload = (event) => {
             if (event.target?.result && typeof event.target.result === 'string') {
-                processCsvData(event.target.result, file.name);
+                processCsvData(event.target.result, file.name); // This will open mapping dialog
             } else {
                 setError("Failed to read CSV file content.");
                 setIsLoading(false);
@@ -633,20 +635,20 @@ export default function DataManagementPage() {
                      }
                  }
                  return {
-                    date: parseDate(record[dateCol!]),
+                    date: parseDate(record[confirmedMappings.date!]),
                     amount: 0,
-                    currency: record[currencyCol!]?.trim().toUpperCase() || 'N/A',
+                    currency: record[confirmedMappings.currency_code!]?.trim().toUpperCase() || 'N/A',
                     description: `Error Processing Row ${index + 2}`,
                     category: 'Uncategorized',
                     tags: [],
                     originalRecord: errorSanitizedRecord,
                     importStatus: 'error',
                     errorMessage: rowError.message || 'Failed to process row.',
-                    csvRawSourceName: (sourceNameCol && record[sourceNameCol] ? record[sourceNameCol]?.trim() : undefined) ?? null,
-                    csvRawDestinationName: (destNameCol && record[destNameCol] ? record[destNameCol]?.trim() : undefined) ?? null,
-                    csvTransactionType: (typeCol && record[typeCol] ? record[typeCol]?.trim().toLowerCase() : undefined) ?? null,
-                    csvSourceType: (sourceTypeCol && record[sourceTypeCol] ? record[sourceTypeCol]?.trim().toLowerCase() : undefined) ?? null,
-                    csvDestinationType: (destTypeCol && record[destTypeCol] ? record[destTypeCol]?.trim().toLowerCase() : undefined) ?? null,
+                    csvRawSourceName: (confirmedMappings.source_name && record[confirmedMappings.source_name] ? record[confirmedMappings.source_name]?.trim() : undefined) ?? null,
+                    csvRawDestinationName: (confirmedMappings.destination_name && record[confirmedMappings.destination_name] ? record[confirmedMappings.destination_name]?.trim() : undefined) ?? null,
+                    csvTransactionType: (confirmedMappings.transaction_type && record[confirmedMappings.transaction_type] ? record[confirmedMappings.transaction_type]?.trim().toLowerCase() : undefined) ?? null,
+                    csvSourceType: (confirmedMappings.source_type && record[confirmedMappings.source_type] ? record[confirmedMappings.source_type]?.trim().toLowerCase() : undefined) ?? null,
+                    csvDestinationType: (confirmedMappings.destination_type && record[confirmedMappings.destination_type] ? record[confirmedMappings.destination_type]?.trim().toLowerCase() : undefined) ?? null,
                     foreignAmount: null,
                     foreignCurrency: null,
                     appSourceAccountId: null,
@@ -1776,7 +1778,7 @@ export default function DataManagementPage() {
                        </AlertDialogHeader>
                        <AlertDialogFooter>
                            <AlertDialogCancel onClick={() => setIsClearing(false)} disabled={isClearing}>Cancel</AlertDialogCancel>
-                           <AlertDialogAction onClick={handleClearData} disabled={isClearing} className="bg-destructive hover:bg-destructive/90">
+                           <AlertDialogAction onClick={handleClearData} disabled={isClearing} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
                                {isClearing ? "Clearing..." : "Yes, Clear All My Data"}
                            </AlertDialogAction>
                        </AlertDialogFooter>
@@ -1951,3 +1953,4 @@ export default function DataManagementPage() {
     </div>
   );
 }
+
