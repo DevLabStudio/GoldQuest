@@ -204,6 +204,7 @@ export default function DataManagementPage() {
 
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
   const [zipFileForRestore, setZipFileForRestore] = useState<File | null>(null);
+  const [isRestoring, setIsRestoring] = useState(false); // Specific state for restore operation
 
 
   const fetchData = useCallback(async () => {
@@ -240,7 +241,7 @@ export default function DataManagementPage() {
       }
     }
     return () => { isMounted = false; };
-  }, [user, isLoadingAuth, isLoading, toast]); 
+  }, [user, isLoadingAuth, toast]); // Removed isLoading from dep array as it's managed inside
 
   useEffect(() => {
     fetchData();
@@ -355,11 +356,12 @@ export default function DataManagementPage() {
                 if (manifest.appName === "GoldQuest") {
                     setZipFileForRestore(file);
                     setIsRestoreConfirmOpen(true); 
-                    setIsLoading(false);
+                    setIsLoading(false); // Stop general loading as we're moving to restore dialog
                     return; 
                 }
             }
             
+            // Fallback to finding a CSV if not a GoldQuest backup
             let primaryCsvFile: JSZip.JSZipObject | null = null;
             const commonPrimaryNames = ['transactions.csv', 'firefly_iii_export.csv', 'default.csv'];
             for (const name of commonPrimaryNames) {
@@ -383,7 +385,7 @@ export default function DataManagementPage() {
             }
 
             if (primaryCsvFile) {
-                toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from the archive for manual mapping.`, duration: 4000});
+                toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from archive for manual mapping.`, duration: 4000});
                 const csvString = await primaryCsvFile.async("string");
                 processCsvData(csvString, primaryCsvFile.name); 
             } else {
@@ -1467,15 +1469,13 @@ export default function DataManagementPage() {
       setIsRestoreConfirmOpen(false);
       return;
     }
-    setIsLoading(true);
+    setIsRestoring(true); // Use dedicated state for restore button
     setImportProgress(0);
     setError(null);
     let overallSuccess = true;
-    const accountsFromBackup: Account[] = [];
     const oldAccountIdToNewIdMap: Record<string, string> = {};
     const oldCategoryIdToNewIdMap: Record<string, string> = {};
     const oldGroupIdToNewIdMap: Record<string, string> = {};
-    let newAccountsListAfterRestore: Account[] = [];
 
     try {
       toast({ title: "Restore Started", description: "Clearing existing data...", duration: 2000 });
@@ -1554,7 +1554,7 @@ export default function DataManagementPage() {
       updateProgress();
       setTags(await getTags());
 
-      // 4. Accounts (Crucial: set balance from CSV here)
+      // 4. Accounts
       const accountsFile = zip.file('goldquest_accounts.csv');
       if (accountsFile) {
         const accountsCsv = await accountsFile.async('text');
@@ -1564,7 +1564,7 @@ export default function DataManagementPage() {
             const newAccData: NewAccountData = {
                 name: accFromCsv.name,
                 type: accFromCsv.type,
-                balance: parseFloat(String(accFromCsv.balance)) || 0, // Use balance from CSV
+                balance: 0, // Start with 0, balance will be reconstructed by transactions
                 currency: accFromCsv.currency,
                 providerName: accFromCsv.providerName || 'Restored',
                 category: accFromCsv.category || 'asset',
@@ -1574,22 +1574,18 @@ export default function DataManagementPage() {
                 includeInNetWorth: accFromCsv.includeInNetWorth !== undefined ? (String(accFromCsv.includeInNetWorth).toLowerCase() === 'true') : true,
             };
             try {
-              const newAccount = await addAccount(newAccData); // addAccount sets balance
+              const newAccount = await addAccount(newAccData);
               oldAccountIdToNewIdMap[accFromCsv.id] = newAccount.id;
-              accountsFromBackup.push(newAccount); // Store for later reference if needed
             } catch (e: any) {
               console.error(`Error restoring account ${accFromCsv.name}: ${e.message}`);
               overallSuccess = false;
             }
           }
         }
-        newAccountsListAfterRestore = await getAccounts(); // Get all accounts after they've been added
-        setAccounts(newAccountsListAfterRestore);
-        toast({ title: "Restore Progress", description: "Accounts restored."});
+        toast({ title: "Restore Progress", description: "Accounts (metadata) restored."});
       }
       updateProgress();
       
-
       // 5. Groups
       const groupsFile = zip.file('goldquest_groups.csv');
       if (groupsFile) {
@@ -1621,14 +1617,17 @@ export default function DataManagementPage() {
       }
       updateProgress();
 
-      // 6. Transactions (Skip balance modification)
+      // 6. Transactions (NOW these will update balances from 0)
       const transactionsFile = zip.file('goldquest_transactions.csv');
       if (transactionsFile) {
           const transactionsCsv = await transactionsFile.async('text');
           const parsedTransactions = Papa.parse<ExportableTransaction>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
           
+          // Sort transactions by date to ensure correct balance calculation
+          parsedTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
           for (const txCSV of parsedTransactions) {
-              if (txCSV.id && txCSV.accountId && txCSV.date && txCSV.amount !== undefined && txCSV.transactionCurrency && txCSV.category) {
+              if (txCSV.id && txCSV.accountId && txCSV.date && txCSV.amount !== undefined && txCSV.transactionCurrency) {
                   const newAccountId = oldAccountIdToNewIdMap[txCSV.accountId];
                   if (newAccountId) {
                       const newTxData: NewTransactionData = {
@@ -1636,27 +1635,32 @@ export default function DataManagementPage() {
                           amount: typeof txCSV.amount === 'string' ? parseFloat(txCSV.amount) : txCSV.amount,
                           transactionCurrency: txCSV.transactionCurrency,
                           description: txCSV.description || 'Restored Transaction',
-                          category: txCSV.category,
+                          category: txCSV.category || 'Uncategorized', // Ensure category is not empty
                           accountId: newAccountId,
                           tags: txCSV.tags ? txCSV.tags.split('|').filter(Boolean) : [],
                           originalImportData: txCSV.originalImportData ? JSON.parse(txCSV.originalImportData) : undefined,
                       };
                       try {
-                           // Add transaction without modifying balance, as balances are set from accounts.csv
-                          await addTransaction(newTxData, { skipBalanceModification: true });
+                          // IMPORTANT: Use skipBalanceModification: false (or omit) so balances are modified
+                          await addTransaction(newTxData, { skipBalanceModification: txCSV.category?.toLowerCase() === 'opening balance' });
                       } catch (e: any) {
                           console.error(`Error restoring transaction ${txCSV.description}: ${e.message}`);
                           overallSuccess = false;
                       }
                   } else {
                       console.warn(`Could not map old account ID ${txCSV.accountId} for transaction ${txCSV.description}`);
+                      overallSuccess = false;
                   }
+              } else {
+                  console.warn("Skipping invalid transaction row from CSV:", txCSV);
+                  overallSuccess = false;
               }
           }
-          toast({ title: "Restore Progress", description: "Transactions restored." });
+          toast({ title: "Restore Progress", description: "Transactions restored and balances recalculated." });
       }
       updateProgress();
 
+      // Restore other data types...
       const dataTypesToRestore = [
           { name: 'Subscriptions', file: 'goldquest_subscriptions.csv', addFn: addSubscriptionToDb, serviceName: 'subscription' },
           { name: 'Loans', file: 'goldquest_loans.csv', addFn: addLoanToDb, serviceName: 'loan' },
@@ -1698,13 +1702,6 @@ export default function DataManagementPage() {
           }
           updateProgress();
       }
-
-
-      if (overallSuccess) {
-        toast({ title: "Restore Complete", description: "All data restored successfully.", duration: 5000 });
-      } else {
-        toast({ title: "Restore Partially Complete", description: "Some data could not be restored. Check console for errors.", variant: "destructive", duration: 10000 });
-      }
       
     } catch (restoreError: any) {
       console.error("Full restore failed:", restoreError);
@@ -1712,17 +1709,21 @@ export default function DataManagementPage() {
       toast({ title: "Restore Failed", description: restoreError.message || "An unknown error occurred during restore.", variant: "destructive" });
       overallSuccess = false;
     } finally {
-      setIsLoading(false);
-      setImportProgress(100); // Indicate completion even if errors
+      setIsRestoring(false); // Reset dedicated restore loading state
+      setImportProgress(100); 
       setIsRestoreConfirmOpen(false);
       setZipFileForRestore(null);
+      
       if (overallSuccess) {
-        await fetchData(); // Refresh page data
-        window.dispatchEvent(new Event('storage')); // Notify other components
+        toast({ title: "Restore Complete", description: "All data restored successfully from backup.", duration: 7000 });
+        await fetchData(); 
+        window.dispatchEvent(new Event('storage')); 
+      } else {
+        toast({ title: "Restore Partially Complete or Failed", description: "Some data may not have been restored. Check console for errors.", variant: "destructive", duration: 10000 });
+        await fetchData(); // Still try to refresh what might have been restored
       }
     }
   };
-
 
 
   if (isLoadingAuth) {
@@ -1746,7 +1747,7 @@ export default function DataManagementPage() {
         <CardContent className="space-y-6">
           <div className="grid w-full max-w-sm items-center gap-1.5">
             <Label htmlFor="csv-file">Select File</Label>
-            <Input id="csv-file" type="file" accept=".csv,text/csv,application/zip,application/x-zip-compressed" onChange={handleFileChange} disabled={isLoading && !isMappingDialogOpen}/>
+            <Input id="csv-file" type="file" accept=".csv,text/csv,application/zip,application/x-zip-compressed" onChange={handleFileChange} disabled={isLoading || isRestoring}/>
           </div>
 
           {error && (
@@ -1758,19 +1759,19 @@ export default function DataManagementPage() {
           )}
 
           <div className="flex flex-wrap gap-4">
-             <Button onClick={handleParseAndMap} disabled={!file || (isLoading && !isMappingDialogOpen && !isRestoreConfirmOpen)}>
-                {isLoading && !isMappingDialogOpen && !importProgress && !isRestoreConfirmOpen ? "Processing File..." : "Parse File & Map Columns"}
+             <Button onClick={handleParseAndMap} disabled={!file || isLoading || isRestoring}>
+                {isLoading ? "Processing File..." : "Parse File & Map Columns"}
              </Button>
-             <Button onClick={handleImport} disabled={(isLoading && !isMappingDialogOpen) || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending') || isRestoreConfirmOpen}>
-               {isLoading && importProgress > 0 ? `Importing... (${importProgress}%)` : "Import Mapped Data"}
+             <Button onClick={handleImport} disabled={isLoading || isRestoring || parsedData.length === 0 || parsedData.every(d => d.importStatus !== 'pending')}>
+               {isLoading && importProgress > 0 && importProgress < 100 ? `Importing... (${importProgress}%)` : "Import Mapped Data"}
              </Button>
-              <Button onClick={handleExportData} disabled={isExporting || (isLoading && !isMappingDialogOpen)}>
+              <Button onClick={handleExportData} disabled={isExporting || isLoading || isRestoring}>
                 <Download className="mr-2 h-4 w-4" />
                 {isExporting ? "Exporting..." : "Export All Data (ZIP)"}
               </Button>
                <AlertDialog>
                    <AlertDialogTrigger asChild>
-                       <Button variant="destructive" disabled={(isLoading && !isMappingDialogOpen) || isClearing || isRestoreConfirmOpen}>
+                       <Button variant="destructive" disabled={isLoading || isClearing || isRestoring}>
                            <Trash2 className="mr-2 h-4 w-4" />
                            {isClearing ? "Clearing..." : "Clear All User Data (DB)"}
                        </Button>
@@ -1792,7 +1793,7 @@ export default function DataManagementPage() {
                </AlertDialog>
           </div>
 
-           {isLoading && importProgress > 0 && (
+           {isLoading && importProgress > 0 && importProgress < 100 && (
                <Progress value={importProgress} className="w-full mt-4" />
            )}
         </CardContent>
@@ -1829,16 +1830,16 @@ export default function DataManagementPage() {
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => {setIsRestoreConfirmOpen(false); setZipFileForRestore(null);}} disabled={isLoading}>Cancel</AlertDialogCancel>
-                    <AlertDialogAction onClick={handleFullRestoreFromZip} disabled={isLoading} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
-                        {isLoading ? "Restoring..." : "Yes, Restore from Backup"}
+                    <AlertDialogCancel onClick={() => {setIsRestoreConfirmOpen(false); setZipFileForRestore(null);}} disabled={isRestoring}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleFullRestoreFromZip} disabled={isRestoring} className="bg-destructive hover:bg-destructive/90 text-destructive-foreground">
+                        {isRestoring ? "Restoring..." : "Yes, Restore from Backup"}
                     </AlertDialogAction>
                 </AlertDialogFooter>
             </AlertDialogContent>
         </AlertDialog>
 
 
-       {accountPreviewData.length > 0 && !isLoading && !isRestoreConfirmOpen && (
+       {accountPreviewData.length > 0 && !isLoading && !isRestoring && (
             <Card className="mb-8">
                 <CardHeader>
                     <CardTitle>Account Changes Preview</CardTitle>
@@ -1876,7 +1877,7 @@ export default function DataManagementPage() {
             </Card>
         )}
 
-      {parsedData.length > 0 && !isRestoreConfirmOpen && (
+      {parsedData.length > 0 && !isRestoring && (
         <Card>
           <CardHeader>
             <CardTitle>Review &amp; Import ({parsedData.filter(i => i.importStatus === 'pending').length} Pending Rows)</CardTitle>
