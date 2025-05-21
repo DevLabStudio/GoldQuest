@@ -2,7 +2,7 @@
 'use client';
 
 import { database, auth } from '@/lib/firebase';
-import { ref, set, get, push, remove, update, serverTimestamp } from 'firebase/database';
+import { ref, set, get, push, remove, update, serverTimestamp, query, orderByChild, limitToLast } from 'firebase/database';
 import type { User } from 'firebase/auth';
 import { getAccounts as getAllAccounts, updateAccount as updateAccountInDb, type Account } from './account-sync';
 import { convertCurrency } from '@/lib/currency';
@@ -59,12 +59,11 @@ function getSingleTransactionRefPath(currentUser: User | null, accountId: string
 }
 
 async function modifyAccountBalance(accountId: string, amountInTransactionCurrency: number, transactionCurrency: string, operation: 'add' | 'subtract') {
-    const accounts = await getAllAccounts(); // This fetches from Firebase/localStorage as per account-sync
+    const accounts = await getAllAccounts();
     const accountToUpdate = accounts.find(acc => acc.id === accountId);
 
     if (accountToUpdate) {
         let amountInAccountCurrency = amountInTransactionCurrency;
-        // Ensure both currencies are defined and not empty strings before attempting conversion
         if (transactionCurrency && accountToUpdate.currency && transactionCurrency.toUpperCase() !== accountToUpdate.currency.toUpperCase()) {
             amountInAccountCurrency = convertCurrency(
                 amountInTransactionCurrency,
@@ -75,35 +74,14 @@ async function modifyAccountBalance(accountId: string, amountInTransactionCurren
         const balanceChange = operation === 'add' ? amountInAccountCurrency : -amountInAccountCurrency;
         const newBalance = parseFloat((accountToUpdate.balance + balanceChange).toFixed(2));
 
-        await updateAccountInDb({ // This updates Firebase/localStorage as per account-sync
+        await updateAccountInDb({
             ...accountToUpdate,
             balance: newBalance,
             lastActivity: new Date().toISOString(),
         });
-        // console.log(`Account ${accountToUpdate.name} balance updated by ${balanceChange} ${accountToUpdate.currency}. New balance: ${newBalance}`);
     } else {
         console.warn(`Account ID ${accountId} not found for balance update.`);
     }
-}
-
-async function _getTransactionsFromLocalStorage(accountId: string): Promise<Transaction[]> {
-    const currentUser = auth.currentUser;
-    if (!currentUser?.uid) return [];
-    const key = `transactions-${accountId}-${currentUser.uid}`;
-    const data = localStorage.getItem(key);
-    try {
-        return data ? JSON.parse(data) : [];
-    } catch (e) {
-        console.error("Error parsing transactions from localStorage for account:", accountId, e);
-        return [];
-    }
-}
-
-async function _saveTransactionsToLocalStorage(accountId: string, transactions: Transaction[]): Promise<void> {
-    const currentUser = auth.currentUser;
-    if (!currentUser?.uid) return;
-    const key = `transactions-${accountId}-${currentUser.uid}`;
-    localStorage.setItem(key, JSON.stringify(transactions));
 }
 
 export async function getTransactions(
@@ -111,36 +89,50 @@ export async function getTransactions(
     options?: { limit?: number }
 ): Promise<Transaction[]> {
   const currentUser = auth.currentUser;
-   if (!currentUser?.uid) {
+  if (!currentUser?.uid) {
     console.warn("getTransactions called without authenticated user. Returning empty array.");
     return [];
   }
-  const storageKey = `transactions-${accountId}-${currentUser.uid}`;
-  const data = localStorage.getItem(storageKey);
+  const transactionsRefPath = getTransactionsRefPath(currentUser, accountId);
+  const accountTransactionsRef = ref(database, transactionsRefPath);
 
-  if (data) {
-      try {
-        const allAppAccounts = await getAllAccounts();
-        const transactionsArray = (JSON.parse(data) as Transaction[])
-            .map(tx => ({
-                ...tx,
-                tags: tx.tags || [],
-                category: tx.category || 'Uncategorized',
-                transactionCurrency: tx.transactionCurrency || allAppAccounts.find(a=>a.id === tx.accountId)?.currency || 'USD'
-            }))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  try {
+    const dataQuery = options?.limit && options.limit > 0
+        ? query(accountTransactionsRef, orderByChild('date'), limitToLast(options.limit))
+        : query(accountTransactionsRef, orderByChild('date'));
 
-        if (options?.limit && options.limit > 0) {
-            return transactionsArray.slice(0, options.limit);
-        }
-        return transactionsArray;
-      } catch(e) {
-          console.error("Error parsing transactions from localStorage during getTransactions for account:", accountId, e);
-          localStorage.removeItem(storageKey);
-          return [];
-      }
+    const snapshot = await get(dataQuery);
+    if (snapshot.exists()) {
+      const transactionsData = snapshot.val();
+      const allAppAccounts = await getAllAccounts(); // Needed for fallback currency
+      const transactionsArray = Object.entries(transactionsData)
+        .map(([id, data]) => {
+            const txData = data as Omit<Transaction, 'id'>;
+            return {
+                id,
+                ...txData,
+                tags: txData.tags || [],
+                category: txData.category || 'Uncategorized',
+                transactionCurrency: txData.transactionCurrency || allAppAccounts.find(a => a.id === txData.accountId)?.currency || 'USD',
+                // Convert Firebase server timestamps to ISO strings if they exist
+                createdAt: txData.createdAt && typeof txData.createdAt === 'object' ? new Date().toISOString() : txData.createdAt as string,
+                updatedAt: txData.updatedAt && typeof txData.updatedAt === 'object' ? new Date().toISOString() : txData.updatedAt as string,
+            };
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort descending by date
+
+      // If a limit was applied by Firebase, it's already handled.
+      // If no limit option or limit was larger than actual data, slice here if needed (though Firebase limit is more efficient)
+      // This client-side slice is mainly for consistency if options.limit was used but Firebase query didn't support it as expected.
+      return options?.limit && options.limit > 0 && transactionsArray.length > options.limit
+        ? transactionsArray.slice(0, options.limit)
+        : transactionsArray;
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching transactions from Firebase:", error);
+    throw error; // Re-throw other errors
   }
-  return [];
 }
 
 export async function addTransaction(
@@ -149,6 +141,9 @@ export async function addTransaction(
 ): Promise<Transaction> {
   const currentUser = auth.currentUser;
   const { accountId, amount, transactionCurrency, category } = transactionData;
+  if (!currentUser?.uid) {
+    throw new Error("User not authenticated. Cannot add transaction.");
+  }
   const transactionsRefPath = getTransactionsRefPath(currentUser, accountId);
   const accountTransactionsRef = ref(database, transactionsRefPath);
   const newTransactionRef = push(accountTransactionsRef);
@@ -171,21 +166,15 @@ export async function addTransaction(
   };
 
   const dataToSave = { ...newTransaction } as any;
-  delete dataToSave.id;
+  delete dataToSave.id; // Firebase key is the ID
 
   try {
     await set(newTransactionRef, dataToSave);
-    // Conditionally modify balance
     if (category?.toLowerCase() !== 'opening balance' && !options?.skipBalanceModification) {
         await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
-
-    const storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    const newTxForStorage = { ...newTransaction, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    storedTransactions.push(newTxForStorage);
-    await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-
-    return newTransaction;
+    // Return the transaction with a client-side timestamp approximation for immediate UI use
+    return { ...newTransaction, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   } catch (error) {
     console.error("Error adding transaction to Firebase:", error);
     throw error;
@@ -194,7 +183,10 @@ export async function addTransaction(
 
 export async function updateTransaction(updatedTransaction: Transaction): Promise<Transaction> {
   const currentUser = auth.currentUser;
-  const { id, accountId, amount, transactionCurrency } = updatedTransaction;
+  const { id, accountId, amount, transactionCurrency, category } = updatedTransaction;
+  if (!currentUser?.uid) {
+    throw new Error("User not authenticated. Cannot update transaction.");
+  }
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, id);
   const transactionRef = ref(database, transactionRefPath);
 
@@ -220,30 +212,15 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
   try {
     await update(transactionRef, dataToUpdateFirebase);
 
-    await modifyAccountBalance(accountId, originalTransactionDataFromDB.amount, originalDbTxCurrency, 'subtract');
-    await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
-
-    const storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    const transactionIndex = storedTransactions.findIndex(t => t.id === id);
-    if (transactionIndex !== -1) {
-      const originalStoredCreatedAt = storedTransactions[transactionIndex].createdAt;
-      storedTransactions[transactionIndex] = {
-          ...updatedTransaction,
-          createdAt: updatedTransaction.createdAt || originalStoredCreatedAt || new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-      };
-      await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-    } else {
-        console.warn(`Transaction ${id} updated in DB but not found in localStorage cache for account ${accountId}. Adding it.`);
-        storedTransactions.push({
-            ...updatedTransaction,
-            createdAt: updatedTransaction.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        });
-        await _saveTransactionsToLocalStorage(accountId, storedTransactions);
+    if (category?.toLowerCase() !== 'opening balance') {
+        await modifyAccountBalance(accountId, originalTransactionDataFromDB.amount, originalDbTxCurrency, 'subtract');
+        await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
 
-    return updatedTransaction;
+    return {
+        ...updatedTransaction,
+        updatedAt: new Date().toISOString(), // Approximate for local state
+    };
   } catch (error) {
     console.error("Error updating transaction in Firebase:", error);
     throw error;
@@ -252,6 +229,9 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
 
 export async function deleteTransaction(transactionId: string, accountId: string): Promise<void> {
   const currentUser = auth.currentUser;
+  if (!currentUser?.uid) {
+    throw new Error("User not authenticated. Cannot delete transaction.");
+  }
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, transactionId);
   const transactionRef = ref(database, transactionRefPath);
 
@@ -266,12 +246,9 @@ export async function deleteTransaction(transactionId: string, accountId: string
 
   try {
     await remove(transactionRef);
-    await modifyAccountBalance(accountId, transactionToDelete.amount, txCurrency, 'subtract');
-
-    let storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    storedTransactions = storedTransactions.filter(t => t.id !== transactionId);
-    await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-
+    if (transactionToDelete.category?.toLowerCase() !== 'opening balance') {
+        await modifyAccountBalance(accountId, transactionToDelete.amount, txCurrency, 'subtract');
+    }
   } catch (error) {
     console.error("Error deleting transaction from Firebase:", error);
     throw error;
@@ -287,35 +264,23 @@ export async function clearAllSessionTransactions(): Promise<void> {
 
   console.warn("Attempting to clear ALL user data for user:", currentUser.uid);
   try {
-    const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`;
-    const categoriesPath = getCategoriesRefPath(currentUser);
-    const tagsPath = getTagsRefPath(currentUser);
-    const groupsPath = getGroupsRefPath(currentUser);
-    const subscriptionsPath = getSubscriptionsRefPath(currentUser);
-    const loansPath = getLoansRefPath(currentUser);
-    const creditCardsPath = getCreditCardsRefPath(currentUser);
-    const budgetsPath = getBudgetsRefPath(currentUser);
-    const accountsPath = `users/${currentUser.uid}/accounts`;
+    const userRootPath = `users/${currentUser.uid}`;
+    await remove(ref(database, userRootPath)); // This removes all data under users/{uid}
 
-    await Promise.all([
-        remove(ref(database, userFirebaseTransactionsBasePath)),
-        remove(ref(database, categoriesPath)),
-        remove(ref(database, tagsPath)),
-        remove(ref(database, groupsPath)),
-        remove(ref(database, subscriptionsPath)),
-        remove(ref(database, loansPath)),
-        remove(ref(database, creditCardsPath)),
-        remove(ref(database, budgetsPath)),
-        remove(ref(database, accountsPath))
-    ]);
-
+    // Clear related localStorage items (though Firebase is now primary, good for cleanup)
     const allKeys = Object.keys(localStorage);
     allKeys.forEach(key => {
         if (key.startsWith(`transactions-`) && key.endsWith(`-${currentUser.uid}`)) {
             localStorage.removeItem(key);
         }
+        if (key.startsWith(`user`) && key.endsWith(`-${currentUser.uid}`)) {
+            localStorage.removeItem(key);
+        }
+         if (key === `userPreferences-${currentUser.uid}`) { // From AuthContext for theme/currency
+            localStorage.removeItem(key);
+        }
     });
-
+    // Remove other potential user-specific keys if they exist
     localStorage.removeItem(`userAccounts-${currentUser.uid}`);
     localStorage.removeItem(`userCategories-${currentUser.uid}`);
     localStorage.removeItem(`userTags-${currentUser.uid}`);
@@ -324,7 +289,7 @@ export async function clearAllSessionTransactions(): Promise<void> {
     localStorage.removeItem(`userLoans-${currentUser.uid}`);
     localStorage.removeItem(`userCreditCards-${currentUser.uid}`);
     localStorage.removeItem(`userBudgets-${currentUser.uid}`);
-    localStorage.removeItem(`userPreferences-${currentUser.uid}`);
+
 
     console.log("All user data cleared from Firebase and localStorage for user:", currentUser.uid);
   } catch (error) {
@@ -332,3 +297,4 @@ export async function clearAllSessionTransactions(): Promise<void> {
     throw error;
   }
 }
+    
