@@ -8,7 +8,6 @@ import {
     SidebarProvider,
     Sidebar,
     SidebarHeader,
-    // SidebarTrigger, // Removed from here
     SidebarContent,
     SidebarMenu,
     SidebarMenuItem,
@@ -19,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal, FileText } from 'lucide-react';
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText } from 'lucide-react'; // Added Database
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -68,10 +67,10 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     setIsClient(true);
     setLoadingDivClassName("flex items-center justify-center min-h-screen bg-background text-foreground");
   }, []);
-  
+
   useEffect(() => {
       const applyTheme = () => {
-          if (!isClient) return; 
+          if (!isClient) return;
           const root = document.documentElement;
           let currentTheme = theme;
 
@@ -82,10 +81,10 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
           root.classList.remove('dark', 'light');
           root.classList.add(currentTheme);
-          root.style.colorScheme = currentTheme; 
+          root.style.colorScheme = currentTheme;
       };
 
-      applyTheme(); 
+      applyTheme();
 
       if (theme === 'system' && typeof window !== 'undefined') {
           const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -110,7 +109,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     }
 
     const firstLoginFlagKey = `hasLoggedInBefore-${user.uid}`;
-    
+
     if(typeof window !== 'undefined') {
         const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
         const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
@@ -122,7 +121,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     }
 
   }, [user, isLoadingAuth, router, pathname, isClient, isFirebaseActive, userPreferences]);
-
 
 
   const isActive = (path: string) => isClient && pathname === path;
@@ -138,10 +136,10 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
       <div className={loadingDivClassName}>Loading authentication...</div>
     );
   }
-  
+
   if (firebaseError && !isFirebaseActive) {
      if (pathname !== '/login' && pathname !== '/signup') {
-         router.push('/login'); 
+         router.push('/login');
          return <div className={loadingDivClassName}>Firebase not available. Redirecting...</div>;
      }
   }
@@ -176,7 +174,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                 <LogoIcon />
                 <span className="text-lg font-semibold text-primary">GoldQuest</span>
                 </div>
-                {/* SidebarTrigger was here, moved to GlobalHeader for mobile */}
             </SidebarHeader>
             <SidebarContent>
                 <SidebarMenu>
@@ -190,7 +187,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-                
+
                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
@@ -216,7 +213,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             isActive={isAnyTransactionRouteActive}
                         >
                             <div className="flex items-center gap-2">
-                            <FileText /> {/* Changed icon */}
+                            <FileText />
                             <span>Transactions</span>
                             </div>
                             <ChevronDown
@@ -297,7 +294,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                     <SidebarMenuItem>
                         <Link href="/data-management" passHref>
                         <SidebarMenuButton tooltip="Data Management" isActive={isDataManagementActive}>
-                            <ArchiveIcon />
+                            <Database />
                             <span>Data Management</span>
                         </SidebarMenuButton>
                         </Link>
@@ -308,7 +305,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <SidebarFooter className="p-2 border-t border-sidebar-border">
                 <div className="flex items-center gap-3 p-2">
                 <Avatar className="h-9 w-9">
-                    <AvatarImage src={user?.photoURL || "https://picsum.photos/seed/useravatar/40/40"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
+                    <AvatarImage src={user?.photoURL || "https://placehold.co/40x40.png"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
                     <AvatarFallback>{user?.email ? user.email.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
@@ -332,5 +329,24 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
-  return <div className={loadingDivClassName}>Preparing application...</div>;
+  return (
+      <html lang="en" className={oxanium.variable} suppressHydrationWarning>
+      <head>
+          <meta charSet="utf-8" />
+          <meta name="viewport" content="width=device-width, initial-scale=1" />
+          <title>The Golden Game</title>
+          <meta name="description" content="Simple personal finance management" />
+      </head>
+      <body
+      className={cn(
+          // oxanium.className, // Removed from here
+          'font-sans antialiased', // font-sans will use var(--font-oxanium) from html
+          'min-h-screen flex flex-col'
+        )}
+        suppressHydrationWarning // Add this to the body tag
+      >
+        <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Preparing application...</div>
+      </body>
+    </html>
+  );
 }
