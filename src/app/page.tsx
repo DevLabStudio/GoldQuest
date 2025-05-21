@@ -5,7 +5,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useC
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
-import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown";
+// import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown"; // Removed
+import SubscriptionsPieChart from "@/components/dashboard/subscriptions-pie-chart"; // Added
 import IncomeSourceChart from "@/components/dashboard/income-source-chart";
 import IncomeExpensesChart from "@/components/dashboard/income-expenses-chart";
 import AssetsChart from "@/components/dashboard/assets-chart";
@@ -75,8 +76,8 @@ export default function DashboardPage() {
     const handleStorageChange = (event: StorageEvent) => {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-', 'userSubscriptions']; // Added userSubscriptions
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log("Storage changed on main dashboard, refetching data...");
@@ -141,40 +142,6 @@ export default function DashboardPage() {
       return sum;
     }, 0);
   }, [periodTransactions, accounts, preferredCurrency, isLoading]);
-
-
-  const spendingsBreakdownDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !categories.length || !periodTransactions.length) return [];
-    const expenseCategoryTotals: { [key: string]: number } = {};
-
-    periodTransactions.forEach(tx => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { 
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
-          const categoryName = tx.category || 'Uncategorized';
-          const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
-          expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
-        }
-      }
-    });
-
-    return Object.entries(expenseCategoryTotals)
-      .map(([name, amount]) => {
-        const { icon: CategoryIcon, color } = getCategoryStyle(name);
-
-        const categoryStyle = getCategoryStyle(name);
-        const bgColor = categoryStyle.color.split(' ').find(cls => cls.startsWith('bg-')) || 'bg-gray-500 dark:bg-gray-700';
-
-        return {
-          name: name.charAt(0).toUpperCase() + name.slice(1),
-          amount,
-          icon: <CategoryIcon />,
-          bgColor: bgColor,
-        };
-      })
-      .sort((a, b) => b.amount - a.amount)
-      .slice(0, 3);
-  }, [periodTransactions, accounts, categories, preferredCurrency, isLoading]);
 
   const incomeSourceDataActual = useMemo(() => {
     if (isLoading || typeof window === 'undefined' || !periodTransactions.length) return [];
@@ -253,12 +220,11 @@ export default function DashboardPage() {
   if (isLoading && typeof window !== 'undefined' && accounts.length === 0) {
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-2"><Skeleton className="h-[160px] w-full" /></div>
           <Skeleton className="h-[160px] w-full" />
-          <Skeleton className="h-[160px] w-full" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-2"><Skeleton className="h-[300px] w-full" /></div>
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
@@ -276,7 +242,7 @@ export default function DashboardPage() {
         <div className="xl:col-span-2">
           <TotalNetWorthCard accounts={accounts} preferredCurrency={preferredCurrency} />
         </div>
-         <SpendingsBreakdown title={`Top Spendings (${dateRangeLabel})`} data={spendingsBreakdownDataActual} currency={preferredCurrency} />
+         <SubscriptionsPieChart dateRangeLabel={dateRangeLabel} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
