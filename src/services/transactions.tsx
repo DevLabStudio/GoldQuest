@@ -1,8 +1,10 @@
 
+'use client';
+
 import { database, auth } from '@/lib/firebase';
 import { ref, set, get, push, remove, update, serverTimestamp } from 'firebase/database';
 import type { User } from 'firebase/auth';
-import { getAccounts as getAllAccounts, updateAccount as updateAccountInDb, type Account } from './account-sync'; // Renamed getAccounts to avoid conflict
+import { getAccounts as getAllAccounts, updateAccount as updateAccountInDb, type Account } from './account-sync';
 import { convertCurrency } from '@/lib/currency';
 // Import ref path getters from other services
 import { getCategoriesRefPath } from './categories';
@@ -35,11 +37,15 @@ export interface Transaction {
 // Type for data passed to addTransaction - transactionCurrency is now mandatory
 export type NewTransactionData = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & {
     transactionCurrency: string;
-    originalImportData?: { // Ensure this is part of the type if passed directly
+    originalImportData?: {
         foreignAmount?: number | null;
         foreignCurrency?: string | null;
     }
 };
+
+interface AddTransactionOptions {
+  skipBalanceModification?: boolean;
+}
 
 
 function getTransactionsRefPath(currentUser: User | null, accountId: string) {
@@ -53,12 +59,13 @@ function getSingleTransactionRefPath(currentUser: User | null, accountId: string
 }
 
 async function modifyAccountBalance(accountId: string, amountInTransactionCurrency: number, transactionCurrency: string, operation: 'add' | 'subtract') {
-    const accounts = await getAllAccounts();
+    const accounts = await getAllAccounts(); // This fetches from Firebase/localStorage as per account-sync
     const accountToUpdate = accounts.find(acc => acc.id === accountId);
 
     if (accountToUpdate) {
         let amountInAccountCurrency = amountInTransactionCurrency;
-        if (transactionCurrency.toUpperCase() !== accountToUpdate.currency.toUpperCase()) {
+        // Ensure both currencies are defined and not empty strings before attempting conversion
+        if (transactionCurrency && accountToUpdate.currency && transactionCurrency.toUpperCase() !== accountToUpdate.currency.toUpperCase()) {
             amountInAccountCurrency = convertCurrency(
                 amountInTransactionCurrency,
                 transactionCurrency,
@@ -66,22 +73,19 @@ async function modifyAccountBalance(accountId: string, amountInTransactionCurren
             );
         }
         const balanceChange = operation === 'add' ? amountInAccountCurrency : -amountInAccountCurrency;
-        // Ensure newBalance calculation handles floating point inaccuracies for currency
         const newBalance = parseFloat((accountToUpdate.balance + balanceChange).toFixed(2));
 
-
-        await updateAccountInDb({
+        await updateAccountInDb({ // This updates Firebase/localStorage as per account-sync
             ...accountToUpdate,
             balance: newBalance,
             lastActivity: new Date().toISOString(),
         });
-        console.log(`Account ${accountToUpdate.name} balance updated by ${balanceChange} ${accountToUpdate.currency}. New balance: ${newBalance}`);
+        // console.log(`Account ${accountToUpdate.name} balance updated by ${balanceChange} ${accountToUpdate.currency}. New balance: ${newBalance}`);
     } else {
         console.warn(`Account ID ${accountId} not found for balance update.`);
     }
 }
 
-// Helper function to get transactions from localStorage (internal to this service)
 async function _getTransactionsFromLocalStorage(accountId: string): Promise<Transaction[]> {
     const currentUser = auth.currentUser;
     if (!currentUser?.uid) return [];
@@ -91,18 +95,16 @@ async function _getTransactionsFromLocalStorage(accountId: string): Promise<Tran
         return data ? JSON.parse(data) : [];
     } catch (e) {
         console.error("Error parsing transactions from localStorage for account:", accountId, e);
-        return []; // Return empty array on parsing error
+        return [];
     }
 }
 
-// Helper function to save transactions to localStorage (internal to this service)
 async function _saveTransactionsToLocalStorage(accountId: string, transactions: Transaction[]): Promise<void> {
     const currentUser = auth.currentUser;
     if (!currentUser?.uid) return;
     const key = `transactions-${accountId}-${currentUser.uid}`;
     localStorage.setItem(key, JSON.stringify(transactions));
 }
-
 
 export async function getTransactions(
     accountId: string,
@@ -116,13 +118,11 @@ export async function getTransactions(
   const storageKey = `transactions-${accountId}-${currentUser.uid}`;
   const data = localStorage.getItem(storageKey);
 
-  // console.log("Fetching transactions for account:", accountId, "from localStorage key:", storageKey);
-
   if (data) {
       try {
-        const allAppAccounts = await getAllAccounts(); // Fetch accounts for currency fallback
+        const allAppAccounts = await getAllAccounts();
         const transactionsArray = (JSON.parse(data) as Transaction[])
-            .map(tx => ({ // Ensure default values for robustness with old data
+            .map(tx => ({
                 ...tx,
                 tags: tx.tags || [],
                 category: tx.category || 'Uncategorized',
@@ -136,14 +136,17 @@ export async function getTransactions(
         return transactionsArray;
       } catch(e) {
           console.error("Error parsing transactions from localStorage during getTransactions for account:", accountId, e);
-          localStorage.removeItem(storageKey); // Clear corrupted data
-          return []; // Return empty if parsing fails
+          localStorage.removeItem(storageKey);
+          return [];
       }
   }
   return [];
 }
 
-export async function addTransaction(transactionData: NewTransactionData): Promise<Transaction> {
+export async function addTransaction(
+  transactionData: NewTransactionData,
+  options?: AddTransactionOptions
+): Promise<Transaction> {
   const currentUser = auth.currentUser;
   const { accountId, amount, transactionCurrency, category } = transactionData;
   const transactionsRefPath = getTransactionsRefPath(currentUser, accountId);
@@ -170,21 +173,17 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
   const dataToSave = { ...newTransaction } as any;
   delete dataToSave.id;
 
-
-  // console.log("Adding transaction to Firebase RTDB:", newTransaction);
   try {
     await set(newTransactionRef, dataToSave);
-    if (category?.toLowerCase() !== 'opening balance') {
+    // Conditionally modify balance
+    if (category?.toLowerCase() !== 'opening balance' && !options?.skipBalanceModification) {
         await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
 
-    // Update localStorage transaction list
     const storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    // Ensure createdAt/updatedAt are strings for localStorage
     const newTxForStorage = { ...newTransaction, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     storedTransactions.push(newTxForStorage);
     await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-
 
     return newTransaction;
   } catch (error) {
@@ -199,7 +198,7 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, id);
   const transactionRef = ref(database, transactionRefPath);
 
-  const originalSnapshot = await get(transactionRef); // Get from DB for balance adjustment
+  const originalSnapshot = await get(transactionRef);
   if (!originalSnapshot.exists()) {
     throw new Error(`Transaction with ID ${id} not found for update.`);
   }
@@ -207,8 +206,7 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
   const allAppAccounts = await getAllAccounts();
   const originalDbTxCurrency = originalTransactionDataFromDB.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
 
-
-  const dataToUpdateFirebase = { // Data for Firebase update
+  const dataToUpdateFirebase = {
     ...updatedTransaction,
     updatedAt: serverTimestamp(),
     originalImportData: {
@@ -217,26 +215,22 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
     }
   } as any;
   delete dataToUpdateFirebase.id;
+  delete dataToUpdateFirebase.createdAt; // Should not update createdAt
 
-
-  // console.log("Updating transaction in Firebase RTDB:", id, dataToUpdateFirebase);
   try {
-    await update(transactionRef, dataToUpdateFirebase); // Update DB
+    await update(transactionRef, dataToUpdateFirebase);
 
-    // Adjust account balances based on original (from DB) and new transaction amounts
     await modifyAccountBalance(accountId, originalTransactionDataFromDB.amount, originalDbTxCurrency, 'subtract');
     await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
 
-    // Update localStorage transaction list
     const storedTransactions = await _getTransactionsFromLocalStorage(accountId);
     const transactionIndex = storedTransactions.findIndex(t => t.id === id);
     if (transactionIndex !== -1) {
-      // Preserve original createdAt from localStorage if it exists and is a string, otherwise use what's in updatedTransaction
       const originalStoredCreatedAt = storedTransactions[transactionIndex].createdAt;
       storedTransactions[transactionIndex] = {
-          ...updatedTransaction, // Apply all updates
-          createdAt: updatedTransaction.createdAt || originalStoredCreatedAt || new Date().toISOString(), // Ensure createdAt is set
-          updatedAt: new Date().toISOString(), // For localStorage, use ISO string
+          ...updatedTransaction,
+          createdAt: updatedTransaction.createdAt || originalStoredCreatedAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
       };
       await _saveTransactionsToLocalStorage(accountId, storedTransactions);
     } else {
@@ -261,7 +255,7 @@ export async function deleteTransaction(transactionId: string, accountId: string
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, transactionId);
   const transactionRef = ref(database, transactionRefPath);
 
-  const snapshot = await get(transactionRef); // Get from DB for balance adjustment
+  const snapshot = await get(transactionRef);
   if (!snapshot.exists()) {
     console.warn(`Transaction ${transactionId} not found for deletion.`);
     return;
@@ -270,13 +264,10 @@ export async function deleteTransaction(transactionId: string, accountId: string
   const allAppAccounts = await getAllAccounts();
   const txCurrency = transactionToDelete.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
 
-  // console.log("Deleting transaction from Firebase RTDB:", transactionRefPath);
   try {
-    await remove(transactionRef); // Remove from DB
-    // Use the currency from the transaction being deleted for accurate balance reversal
+    await remove(transactionRef);
     await modifyAccountBalance(accountId, transactionToDelete.amount, txCurrency, 'subtract');
 
-    // Update localStorage transaction list
     let storedTransactions = await _getTransactionsFromLocalStorage(accountId);
     storedTransactions = storedTransactions.filter(t => t.id !== transactionId);
     await _saveTransactionsToLocalStorage(accountId, storedTransactions);
@@ -296,8 +287,7 @@ export async function clearAllSessionTransactions(): Promise<void> {
 
   console.warn("Attempting to clear ALL user data for user:", currentUser.uid);
   try {
-    // Get paths for all data types
-    const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`; // Base path for all account transactions
+    const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`;
     const categoriesPath = getCategoriesRefPath(currentUser);
     const tagsPath = getTagsRefPath(currentUser);
     const groupsPath = getGroupsRefPath(currentUser);
@@ -305,9 +295,8 @@ export async function clearAllSessionTransactions(): Promise<void> {
     const loansPath = getLoansRefPath(currentUser);
     const creditCardsPath = getCreditCardsRefPath(currentUser);
     const budgetsPath = getBudgetsRefPath(currentUser);
-    const accountsPath = `users/${currentUser.uid}/accounts`; // Base path for all accounts
+    const accountsPath = `users/${currentUser.uid}/accounts`;
 
-    // Clear from Firebase DB
     await Promise.all([
         remove(ref(database, userFirebaseTransactionsBasePath)),
         remove(ref(database, categoriesPath)),
@@ -317,12 +306,9 @@ export async function clearAllSessionTransactions(): Promise<void> {
         remove(ref(database, loansPath)),
         remove(ref(database, creditCardsPath)),
         remove(ref(database, budgetsPath)),
-        remove(ref(database, accountsPath)) // Clear all accounts from DB
+        remove(ref(database, accountsPath))
     ]);
 
-    // Clear from localStorage
-    // Since accounts are cleared, we don't need to iterate through them for transaction keys
-    // but we should clear any general keys if they existed.
     const allKeys = Object.keys(localStorage);
     allKeys.forEach(key => {
         if (key.startsWith(`transactions-`) && key.endsWith(`-${currentUser.uid}`)) {
@@ -339,7 +325,6 @@ export async function clearAllSessionTransactions(): Promise<void> {
     localStorage.removeItem(`userCreditCards-${currentUser.uid}`);
     localStorage.removeItem(`userBudgets-${currentUser.uid}`);
     localStorage.removeItem(`userPreferences-${currentUser.uid}`);
-
 
     console.log("All user data cleared from Firebase and localStorage for user:", currentUser.uid);
   } catch (error) {

@@ -24,11 +24,10 @@ import { getBudgets, addBudget as addBudgetToDb, type Budget } from '@/services/
 import { saveUserPreferences, type UserPreferences, getUserPreferences } from '@/lib/preferences';
 
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
-import { format, parseISO, isValid, parse as parseDateFns } from 'date-fns';
+import { format as formatDateFns, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency, convertCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
 import { AlertCircle, Trash2, Download } from 'lucide-react';
@@ -134,11 +133,11 @@ const parseAmount = (amountStr: string | undefined): number => {
 
 
 const parseDate = (dateStr: string | undefined): string => {
-    if (!dateStr) return format(new Date(), 'yyyy-MM-dd');
+    if (!dateStr) return formatDateFns(new Date(), 'yyyy-MM-dd');
     try {
         let parsedDate = parseISO(dateStr);
         if (isValid(parsedDate)) {
-            return format(parsedDate, 'yyyy-MM-dd');
+            return formatDateFns(parsedDate, 'yyyy-MM-dd');
         }
 
         const commonFormats = [
@@ -153,27 +152,27 @@ const parseDate = (dateStr: string | undefined): string => {
         for (const fmt of commonFormats) {
             try {
                 parsedDate = parseDateFns(dateStr, fmt, new Date());
-                if (isValid(parsedDate)) return format(parsedDate, 'yyyy-MM-dd');
+                if (isValid(parsedDate)) return formatDateFns(parsedDate, 'yyyy-MM-dd');
 
                 const datePartOnly = dateStr.split('T')[0].split(' ')[0];
                 const dateFormatOnly = fmt.split('T')[0].split(' ')[0];
                 if (datePartOnly !== dateStr && dateFormatOnly !== fmt) {
                     parsedDate = parseDateFns(datePartOnly, dateFormatOnly, new Date());
-                    if (isValid(parsedDate)) return format(parsedDate, 'yyyy-MM-dd');
+                    if (isValid(parsedDate)) return formatDateFns(parsedDate, 'yyyy-MM-dd');
                 }
             } catch { /* ignore parse error for this format, try next */ }
         }
         
         parsedDate = new Date(dateStr);
         if (isValid(parsedDate)) {
-            return format(parsedDate, 'yyyy-MM-dd');
+            return formatDateFns(parsedDate, 'yyyy-MM-dd');
         }
 
     } catch (e) {
         console.error("Error parsing date:", dateStr, e);
     }
     console.warn(`Could not parse date "${dateStr}", defaulting to today.`);
-    return format(new Date(), 'yyyy-MM-dd');
+    return formatDateFns(new Date(), 'yyyy-MM-dd');
 };
 
 const parseNameFromDescriptiveString = (text: string | undefined): string | undefined => {
@@ -203,7 +202,6 @@ export default function DataManagementPage() {
   const [isExporting, setIsExporting] = useState(false);
   const { toast } = useToast();
 
-  // New state for restore confirmation
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
   const [zipFileForRestore, setZipFileForRestore] = useState<File | null>(null);
 
@@ -242,11 +240,11 @@ export default function DataManagementPage() {
       }
     }
     return () => { isMounted = false; };
-  }, [user, isLoadingAuth]); // Removed toast, added isLoading to prevent re-trigger if already loading
+  }, [user, isLoadingAuth, isLoading, toast]); 
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]); // fetchData is memoized, so this runs once on mount / when user/auth status changes.
+  }, [fetchData]); 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -316,7 +314,7 @@ export default function DataManagementPage() {
         initialMappings.initialBalance = findColumnName(detectedHeaders, 'initial_balance') || findColumnName(detectedHeaders, 'opening_balance');
         
         setColumnMappings(initialMappings);
-        setIsMappingDialogOpen(true); // Show mapping dialog for generic CSV or non-GoldQuest ZIP
+        setIsMappingDialogOpen(true); 
         setIsLoading(false);
       },
       error: (err: Error) => {
@@ -344,25 +342,24 @@ export default function DataManagementPage() {
     setRawData([]);
     setCsvHeaders([]);
     setZipFileForRestore(null);
-    setIsMappingDialogOpen(false); // Reset mapping dialog state
+    setIsMappingDialogOpen(false); 
 
     if (file.name.endsWith('.zip') || file.type === 'application/zip' || file.type === 'application/x-zip-compressed') {
         try {
             const zip = await JSZip.loadAsync(file);
             const manifestFile = zip.file('goldquest_manifest.json');
             
-            if (manifestFile) { // Detected a GoldQuest backup
+            if (manifestFile) { 
                 const manifestContent = await manifestFile.async('string');
                 const manifest = JSON.parse(manifestContent);
                 if (manifest.appName === "GoldQuest") {
                     setZipFileForRestore(file);
-                    setIsRestoreConfirmOpen(true); // Go directly to restore confirmation
+                    setIsRestoreConfirmOpen(true); 
                     setIsLoading(false);
-                    return; // Skip manual mapping
+                    return; 
                 }
             }
             
-            // If not a GoldQuest backup or no manifest, try to find a primary CSV for manual mapping
             let primaryCsvFile: JSZip.JSZipObject | null = null;
             const commonPrimaryNames = ['transactions.csv', 'firefly_iii_export.csv', 'default.csv'];
             for (const name of commonPrimaryNames) {
@@ -372,7 +369,7 @@ export default function DataManagementPage() {
                     break;
                 }
             }
-            if (!primaryCsvFile) { // Fallback to largest CSV if common names not found
+            if (!primaryCsvFile) { 
                 let largestSize = 0;
                 zip.forEach((relativePath, zipEntry) => {
                     if (zipEntry.name.toLowerCase().endsWith('.csv') && !zipEntry.dir) {
@@ -388,7 +385,7 @@ export default function DataManagementPage() {
             if (primaryCsvFile) {
                 toast({ title: "ZIP Detected", description: `Processing '${primaryCsvFile.name}' from the archive for manual mapping.`, duration: 4000});
                 const csvString = await primaryCsvFile.async("string");
-                processCsvData(csvString, primaryCsvFile.name); // This will open mapping dialog
+                processCsvData(csvString, primaryCsvFile.name); 
             } else {
                 setError("No suitable CSV file found within the ZIP archive to process for mapping. If this is a GoldQuest backup, it might be missing a manifest or CSV files.");
                 setIsLoading(false);
@@ -397,11 +394,11 @@ export default function DataManagementPage() {
             setError(`Failed to process ZIP file: ${zipError.message}`);
             setIsLoading(false);
         }
-    } else if (file.name.endsWith('.csv') || file.type === 'text/csv') { // Direct CSV upload
+    } else if (file.name.endsWith('.csv') || file.type === 'text/csv') { 
         const reader = new FileReader();
         reader.onload = (event) => {
             if (event.target?.result && typeof event.target.result === 'string') {
-                processCsvData(event.target.result, file.name); // This will open mapping dialog
+                processCsvData(event.target.result, file.name); 
             } else {
                 setError("Failed to read CSV file content.");
                 setIsLoading(false);
@@ -574,6 +571,8 @@ export default function DataManagementPage() {
 
                         if (parsedFromNameInDest) actualAccountNameForOB = parsedFromNameInDest;
                         else if (parsedFromNameInSource) actualAccountNameForOB = parsedFromNameInSource;
+                        else if (rawDestType === "initial balance account" && rawDestName) actualAccountNameForOB = rawDestName; // Firefly structure
+                        else if (rawSourceType === "initial balance account" && rawSourceName) actualAccountNameForOB = rawSourceName; // Firefly structure
                         else actualAccountNameForOB = rawDestName || rawSourceName; 
                     }
 
@@ -698,6 +697,7 @@ export default function DataManagementPage() {
                 currency: currency,
                 foreignCurrency: foreignCurrencyVal,
                 amount: type === 'opening balance' ? initialBalance : amount,
+                description: record[mappings.description!]?.trim()
             };
         }) as Partial<MappedTransaction>[];
 
@@ -761,39 +761,41 @@ export default function DataManagementPage() {
             if (item.csvTransactionType === 'opening balance') {
                 let accountNameForOB: string | undefined;
                 const recordCurrency = item.currency;
-                const recordAmount = item.amount;
+                const recordAmount = item.amount; // This is already parsed initialBalance or amount for OB type
+                const desc = item.description; // Using the description field from mappedCsvData
+                const sourceName = item.csvRawSourceName;
+                const destName = item.csvRawDestinationName;
+                const sourceType = item.csvSourceType;
+                const destType = item.csvDestinationType;
 
-                const descriptiveDestName = item.csvRawDestinationName;
-                const descriptiveSourceName = item.csvRawSourceName;
-
-                const parsedNameFromDest = parseNameFromDescriptiveString(descriptiveDestName);
-                const parsedNameFromSource = parseNameFromDescriptiveString(descriptiveSourceName);
-                const sourceIsDescriptive = !!parsedNameFromSource;
-                const destIsDescriptive = !!parsedNameFromDest;
-
-
-                if (item.csvDestinationType === "asset account" && descriptiveDestName && !destIsDescriptive ) {
-                    accountNameForOB = descriptiveDestName;
-                } else if (item.csvSourceType === "asset account" && descriptiveSourceName && !sourceIsDescriptive) {
-                    accountNameForOB = descriptiveSourceName;
-                } else if (parsedNameFromDest) {
-                    accountNameForOB = parsedNameFromDest;
-                } else if (parsedNameFromSource) {
-                     accountNameForOB = parsedNameFromSource;
+                if (destType === "asset account" && destName) {
+                    accountNameForOB = destName;
+                } else if (sourceType === "asset account" && sourceName) {
+                    accountNameForOB = sourceName;
                 } else {
-                    accountNameForOB = descriptiveDestName || descriptiveSourceName;
+                    const parsedNameFromDesc = parseNameFromDescriptiveString(desc);
+                    if (parsedNameFromDesc) {
+                        accountNameForOB = parsedNameFromDesc;
+                    } else if (destType === "initial balance account" && destName) { // Firefly structure for account name in destination
+                        accountNameForOB = destName;
+                    } else if (sourceType === "initial balance account" && sourceName) { // Firefly structure for account name in source
+                         accountNameForOB = sourceName;
+                    } else {
+                        accountNameForOB = destName || sourceName; // Fallback
+                    }
                 }
+
 
                 if (accountNameForOB && recordCurrency && recordAmount !== undefined && !isNaN(recordAmount)) {
                     const normalizedName = accountNameForOB.toLowerCase().trim();
                     const existingDetailsInMap = accountMap.get(normalizedName);
                     let accountCategory: 'asset' | 'crypto' = 'asset';
                     
-                    if (item.csvDestinationType === "asset account" && !destIsDescriptive && item.csvRawDestinationName?.toLowerCase().includes('crypto')) {
+                     if (destType === "asset account" && destName?.toLowerCase().includes('crypto')) {
                         accountCategory = 'crypto';
-                    } else if (item.csvSourceType === "asset account" && !sourceIsDescriptive && item.csvRawSourceName?.toLowerCase().includes('crypto')) {
+                    } else if (sourceType === "asset account" && sourceName?.toLowerCase().includes('crypto')) {
                         accountCategory = 'crypto';
-                    } else if (item.csvDestinationType?.includes('crypto') || item.csvSourceType?.includes('crypto') || accountNameForOB.toLowerCase().includes('crypto') || accountNameForOB.toLowerCase().includes('wallet')) {
+                    } else if (destType?.includes('crypto') || sourceType?.includes('crypto') || accountNameForOB.toLowerCase().includes('crypto') || accountNameForOB.toLowerCase().includes('wallet')) {
                         accountCategory = 'crypto';
                     }
 
@@ -836,7 +838,7 @@ export default function DataManagementPage() {
                              accountMap.set(normalizedName, {
                                 name: accInfo.name,
                                 currency: existingAppAccount?.currency || accInfo.currency,
-                                initialBalance: existingAppAccount?.balance,
+                                initialBalance: existingAppAccount?.balance, // Use existing balance as default, will be overwritten by OB if present
                                 category: existingAppAccount?.category || category,
                             });
                         } else {
@@ -885,8 +887,8 @@ export default function DataManagementPage() {
                 if (accPreview.action === 'create') {
                     const newAccountData: NewAccountData = {
                         name: accPreview.name,
-                        type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'),
-                        balance: accPreview.initialBalance,
+                        type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'), // Default type
+                        balance: accPreview.initialBalance, // Use the balance determined by preview (from OB or 0)
                         currency: accPreview.currency,
                         providerName: 'Imported - ' + accPreview.name,
                         category: accPreview.category,
@@ -959,7 +961,7 @@ export default function DataManagementPage() {
       let success = true;
 
       transactionsToProcess.forEach(tx => {
-          if (tx.importStatus === 'pending') {
+          if (tx.importStatus === 'pending') { // Only consider pending transactions
               if (tx.category && !['Uncategorized', 'Initial Balance', 'Transfer', 'Skipped', 'Opening Balance'].includes(tx.category)) {
                   const categoryName = tx.category.trim();
                   if (categoryName && !existingCategoryNames.has(categoryName.toLowerCase())) {
@@ -1362,7 +1364,7 @@ export default function DataManagementPage() {
                         try {
                             const d = new Date(value); 
                             if (!isNaN(d.getTime())) {
-                                transactionToUpdate.date = format(d, 'yyyy-MM-dd');
+                                transactionToUpdate.date = formatDateFns(d, 'yyyy-MM-dd');
                             } else { throw new Error("Invalid date object"); }
                         } catch {
                             toast({ title: "Invalid Date", description: "Date not updated. Please use YYYY-MM-DD format or select a valid date.", variant: "destructive" });
@@ -1469,6 +1471,11 @@ export default function DataManagementPage() {
     setImportProgress(0);
     setError(null);
     let overallSuccess = true;
+    const accountsFromBackup: Account[] = [];
+    const oldAccountIdToNewIdMap: Record<string, string> = {};
+    const oldCategoryIdToNewIdMap: Record<string, string> = {};
+    const oldGroupIdToNewIdMap: Record<string, string> = {};
+    let newAccountsListAfterRestore: Account[] = [];
 
     try {
       toast({ title: "Restore Started", description: "Clearing existing data...", duration: 2000 });
@@ -1477,17 +1484,13 @@ export default function DataManagementPage() {
 
       const zip = await JSZip.loadAsync(zipFileForRestore);
       let progressCounter = 0;
-      const totalFilesToProcess = 10; // Approx count of CSV files
+      const totalFilesToProcess = 10; 
 
       const updateProgress = () => {
         progressCounter++;
         setImportProgress(calculateProgress(progressCounter, totalFilesToProcess));
       };
       
-      const oldAccountIdToNewIdMap: Record<string, string> = {};
-      const oldCategoryIdToNewIdMap: Record<string, string> = {};
-      const oldGroupIdToNewIdMap: Record<string, string> = {};
-
       // 1. Preferences
       const prefsFile = zip.file('goldquest_preferences.csv');
       if (prefsFile) {
@@ -1495,7 +1498,7 @@ export default function DataManagementPage() {
         const parsedPrefs = Papa.parse<UserPreferences>(prefsCsv, { header: true, skipEmptyLines: true }).data[0];
         if (parsedPrefs) {
           await saveUserPreferences(parsedPrefs);
-          await refreshUserPreferences(); // AuthContext function
+          await refreshUserPreferences();
           toast({ title: "Restore Progress", description: "Preferences restored."});
         }
       }
@@ -1507,7 +1510,7 @@ export default function DataManagementPage() {
         const categoriesCsv = await categoriesFile.async('text');
         const parsedCategories = Papa.parse<Category>(categoriesCsv, { header: true, skipEmptyLines: true }).data;
         for (const cat of parsedCategories) {
-          if(cat.id && cat.name) { // Ensure critical fields are present
+          if(cat.id && cat.name) {
             try {
               const newCategory = await addCategoryToDb(cat.name, cat.icon);
               oldCategoryIdToNewIdMap[cat.id] = newCategory.id;
@@ -1515,7 +1518,7 @@ export default function DataManagementPage() {
               if (!e.message?.includes('already exists')) {
                  console.warn(`Skipping category restore due to error: ${e.message}`, cat);
                  overallSuccess = false;
-              } else { // If it already exists, try to find and map its ID
+              } else {
                 const existingCats = await getCategories();
                 const existing = existingCats.find(ec => ec.name.toLowerCase() === cat.name.toLowerCase());
                 if (existing) oldCategoryIdToNewIdMap[cat.id] = existing.id;
@@ -1551,44 +1554,47 @@ export default function DataManagementPage() {
       updateProgress();
       setTags(await getTags());
 
-      // 4. Accounts
+      // 4. Accounts (Crucial: set balance from CSV here)
       const accountsFile = zip.file('goldquest_accounts.csv');
       if (accountsFile) {
         const accountsCsv = await accountsFile.async('text');
         const parsedAccounts = Papa.parse<Account>(accountsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
-        for (const acc of parsedAccounts) {
-          if(acc.id && acc.name && acc.currency && acc.type ) { // Balance is no longer required for initial setup
+        for (const accFromCsv of parsedAccounts) {
+          if(accFromCsv.id && accFromCsv.name && accFromCsv.currency && accFromCsv.type ) {
             const newAccData: NewAccountData = {
-                name: acc.name,
-                type: acc.type,
-                balance: 0, // Initialize with ZERO balance for restore
-                currency: acc.currency,
-                providerName: acc.providerName || 'Restored',
-                category: acc.category || 'asset',
-                isActive: acc.isActive !== undefined ? acc.isActive : true,
-                lastActivity: acc.lastActivity || new Date().toISOString(),
-                balanceDifference: acc.balanceDifference || 0,
-                includeInNetWorth: acc.includeInNetWorth !== undefined ? acc.includeInNetWorth : true,
+                name: accFromCsv.name,
+                type: accFromCsv.type,
+                balance: parseFloat(String(accFromCsv.balance)) || 0, // Use balance from CSV
+                currency: accFromCsv.currency,
+                providerName: accFromCsv.providerName || 'Restored',
+                category: accFromCsv.category || 'asset',
+                isActive: accFromCsv.isActive !== undefined ? (String(accFromCsv.isActive).toLowerCase() === 'true') : true,
+                lastActivity: accFromCsv.lastActivity || new Date().toISOString(),
+                balanceDifference: parseFloat(String(accFromCsv.balanceDifference)) || 0,
+                includeInNetWorth: accFromCsv.includeInNetWorth !== undefined ? (String(accFromCsv.includeInNetWorth).toLowerCase() === 'true') : true,
             };
             try {
-              const newAccount = await addAccount(newAccData);
-              oldAccountIdToNewIdMap[acc.id] = newAccount.id;
+              const newAccount = await addAccount(newAccData); // addAccount sets balance
+              oldAccountIdToNewIdMap[accFromCsv.id] = newAccount.id;
+              accountsFromBackup.push(newAccount); // Store for later reference if needed
             } catch (e: any) {
-              console.error(`Error restoring account ${acc.name}: ${e.message}`);
+              console.error(`Error restoring account ${accFromCsv.name}: ${e.message}`);
               overallSuccess = false;
             }
           }
         }
+        newAccountsListAfterRestore = await getAccounts(); // Get all accounts after they've been added
+        setAccounts(newAccountsListAfterRestore);
         toast({ title: "Restore Progress", description: "Accounts restored."});
       }
       updateProgress();
-      setAccounts(await getAccounts());
+      
 
       // 5. Groups
       const groupsFile = zip.file('goldquest_groups.csv');
       if (groupsFile) {
           const groupsCsv = await groupsFile.async('text');
-          const parsedGroups = Papa.parse<{ id: string; name: string; categoryIds: string }>(groupsCsv, { header: true, skipEmptyLines: true }).data;
+          const parsedGroups = Papa.parse<ExportableGroup>(groupsCsv, { header: true, skipEmptyLines: true }).data;
           for (const group of parsedGroups) {
               if (group.id && group.name) {
                   const oldCatIds = group.categoryIds ? group.categoryIds.split('|').filter(Boolean) : [];
@@ -1614,39 +1620,36 @@ export default function DataManagementPage() {
           toast({ title: "Restore Progress", description: "Groups restored." });
       }
       updateProgress();
-      // setGroups(await getGroups()); // Assuming getGroups updates local state
 
-      // 6. Transactions
+      // 6. Transactions (Skip balance modification)
       const transactionsFile = zip.file('goldquest_transactions.csv');
       if (transactionsFile) {
           const transactionsCsv = await transactionsFile.async('text');
-          const parsedTransactions = Papa.parse<Transaction & { tags?: string, originalImportData?: string }>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
-          parsedTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()); // Sort by date to process in order
-
-          for (const tx of parsedTransactions) {
-              if (tx.id && tx.accountId && tx.date && tx.amount !== undefined && tx.transactionCurrency && tx.category) {
-                  const newAccountId = oldAccountIdToNewIdMap[tx.accountId];
+          const parsedTransactions = Papa.parse<ExportableTransaction>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+          
+          for (const txCSV of parsedTransactions) {
+              if (txCSV.id && txCSV.accountId && txCSV.date && txCSV.amount !== undefined && txCSV.transactionCurrency && txCSV.category) {
+                  const newAccountId = oldAccountIdToNewIdMap[txCSV.accountId];
                   if (newAccountId) {
                       const newTxData: NewTransactionData = {
-                          date: typeof tx.date === 'string' ? tx.date : formatDateFns(new Date(tx.date as any), 'yyyy-MM-dd'),
-                          amount: typeof tx.amount === 'string' ? parseFloat(tx.amount) : tx.amount,
-                          transactionCurrency: tx.transactionCurrency,
-                          description: tx.description || 'Restored Transaction',
-                          category: tx.category,
+                          date: typeof txCSV.date === 'string' ? txCSV.date : formatDateFns(new Date(txCSV.date as any), 'yyyy-MM-dd'),
+                          amount: typeof txCSV.amount === 'string' ? parseFloat(txCSV.amount) : txCSV.amount,
+                          transactionCurrency: txCSV.transactionCurrency,
+                          description: txCSV.description || 'Restored Transaction',
+                          category: txCSV.category,
                           accountId: newAccountId,
-                          tags: tx.tags ? (tx.tags as string).split('|').filter(Boolean) : [],
-                          originalImportData: tx.originalImportData ? JSON.parse(tx.originalImportData as string) : undefined,
+                          tags: txCSV.tags ? txCSV.tags.split('|').filter(Boolean) : [],
+                          originalImportData: txCSV.originalImportData ? JSON.parse(txCSV.originalImportData) : undefined,
                       };
                       try {
-                          // During restore, addTransaction will call modifyAccountBalance which will
-                          // build up the balance from 0, as set during account creation in this function.
-                          await addTransaction(newTxData);
+                           // Add transaction without modifying balance, as balances are set from accounts.csv
+                          await addTransaction(newTxData, { skipBalanceModification: true });
                       } catch (e: any) {
-                          console.error(`Error restoring transaction ${tx.description}: ${e.message}`);
+                          console.error(`Error restoring transaction ${txCSV.description}: ${e.message}`);
                           overallSuccess = false;
                       }
                   } else {
-                      console.warn(`Could not map old account ID ${tx.accountId} for transaction ${tx.description}`);
+                      console.warn(`Could not map old account ID ${txCSV.accountId} for transaction ${txCSV.description}`);
                   }
               }
           }
@@ -1654,8 +1657,6 @@ export default function DataManagementPage() {
       }
       updateProgress();
 
-      // Placeholders for other data types (Subscriptions, Loans, CreditCards, Budgets)
-      // For each, parse its CSV, remap IDs (accountId, categoryId, groupId etc.) and call its add service.
       const dataTypesToRestore = [
           { name: 'Subscriptions', file: 'goldquest_subscriptions.csv', addFn: addSubscriptionToDb, serviceName: 'subscription' },
           { name: 'Loans', file: 'goldquest_loans.csv', addFn: addLoanToDb, serviceName: 'loan' },
@@ -1671,7 +1672,7 @@ export default function DataManagementPage() {
               for (const item of parsedItems) {
                   try {
                       let itemData = { ...item };
-                      delete itemData.id; // Remove old ID
+                      delete itemData.id; 
                       if (itemData.accountId) itemData.accountId = oldAccountIdToNewIdMap[itemData.accountId] || itemData.accountId;
                       if (itemData.groupId) itemData.groupId = oldGroupIdToNewIdMap[itemData.groupId] || itemData.groupId;
                       
@@ -1682,12 +1683,10 @@ export default function DataManagementPage() {
                             itemData.appliesTo === 'categories' ? oldCategoryIdToNewIdMap[oldId] : oldGroupIdToNewIdMap[oldId]
                           ).filter(Boolean);
                       }
-                      // Convert date strings if necessary
-                      if (itemData.startDate && typeof itemData.startDate !== 'string') itemData.startDate = formatDateFns(new Date(itemData.startDate), 'yyyy-MM-dd');
-                      if (itemData.nextPaymentDate && typeof itemData.nextPaymentDate !== 'string') itemData.nextPaymentDate = formatDateFns(new Date(itemData.nextPaymentDate), 'yyyy-MM-dd');
-                      if (itemData.endDate && typeof itemData.endDate !== 'string') itemData.endDate = formatDateFns(new Date(itemData.endDate), 'yyyy-MM-dd');
-                      if (itemData.paymentDueDate && typeof itemData.paymentDueDate !== 'string') itemData.paymentDueDate = formatDateFns(new Date(itemData.paymentDueDate), 'yyyy-MM-dd');
-
+                      if (itemData.startDate && typeof itemData.startDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.startDate)) itemData.startDate = formatDateFns(new Date(itemData.startDate), 'yyyy-MM-dd');
+                      if (itemData.nextPaymentDate && typeof itemData.nextPaymentDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.nextPaymentDate)) itemData.nextPaymentDate = formatDateFns(new Date(itemData.nextPaymentDate), 'yyyy-MM-dd');
+                      if (itemData.endDate && typeof itemData.endDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.endDate)) itemData.endDate = formatDateFns(new Date(itemData.endDate), 'yyyy-MM-dd');
+                      if (itemData.paymentDueDate && typeof itemData.paymentDueDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.paymentDueDate)) itemData.paymentDueDate = formatDateFns(new Date(itemData.paymentDueDate), 'yyyy-MM-dd');
 
                       await dataType.addFn(itemData);
                   } catch (e: any) {
@@ -1706,18 +1705,21 @@ export default function DataManagementPage() {
       } else {
         toast({ title: "Restore Partially Complete", description: "Some data could not be restored. Check console for errors.", variant: "destructive", duration: 10000 });
       }
-      await fetchData(); // Refresh page data
-      window.dispatchEvent(new Event('storage')); // Notify other components
-
+      
     } catch (restoreError: any) {
       console.error("Full restore failed:", restoreError);
       setError(`Full restore failed: ${restoreError.message}`);
       toast({ title: "Restore Failed", description: restoreError.message || "An unknown error occurred during restore.", variant: "destructive" });
+      overallSuccess = false;
     } finally {
       setIsLoading(false);
-      setImportProgress(100);
+      setImportProgress(100); // Indicate completion even if errors
       setIsRestoreConfirmOpen(false);
       setZipFileForRestore(null);
+      if (overallSuccess) {
+        await fetchData(); // Refresh page data
+        window.dispatchEvent(new Event('storage')); // Notify other components
+      }
     }
   };
 
@@ -1814,7 +1816,7 @@ export default function DataManagementPage() {
         </Dialog>
         
         <AlertDialog open={isRestoreConfirmOpen} onOpenChange={(open) => {
-            if (!open) setZipFileForRestore(null); // Clear file if dialog is cancelled
+            if (!open) setZipFileForRestore(null); 
             setIsRestoreConfirmOpen(open);
         }}>
             <AlertDialogContent>
