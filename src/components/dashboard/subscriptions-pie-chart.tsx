@@ -50,8 +50,7 @@ const BAR_COLORS = [
 ];
 
 interface SubscriptionsPieChartProps {
-  // Props can be added if needed, e.g., to pass pre-fetched data or config
-  dateRangeLabel: string; // To display in the card description
+  dateRangeLabel: string;
 }
 
 const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel }) => {
@@ -76,7 +75,6 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
         setCategories(cats);
       } catch (error) {
         console.error("Failed to fetch data for subscriptions chart:", error);
-        // Handle error appropriately, maybe set an error state
       } finally {
         setIsLoading(false);
       }
@@ -94,15 +92,18 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
     subscriptions.forEach(sub => {
       if (sub.type === 'expense') {
         // Consider if subscriptions should be filtered by selectedDateRange
-        // For a "current monthly burden" view, we might not filter by date range,
-        // or we might check if the subscription is active within the range.
-        // For simplicity here, we'll consider all active expense subscriptions.
-        // const isActiveInRange = selectedDateRange.from && selectedDateRange.to ?
-        //   isWithinInterval(parseISO(sub.startDate), { start: selectedDateRange.from, end: selectedDateRange.to }) ||
-        //   isWithinInterval(parseISO(sub.nextPaymentDate), { start: selectedDateRange.from, end: selectedDateRange.to })
-        //   : true; // If no date range, assume active
+        // For this chart, we'll consider all active expense subscriptions that start within or before the range end,
+        // and their next payment date is relevant to the period or they are ongoing.
+        const subStartDate = parseISO(sub.startDate);
+        const subNextPaymentDate = parseISO(sub.nextPaymentDate);
 
-        // if(isActiveInRange) { // If you want to filter by date range
+        let isActiveInRange = true; // Default to true if no specific date range is set (e.g., "All Time")
+        if (selectedDateRange.from && selectedDateRange.to) {
+           isActiveInRange = subStartDate <= selectedDateRange.to; // Starts before or during range
+        }
+
+
+        if(isActiveInRange) {
             const monthlyCost = calculateMonthlyEquivalent(
             sub.amount,
             sub.currency,
@@ -110,27 +111,21 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
             preferredCurrency
             );
             categoryMonthlyTotals[sub.category] = (categoryMonthlyTotals[sub.category] || 0) + monthlyCost;
-        // }
+        }
       }
     });
 
     return Object.entries(categoryMonthlyTotals)
       .map(([categoryName, totalAmount], index) => {
         const categoryDetails = categories.find(c => c.name === categoryName);
-        // Use category specific color if available, otherwise cycle through BAR_COLORS
         let color = BAR_COLORS[index % BAR_COLORS.length];
-        if (categoryDetails) {
-            const style = getCategoryStyle(categoryDetails);
-            // This is tricky as getCategoryStyle returns Tailwind classes.
-            // For charts, direct HSL values are better. We'll stick to BAR_COLORS for now.
-        }
         return {
           name: categoryName,
           value: parseFloat(totalAmount.toFixed(2)),
           fill: color,
         };
       })
-      .filter(item => item.value > 0) // Only include categories with expenses
+      .filter(item => item.value > 0) 
       .sort((a, b) => b.value - a.value);
   }, [isLoading, subscriptions, categories, preferredCurrency, selectedDateRange]);
 
@@ -144,7 +139,9 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
     }, {} as ChartConfig);
   }, [chartData]);
 
-  const totalValue = useMemo(() => chartData.reduce((sum, item) => sum + item.value, 0), [chartData]);
+  const totalMonthlySubscriptionCost = useMemo(() => {
+    return chartData.reduce((sum, item) => sum + item.value, 0);
+  }, [chartData]);
 
 
   if (isLoading) {
@@ -166,10 +163,10 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
       <Card className="shadow-lg bg-card text-card-foreground h-full">
         <CardHeader className="pb-2">
           <CardTitle>Monthly Subscription Costs</CardTitle>
-          <CardDescription>By category for {dateRangeLabel}.</CardDescription>
+          <CardDescription>No expense subscription data for {dateRangeLabel}.</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col items-center justify-center p-0 h-[250px] sm:h-[300px]">
-          <p className="text-muted-foreground">No expense subscription data for this period.</p>
+          <p className="text-muted-foreground">No expense subscription data.</p>
         </CardContent>
       </Card>
     );
@@ -179,7 +176,9 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
     <Card className="shadow-lg bg-card text-card-foreground flex flex-col h-full">
       <CardHeader className="pb-2">
         <CardTitle>Monthly Subscription Costs</CardTitle>
-        <CardDescription>By category for {dateRangeLabel} ({preferredCurrency}).</CardDescription>
+        <CardDescription>
+            Total: {formatCurrency(totalMonthlySubscriptionCost, preferredCurrency, preferredCurrency, false)} for {dateRangeLabel}.
+        </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col items-center justify-center p-0 h-[250px] sm:h-[300px]">
         <ChartContainer
@@ -201,7 +200,7 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
                         />
                         <span>
                           {props.payload.name}: {formatCurrency(Number(value), preferredCurrency, preferredCurrency, false)} (
-                          {totalValue > 0 ? ((Number(value) / totalValue) * 100).toFixed(1) : 0}%)
+                          {totalMonthlySubscriptionCost > 0 ? ((Number(value) / totalMonthlySubscriptionCost) * 100).toFixed(1) : 0}%)
                         </span>
                       </div>
                     )}
@@ -233,3 +232,4 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
 };
 
 export default SubscriptionsPieChart;
+
