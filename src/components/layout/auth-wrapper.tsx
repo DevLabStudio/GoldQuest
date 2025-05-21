@@ -18,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText } from 'lucide-react'; // Added Database
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -36,15 +36,15 @@ const LogoIcon = () => (
     xmlns="http://www.w3.org/2000/svg"
     className="mr-2 text-primary"
   >
-    <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
-    <circle cx="75" cy="25" r="5" fill="currentColor"/>
-    <circle cx="50" cy="10" r="5" fill="currentColor"/>
-    <circle cx="25" cy="25" r="5" fill="currentColor"/>
-    <circle cx="25" cy="75" r="5" fill="currentColor"/>
-    <circle cx="50" cy="90" r="5" fill="currentColor"/>
-    <circle cx="75" cy="75" r="5" fill="currentColor"/>
-    <circle cx="75" cy="50" r="5" fill="currentColor"/>
-    <circle cx="50" cy="50" r="5" fill="currentColor"/>
+    <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="hsl(var(--primary))" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="75" cy="25" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="50" cy="10" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="25" cy="25" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="25" cy="75" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="50" cy="90" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="75" cy="75" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="75" cy="50" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="50" cy="50" r="5" fill="hsl(var(--primary))"/>
   </svg>
 );
 
@@ -114,7 +114,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
         const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
 
-        if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
+        if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences' && pathname !== '/welcome') {
           localStorage.setItem(firstLoginFlagKey, 'true');
           router.push('/preferences');
         }
@@ -138,7 +138,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   }
 
   if (firebaseError && !isFirebaseActive) {
-     if (pathname !== '/login' && pathname !== '/signup') {
+     if (pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome') {
          router.push('/login');
          return <div className={loadingDivClassName}>Firebase not available. Redirecting...</div>;
      }
@@ -146,22 +146,22 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
 
   if (!isAuthenticated && isFirebaseActive) {
-    if (pathname !== '/signup' && pathname !== '/login') {
+    if (pathname !== '/signup' && pathname !== '/login' && pathname !== '/welcome') {
         return <LoginPage />;
     }
-    return <>{children}</>;
+    return <>{children}</>; 
   }
 
-  if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
+  if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome') {
     router.push('/login');
     return <div className={loadingDivClassName}>Redirecting to login...</div>;
   }
 
-  if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup'))) {
-     if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup')) {
+  if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup' || pathname === '/welcome'))) {
+     if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome')) {
          return <LoginPage />;
      }
-      if (pathname === '/login' || pathname === '/signup') {
+      if (pathname === '/login' || pathname === '/signup' || pathname === '/welcome') {
         return <>{children}</>;
       }
 
@@ -172,7 +172,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <SidebarHeader className="items-center justify-between">
                 <div className="flex items-center">
                 <LogoIcon />
-                <span className="text-lg font-semibold text-primary">GoldQuest</span>
+                <span className="text-lg font-semibold text-primary">The Golden Game</span>
                 </div>
             </SidebarHeader>
             <SidebarContent>
@@ -187,9 +187,8 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
-
                 <SidebarGroup>
-                     <SidebarMenuItem>
+                    <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
                             <SidebarMenuButton tooltip="Financial Control" isActive={isAnyFinancialControlRouteActive}>
                                 <SlidersHorizontal />
@@ -197,6 +196,8 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
+                 </SidebarGroup>
+                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/accounts" passHref>
                         <SidebarMenuButton tooltip="Manage Accounts" isActive={isAccountsActive}>
@@ -329,24 +330,26 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
+  // Fallback for scenarios where nothing else matches (e.g., during extreme initial loading before isClient is true)
+  // Or if AuthWrapper logic leads to an unhandled state.
   return (
-      <html lang="en" className={oxanium.variable} suppressHydrationWarning>
-      <head>
-          <meta charSet="utf-8" />
-          <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>The Golden Game</title>
-          <meta name="description" content="Simple personal finance management" />
-      </head>
-      <body
-      className={cn(
-          // oxanium.className, // Removed from here
-          'font-sans antialiased', // font-sans will use var(--font-oxanium) from html
-          'min-h-screen flex flex-col'
-        )}
-        suppressHydrationWarning // Add this to the body tag
-      >
-        <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Preparing application...</div>
-      </body>
+      <html lang="en" className={cn(theme === 'dark' ? 'dark' : '')} suppressHydrationWarning>
+          <head>
+              <meta charSet="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>The Golden Game</title>
+              <meta name="description" content="Simple personal finance management" />
+          </head>
+          <body
+          className={cn(
+              'font-sans antialiased', 
+              'min-h-screen flex flex-col'
+            )}
+            suppressHydrationWarning
+          >
+            <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Preparing application...</div>
+          </body>
     </html>
   );
 }
+
