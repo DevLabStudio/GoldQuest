@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart2, Users, Database, Goal, Map, Gem, Shield, BookOpen, Zap, TrendingUp } from 'lucide-react'; // Removed Palette as it's not used, kept others
+import { BarChart2, Users, Database, Goal, Map, Gem, Shield, BookOpen, Zap, TrendingUp } from 'lucide-react';
 
 const LogoIcon = () => (
   <svg
@@ -101,13 +101,13 @@ export default function WelcomePage() {
                 <LogoIcon />
             </div>
             <h1 className="text-4xl sm:text-5xl md:text-6xl font-bold text-primary mb-6">
-              Embark on Your GoldQuest to Financial Freedom!
+              Take Control of Your Finances with GoldQuest
             </h1>
             <p className="text-lg md:text-xl text-muted-foreground mb-10 max-w-3xl mx-auto">
-              Your all-in-one treasure map to track accounts, conquer expenses, forge budgets, and achieve legendary financial goals. Simple, intuitive, and empowering.
+              Your comprehensive solution for tracking accounts, managing expenses, creating budgets, and achieving your financial goals. Simple, intuitive, and empowering.
             </p>
             <Link href="/signup" passHref>
-              <Button size="lg" className="text-lg px-10 py-7 shadow-lg hover:shadow-primary/30 transition-shadow">Begin Your Quest - Free!</Button>
+              <Button size="lg" className="text-lg px-10 py-7 shadow-lg hover:shadow-primary/30 transition-shadow">Get Started - Free!</Button>
             </Link>
           </div>
         </section>
@@ -116,39 +116,39 @@ export default function WelcomePage() {
         <section id="features" className="py-16 md:py-24 bg-background">
           <div className="container mx-auto px-4">
             <div className="text-center mb-16">
-                <h2 className="text-3xl font-bold text-foreground mb-3">Your Arsenal for the Financial Frontier</h2>
-                <p className="text-md text-muted-foreground max-w-2xl mx-auto">Discover the legendary tools that will transform your wealth-building journey.</p>
+                <h2 className="text-3xl font-bold text-foreground mb-3">Key Features for Your Financial Success</h2>
+                <p className="text-md text-muted-foreground max-w-2xl mx-auto">Discover the tools designed to help you manage your finances effectively.</p>
             </div>
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
               <FeatureCard
                 icon={<Map className="h-8 w-8 text-primary" />}
-                title="Chart Your Financial Map"
-                description="Navigate all your accounts, transactions, income, and expenses with insightful charts and reports. Know where your gold flows."
+                title="Comprehensive Financial Overview"
+                description="Navigate all your accounts, transactions, income, and expenses with insightful charts and reports. Understand your financial landscape."
               />
               <FeatureCard
                 icon={<Goal className="h-8 w-8 text-primary" />}
-                title="Forge Powerful Budgets"
-                description="Craft custom budgets for categories or groups, track your spending, and stay on course to conquer your financial milestones."
+                title="Effective Budget Management"
+                description="Craft custom budgets for categories or groups, track your spending, and stay on course to achieve your financial milestones."
               />
               <FeatureCard
                 icon={<Shield className="h-8 w-8 text-primary" />}
-                title="Fortified & Private Vault"
-                description="Your financial treasures are sacred. We prioritize security with Firebase, ensuring your information is heavily guarded."
+                title="Secure & Private Data"
+                description="Your financial information is important. We prioritize security with Firebase, ensuring your data is well-protected."
               />
                <FeatureCard
                 icon={<Users className="h-8 w-8 text-primary" />}
-                title="Master Your Guild Subscriptions"
-                description="Never lose track of recurring tributes. Manage all your subscriptions and see their impact on your treasure chest."
+                title="Subscription Management"
+                description="Keep track of all your recurring payments and understand their impact on your cash flow."
               />
                <FeatureCard
                 icon={<Database className="h-8 w-8 text-primary" />}
-                title="Ancient Scrolls: Import & Export"
-                description="Easily import lore from other realms (services) or export your GoldQuest saga for backup and peace of mind."
+                title="Data Import & Export"
+                description="Easily import data from other services or export your GoldQuest data for backup and peace of mind."
               />
                <FeatureCard
                 icon={<Gem className="h-8 w-8 text-primary" />}
-                title="Claim Your Financial Destiny"
-                description="Set legendary targets, track your epic progress, and make wise decisions to reach your financial aspirations."
+                title="Achieve Your Financial Goals"
+                description="Set clear financial targets, track your progress, and make informed decisions to reach your aspirations."
               />
             </div>
           </div>
@@ -156,14 +156,14 @@ export default function WelcomePage() {
         
         <section className="py-16 md:py-24 bg-muted/30">
             <div className="container mx-auto px-4 text-center">
-                <h2 className="text-3xl font-bold text-foreground mb-3">Begin Your Adventure in Minutes</h2>
+                <h2 className="text-3xl font-bold text-foreground mb-3">Get Started in Minutes</h2>
                 <p className="text-md text-muted-foreground mb-10 max-w-2xl mx-auto">
-                    GoldQuest is designed for clarity and ease of use. Your path to financial mastery is clear.
+                    GoldQuest is designed for clarity and ease of use. Your path to financial clarity is straightforward.
                 </p>
                 <div className="grid md:grid-cols-3 gap-8 text-left">
-                    <StepCard number="1" title="Quick Start Your Quest" description="Create your hero profile (account) in under a minute." icon={<Zap className="h-6 w-6 text-primary" />} />
-                    <StepCard number="2" title="Map Your Territories" description="Manually add your treasure troves: bank accounts, crypto wallets, and credit cards." icon={<TrendingUp className="h-6 w-6 text-primary" />} />
-                    <StepCard number="3" title="Achieve Financial Legend Status" description="Track, budget, and plan your way to becoming a financial legend." icon={<BookOpen className="h-6 w-6 text-primary" />} />
+                    <StepCard number="1" title="Quick Sign Up" description="Create your account in under a minute to begin." icon={<Zap className="h-6 w-6 text-primary" />} />
+                    <StepCard number="2" title="Add Your Accounts" description="Manually add your bank accounts, crypto wallets, and credit cards to get a complete picture." icon={<TrendingUp className="h-6 w-6 text-primary" />} />
+                    <StepCard number="3" title="Manage Your Finances" description="Track, budget, and plan your way to better financial health." icon={<BookOpen className="h-6 w-6 text-primary" />} />
                 </div>
             </div>
         </section>
@@ -171,12 +171,12 @@ export default function WelcomePage() {
         {/* Call to Action Section */}
         <section className="py-20 md:py-28 text-center bg-background">
           <div className="container mx-auto px-4">
-            <h2 className="text-3xl font-bold text-primary mb-6">Ready to Claim Your Financial Riches?</h2>
+            <h2 className="text-3xl font-bold text-primary mb-6">Ready to Improve Your Financial Health?</h2>
             <p className="text-lg text-muted-foreground mb-10 max-w-2xl mx-auto">
-              Take the first step on your GoldQuest. It's free to start your epic journey!
+              Take the first step with GoldQuest. It's free to start.
             </p>
             <Link href="/signup" passHref>
-              <Button size="lg" className="text-lg px-10 py-7 shadow-lg hover:shadow-primary/30 transition-shadow">Create Your Free Account & Begin!</Button>
+              <Button size="lg" className="text-lg px-10 py-7 shadow-lg hover:shadow-primary/30 transition-shadow">Create Your Free Account & Get Started</Button>
             </Link>
           </div>
         </section>
@@ -190,7 +190,7 @@ export default function WelcomePage() {
              <span className="ml-2 text-xl font-semibold text-primary">GoldQuest</span>
           </div>
           <p className="text-sm text-muted-foreground">&copy; {new Date().getFullYear()} GoldQuest. All rights reserved.</p>
-          <p className="text-xs text-muted-foreground/80 mt-1">Your Epic Journey to Financial Mastery Starts Here.</p>
+          <p className="text-xs text-muted-foreground/80 mt-1">Your Journey to Financial Clarity Starts Here.</p>
         </div>
       </footer>
     </div>
