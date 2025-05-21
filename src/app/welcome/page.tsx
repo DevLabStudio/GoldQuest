@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart2, CheckCircle, ShieldCheck, Users, Database, Goal, TrendingUp, Palette, Zap, Map, Treasure, Shield, BookOpen } from 'lucide-react';
+import { BarChart2, CheckCircle, ShieldCheck, Users, Database, Goal, TrendingUp, Palette, Zap, Map, Gem, Shield, BookOpen } from 'lucide-react'; // Changed Treasure to Gem
 
 const LogoIcon = () => (
   <svg
@@ -104,7 +104,7 @@ export default function WelcomePage() {
                 description="Easily import lore from other realms (services) or export your GoldQuest saga for backup and peace of mind."
               />
                <FeatureCard
-                icon={<Treasure className="h-8 w-8 text-primary" />}
+                icon={<Gem className="h-8 w-8 text-primary" />} {/* Changed Treasure to Gem */}
                 title="Claim Your Financial Destiny"
                 description="Set legendary targets, track your epic progress, and make wise decisions to reach your financial aspirations."
               />
