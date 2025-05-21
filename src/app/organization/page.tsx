@@ -23,10 +23,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { cn } from '@/lib/utils';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 
 export default function OrganizationPage() {
-  // Categories State
+  const { user, isLoadingAuth } = useAuthContext();
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoadingCategories, setIsLoadingCategories] = useState(true);
   const [isAddCategoryDialogOpen, setIsAddCategoryDialogOpen] = useState(false);
@@ -35,7 +36,6 @@ export default function OrganizationPage() {
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [categoryError, setCategoryError] = useState<string | null>(null);
 
-  // Tags State
   const [tags, setTags] = useState<Tag[]>([]);
   const [isLoadingTags, setIsLoadingTags] = useState(true);
   const [isAddTagDialogOpen, setIsAddTagDialogOpen] = useState(false);
@@ -44,7 +44,6 @@ export default function OrganizationPage() {
   const [selectedTag, setSelectedTag] = useState<Tag | null>(null);
   const [tagError, setTagError] = useState<string | null>(null);
 
-  // Groups State
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoadingGroups, setIsLoadingGroups] = useState(true);
   const [isAddGroupDialogOpen, setIsAddGroupDialogOpen] = useState(false);
@@ -60,6 +59,15 @@ export default function OrganizationPage() {
   const { toast } = useToast();
 
   const fetchData = useCallback(async () => {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
+        setIsLoadingCategories(true); setIsLoadingTags(true); setIsLoadingGroups(true); // Keep loading true if no user
+        if (!user && !isLoadingAuth) {
+             setCategoryError("Please log in to manage organization.");
+             setTagError("Please log in to manage organization.");
+             setGroupError("Please log in to manage organization.");
+        }
+        return;
+    }
     setIsLoadingCategories(true); setIsLoadingTags(true); setIsLoadingGroups(true);
     setCategoryError(null); setTagError(null); setGroupError(null);
     try {
@@ -74,21 +82,21 @@ export default function OrganizationPage() {
       setTags(fetchedTags);
       fetchedGroups.sort((a, b) => a.name.localeCompare(b.name));
       setGroups(fetchedGroups);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Failed to fetch organization data:", err);
-      const errorMsg = "Could not load organization data.";
+      const errorMsg = "Could not load organization data. " + err.message;
       setCategoryError(errorMsg); setTagError(errorMsg); setGroupError(errorMsg);
-      toast({ title: "Error", description: "Failed to load organization data.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to load organization data. " + err.message, variant: "destructive" });
     } finally {
       setIsLoadingCategories(false); setIsLoadingTags(false); setIsLoadingGroups(false);
     }
-  }, [toast]);
+  }, [toast, user, isLoadingAuth]);
 
   useEffect(() => {
     fetchData();
     
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userCategories', 'userTags', 'userGroups'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
@@ -104,7 +112,7 @@ export default function OrganizationPage() {
     return () => { 
         if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
-  }, [fetchData]);
+  }, [fetchData, user, isLoadingAuth]);
 
 
   // Category Handlers
@@ -312,11 +320,11 @@ export default function OrganizationPage() {
                     <div className="flex items-center justify-between w-full">
                       <span className="font-medium">{group.name}</span>
                       <div className="flex items-center gap-1">
-                        <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1 text-primary hover:text-primary/80" onClick={(e) => e.stopPropagation()}>
-                             <Link href={`/groups/${group.id}`} passHref legacyBehavior>
+                        <Link href={`/groups/${group.id}`} passHref legacyBehavior>
+                           <Button asChild variant="ghost" size="sm" className="h-7 px-2 flex items-center gap-1 text-primary hover:text-primary/80" onClick={(e) => e.stopPropagation()}>
                                 <a><Eye className="h-4 w-4" /><span>View Details</span></a>
-                             </Link>
-                        </Button>
+                           </Button>
+                        </Link>
                         <div
                             role="button"
                             tabIndex={0}

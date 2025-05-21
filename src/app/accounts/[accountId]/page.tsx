@@ -26,6 +26,7 @@ import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sid
 import SpendingChart from '@/components/dashboard/spending-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const formatDate = (dateString: string): string => {
     try {
@@ -42,6 +43,7 @@ export default function AccountDetailPage() {
   const params = useParams();
   const router = useRouter();
   const accountId = typeof params.accountId === 'string' ? params.accountId : undefined;
+  const { user, isLoadingAuth } = useAuthContext();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -63,9 +65,10 @@ export default function AccountDetailPage() {
 
 
   const fetchData = useCallback(async () => {
-    if (!accountId || typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined' || !accountId) {
         setIsLoading(false);
-        if(!accountId) setError("Account ID is missing.");
+        if(!accountId && !isLoadingAuth && user) setError("Account ID is missing.");
+        else if (!user && !isLoadingAuth) setError("Please log in to view account details.");
         return;
     }
     setIsLoading(true);
@@ -102,15 +105,22 @@ export default function AccountDetailPage() {
     } finally {
         setIsLoading(false);
     }
-  }, [accountId, toast]);
+  }, [accountId, toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccount(null);
+        setTransactions([]);
+        setError("Please log in to view account details.");
+    }
+  }, [fetchData, user, isLoadingAuth]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
@@ -132,7 +142,7 @@ export default function AccountDetailPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [accountId, fetchData]);
+  }, [accountId, fetchData, user, isLoadingAuth]);
 
 
   const filteredTransactions = useMemo(() => {
@@ -328,7 +338,7 @@ export default function AccountDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !account) {
+  if (isLoadingAuth || (isLoading && !account)) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -569,7 +579,7 @@ export default function AccountDetailPage() {
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
-              onTransferAdded={handleTransferAdded} // Ensure this is passed for consistency, though less likely used in single-account edit
+              onTransferAdded={handleTransferAdded} 
               isLoading={isLoading}
               initialData={{
                 ...selectedTransaction,
@@ -610,9 +620,9 @@ export default function AccountDetailPage() {
                 clonedTransactionData ||
                 (transactionTypeToAdd !== 'transfer' && account
                     ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                    : (transactionTypeToAdd === 'transfer' && account // If adding a transfer and current account exists
-                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date(), toAccountCurrency: accounts.find(a => a.id !== account.id)?.currency || account.currency }
-                        : {date: new Date()}) // Fallback for other cases or if account not found
+                    : (transactionTypeToAdd === 'transfer' && account 
+                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date(), toAccountCurrency: allAccounts.find(a => a.id !== account.id)?.currency || account.currency }
+                        : {date: new Date()}) 
                 )
               }
             />
@@ -622,4 +632,3 @@ export default function AccountDetailPage() {
     </div>
   );
 }
-

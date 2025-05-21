@@ -23,6 +23,7 @@ import type { AddTransactionFormData } from '@/components/transactions/add-trans
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const INITIAL_TRANSACTION_LIMIT = 50;
 
@@ -38,6 +39,7 @@ const formatDate = (dateString: string): string => {
 };
 
 export default function TransfersPage() {
+  const { user, isLoadingAuth } = useAuthContext();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
@@ -57,9 +59,9 @@ export default function TransfersPage() {
 
 
   const fetchData = useCallback(async () => {
-    if (typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
         setIsLoading(false);
-        setError("Transfer data can only be loaded on the client.");
+        if (!user && !isLoadingAuth) setError("Please log in to view transfer data.");
         return;
     }
 
@@ -92,21 +94,28 @@ export default function TransfersPage() {
 
     } catch (err: any) {
     console.error("Failed to fetch transfer data:", err);
-    setError("Could not load transfer data. Please try again later.");
+    setError("Could not load transfer data. Please try again later. " + err.message);
     toast({ title: "Error", description: err.message || "Failed to load data.", variant: "destructive" });
     } finally {
     setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchData();
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccounts([]);
+        setAllTransactionsUnfiltered([]);
+        setError("Please log in to view transfers.");
+    }
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && event.type === 'storage') {
+         if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -124,7 +133,7 @@ export default function TransfersPage() {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, [fetchData]);
+  }, [fetchData, user, isLoadingAuth]);
 
   const transferTransactionPairs = useMemo(() => {
     if (isLoading) return [];
@@ -142,29 +151,23 @@ export default function TransfersPage() {
 
     potentialTransfers.forEach(txOut => {
       if (txOut.amount < 0 && !processedIds.has(txOut.id)) {
-        // For cross-currency, amount might not be exact opposite.
-        // We rely more on description, date and involved accounts.
-        // For same-currency, amount should be exact opposite.
         const matchingIncoming = potentialTransfers.filter(txIn =>
           txIn.accountId !== txOut.accountId &&
           !processedIds.has(txIn.id) &&
           txIn.date === txOut.date &&
           (txIn.description === txOut.description ||
-           (txIn.description?.startsWith("Transfer from") && txOut.description?.startsWith("Transfer from"))) && // Common pattern
-          ( (txIn.transactionCurrency === txOut.transactionCurrency && txIn.amount === -txOut.amount) || // Same currency check
-            (txIn.transactionCurrency !== txOut.transactionCurrency) ) // Allow different currencies for cross-currency
+           (txIn.description?.startsWith("Transfer from") && txOut.description?.startsWith("Transfer from"))) && 
+          ( (txIn.transactionCurrency === txOut.transactionCurrency && txIn.amount === -txOut.amount) || 
+            (txIn.transactionCurrency !== txOut.transactionCurrency) ) 
         );
 
         if (matchingIncoming.length > 0) {
-            // Prioritize exact amount match if currencies are same, otherwise take first plausible match
             let txIn;
             const sameCurrencyExactMatch = matchingIncoming.find(match => match.transactionCurrency === txOut.transactionCurrency && match.amount === -txOut.amount);
             if (sameCurrencyExactMatch) {
                 txIn = sameCurrencyExactMatch;
             } else {
-                 // If no exact match for same currency, or if currencies are different, take the first one.
-                 // This might need more sophisticated matching for multi-leg CSV imports if descriptions aren't identical.
-                matchingIncoming.sort((a,b) => a.id.localeCompare(b.id)); // Consistent sort for tie-breaking
+                matchingIncoming.sort((a,b) => a.id.localeCompare(b.id)); 
                 txIn = matchingIncoming[0];
             }
 
@@ -320,10 +323,8 @@ export default function TransfersPage() {
 
         let toAmt = Math.abs(editingTransferPair.to.amount);
         if (fromAcc && toAcc && fromAcc.currency !== toAcc.currency) {
-            // If currencies are different, toAccountAmount should be what was in the `to` leg.
             toAmt = Math.abs(editingTransferPair.to.amount);
         } else if (fromAcc && toAcc && fromAcc.currency === toAcc.currency) {
-            // If currencies are same, toAccountAmount should be same as fromAccountAmount (absolute)
             toAmt = Math.abs(editingTransferPair.from.amount);
         }
 
@@ -332,10 +333,10 @@ export default function TransfersPage() {
             type: 'transfer' as 'transfer',
             fromAccountId: editingTransferPair.from.accountId,
             toAccountId: editingTransferPair.to.accountId,
-            amount: Math.abs(editingTransferPair.from.amount), // Amount from source
-            transactionCurrency: editingTransferPair.from.transactionCurrency, // Currency of source
-            toAccountAmount: toAmt, // Amount for destination, pre-filled
-            toAccountCurrency: editingTransferPair.to.transactionCurrency, // Currency of destination
+            amount: Math.abs(editingTransferPair.from.amount), 
+            transactionCurrency: editingTransferPair.from.transactionCurrency, 
+            toAccountAmount: toAmt, 
+            toAccountCurrency: editingTransferPair.to.transactionCurrency, 
             date: parseISO(editingTransferPair.from.date.includes('T') ? editingTransferPair.from.date : editingTransferPair.from.date + 'T00:00:00Z'),
             description: editingTransferPair.from.description,
             tags: editingTransferPair.from.tags || [],

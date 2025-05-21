@@ -22,9 +22,11 @@ import { format as formatDateFns, parseISO, compareAsc, startOfDay, isSameDay, e
 import Link from 'next/link';
 import AccountBalanceHistoryChart from '@/components/accounts/account-balance-history-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 
 export default function AccountsPage() {
+  const { user, isLoadingAuth } = useAuthContext();
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -39,9 +41,9 @@ export default function AccountsPage() {
 
 
    const fetchAllData = useCallback(async () => {
-        if (typeof window === 'undefined') {
+        if (!user || isLoadingAuth || typeof window === 'undefined') {
             setIsLoading(false);
-            setError("Account data can only be loaded on the client.");
+            if (!user && !isLoadingAuth) setError("Please log in to view accounts.");
             return;
         }
 
@@ -63,25 +65,32 @@ export default function AccountsPage() {
                 setAllTransactions([]);
             }
 
-        } catch (err) {
+        } catch (err: any) {
             console.error("Failed to fetch accounts or transactions:", err);
-            setError("Could not load data. Please ensure local storage is accessible and try again.");
+            setError("Could not load data. Please ensure local storage is accessible and try again. Details: " + err.message);
             toast({
                 title: "Error",
-                description: "Failed to load accounts or transactions.",
+                description: "Failed to load accounts or transactions. Details: " + err.message,
                 variant: "destructive",
             });
         } finally {
             setIsLoading(false);
         }
-    }, [toast]);
+    }, [toast, user, isLoadingAuth]);
 
 
   useEffect(() => {
-    fetchAllData();
+    if (user && !isLoadingAuth) {
+        fetchAllData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAllAccounts([]);
+        setAllTransactions([]);
+        setError("Please log in to view accounts.");
+    }
 
     const handleStorageChange = (event: StorageEvent) => {
-         if (event.type === 'storage') {
+         if (event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
@@ -103,7 +112,7 @@ export default function AccountsPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [fetchAllData]);
+  }, [fetchAllData, user, isLoadingAuth]);
 
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
@@ -115,11 +124,11 @@ export default function AccountsPage() {
         description: `Account "${newAccountData.name}" added successfully.`,
       });
       window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch (err: any) {
        console.error("Failed to add account:", err);
        toast({
         title: "Error",
-        description: "Could not add the account.",
+        description: "Could not add the account. Details: " + err.message,
         variant: "destructive",
       });
     }
@@ -135,11 +144,11 @@ export default function AccountsPage() {
         description: `Account "${updatedAccountData.name}" updated successfully.`,
       });
       window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch (err: any) {
        console.error("Failed to update account:", err);
        toast({
         title: "Error",
-        description: "Could not update the account.",
+        description: "Could not update the account. Details: " + err.message,
         variant: "destructive",
       });
     }
@@ -153,11 +162,11 @@ export default function AccountsPage() {
             description: `Account removed successfully.`,
         });
         window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch (err: any) {
         console.error("Failed to delete account:", err);
         toast({
             title: "Error",
-            description: "Could not delete the account.",
+            description: "Could not delete the account. Details: " + err.message,
             variant: "destructive",
         });
     }
@@ -194,57 +203,52 @@ export default function AccountsPage() {
     const maxTxDateOverall = allTxDates.length > 0 ? allTxDates.reduce((max, d) => d > max ? d : max, allTxDates[0]) : new Date();
 
     const chartStartDate = startOfDay(selectedDateRange.from || minTxDateOverall);
-    const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall); // Use endOfDay for the chart's actual end
+    const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall); 
 
-    // Calculate balance for each account AT THE START of chartStartDate
-    const balanceAtChartStart: { [accountId: string]: number } = {};
+    const initialChartBalances: { [accountId: string]: number } = {};
     relevantAccounts.forEach(acc => {
-        let currentBalance = acc.balance; // Current balance in account's native currency
+        let balanceAtChartStart = acc.balance; 
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return tx.accountId === acc.id && txDate >= chartStartDate; // Transactions ON or AFTER chart start
+                return tx.accountId === acc.id && txDate >= chartStartDate; 
             })
             .forEach(tx => {
-                // Subtract these from current balance to roll back to chartStartDate
-                currentBalance -= convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                const amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                balanceAtChartStart -= amountInAccountCurrency;
             });
-        balanceAtChartStart[acc.id] = currentBalance;
+        initialChartBalances[acc.id] = balanceAtChartStart;
     });
 
+
     const chartDatesSet = new Set<string>();
-    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); // Ensure chart start date is included
+    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); 
     allTransactions.forEach(tx => {
         const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
         if (txDate >= chartStartDate && txDate <= chartEndDate) {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
-    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd')); // Ensure chart end date is included
+    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd')); 
 
 
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
         .sort(compareAsc)
-        .filter(date => date <= chartEndDate); // Make sure we don't go beyond chartEndDate
+        .filter(date => date <= chartEndDate); 
 
     if (sortedUniqueChartDates.length === 0) {
          const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
          relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = convertCurrency(balanceAtChartStart[acc.id] || 0, acc.currency, preferredCurrency);
+             dataPoint[acc.name] = convertCurrency(initialChartBalances[acc.id] || 0, acc.currency, preferredCurrency);
          });
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalancesInAccountCurrency = { ...balanceAtChartStart }; // Balances are in account's native currency
+    const runningBalancesInAccountCurrency = { ...initialChartBalances }; 
 
-    sortedUniqueChartDates.forEach((currentDisplayDate, index) => {
-        // If it's not the very first date in our sorted list, the runningBalances
-        // already reflect the start of currentDisplayDate (end of previousDisplayDate).
-        // For the very first date (chartStartDate), runningBalances are already set correctly.
-
-        // Apply transactions FOR currentDisplayDate
+    sortedUniqueChartDates.forEach((currentDisplayDate) => {
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
@@ -258,14 +262,12 @@ export default function AccountsPage() {
                 }
             });
 
-        // Create snapshot for the END of currentDisplayDate
         const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
         relevantAccounts.forEach(acc => {
             dailySnapshot[acc.name] = convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.currency, preferredCurrency);
         });
         
-        // Add or update the snapshot for this date
         const existingEntryIndex = historicalData.findIndex(hd => hd.date === dateStr);
         if (existingEntryIndex !== -1) {
             historicalData[existingEntryIndex] = dailySnapshot;
@@ -274,7 +276,6 @@ export default function AccountsPage() {
         }
     });
     
-    // Ensure data is sorted by date for the chart, especially if chartStartDate/EndDate points were manually added out of order initially
     historicalData.sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)));
 
 
@@ -529,3 +530,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+

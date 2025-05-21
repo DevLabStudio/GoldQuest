@@ -23,9 +23,11 @@ import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { AddTransactionFormData } from '@/components/transactions/add-transaction-form';
 import { useToast } from "@/hooks/use-toast";
 import { useDateRange } from '@/contexts/DateRangeContext'; 
+import { useAuthContext } from '@/contexts/AuthContext';
 
 
 export default function DashboardPage() {
+  const { user, isLoadingAuth } = useAuthContext();
   const [preferredCurrency, setPreferredCurrency] = useState('BRL'); 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -44,8 +46,11 @@ export default function DashboardPage() {
 
 
   const fetchData = useCallback(async () => {
-      if (typeof window === 'undefined') {
+      if (!user || isLoadingAuth || typeof window === 'undefined') {
         setIsLoading(false);
+        if (!user && !isLoadingAuth) {
+            toast({ title: "Authentication Error", description: "Please log in to view dashboard data.", variant: "destructive" });
+        }
         return;
       }
       setIsLoading(true);
@@ -72,22 +77,31 @@ export default function DashboardPage() {
         }
 
         setLastUpdated(new Date());
-      } catch (error) {
+      } catch (error: any) {
         console.error("Failed to fetch dashboard data:", error);
-        toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+        toast({ title: "Error", description: "Failed to load dashboard data. " + error.message, variant: "destructive" });
       } finally {
         setIsLoading(false);
       }
-    }, [toast]);
+    }, [toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchData();
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccounts([]);
+        setAllTransactions([]);
+        setCategories([]);
+        setTags([]);
+        // Optionally clear other state or show login prompt
+    }
 
     const handleStorageChange = (event: StorageEvent) => {
-      if (event.type === 'storage') {
+      if (event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-']; // transactions- for any account change
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-']; 
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for dashboard (key: ${event.key || 'custom'}), refetching data...`);
@@ -105,7 +119,7 @@ export default function DashboardPage() {
         window.removeEventListener('storage', handleStorageChange);
       }
     };
-  }, [fetchData]); 
+  }, [fetchData, user, isLoadingAuth]); 
 
   const handleRefresh = async () => {
      await fetchData();
@@ -226,7 +240,7 @@ export default function DashboardPage() {
   }, [selectedDateRange]);
 
 
-  if (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0) {
+  if (isLoadingAuth || (isLoading && typeof window !== 'undefined' && accounts.length === 0 && allTransactions.length === 0)) {
     return (
       <div className="space-y-4"> 
         <Card>
