@@ -4,7 +4,7 @@
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { BarChart2, CheckCircle, ShieldCheck, Users, Database, Goal, TrendingUp, Palette, Zap, Map, Gem, Shield, BookOpen } from 'lucide-react'; // Changed Treasure to Gem
+import { BarChart2, Users, Database, Goal, Map, Gem, Shield, BookOpen, Zap, TrendingUp } from 'lucide-react'; // Removed Palette as it's not used, kept others
 
 const LogoIcon = () => (
   <svg
@@ -27,6 +27,48 @@ const LogoIcon = () => (
   </svg>
 );
 
+interface FeatureCardProps {
+  icon: React.ReactNode;
+  title: string;
+  description: string;
+}
+
+function FeatureCard({ icon, title, description }: FeatureCardProps) {
+  return (
+    <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col">
+      <CardHeader className="items-center text-center pb-4">
+        <div className="p-3 rounded-full bg-primary/10 mb-3 inline-block">
+          {icon}
+        </div>
+        <CardTitle className="text-lg font-semibold">{title}</CardTitle>
+      </CardHeader>
+      <CardContent className="text-center text-sm flex-grow">
+        <p className="text-muted-foreground">{description}</p>
+      </CardContent>
+    </Card>
+  );
+}
+
+interface StepCardProps {
+  number: string;
+  title: string;
+  description: string;
+  icon: React.ReactNode;
+}
+
+function StepCard({ number, title, description, icon }: StepCardProps) {
+  return (
+    <div className="bg-card p-6 rounded-lg shadow-sm border border-border/50">
+      <div className="flex items-center mb-3">
+        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mr-4">
+          {icon}
+        </div>
+        <h3 className="text-lg font-semibold text-foreground">{number}. {title}</h3>
+      </div>
+      <p className="text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
+}
 
 export default function WelcomePage() {
   return (
@@ -104,7 +146,7 @@ export default function WelcomePage() {
                 description="Easily import lore from other realms (services) or export your GoldQuest saga for backup and peace of mind."
               />
                <FeatureCard
-                icon={<Gem className="h-8 w-8 text-primary" />} {/* Changed Treasure to Gem */}
+                icon={<Gem className="h-8 w-8 text-primary" />}
                 title="Claim Your Financial Destiny"
                 description="Set legendary targets, track your epic progress, and make wise decisions to reach your financial aspirations."
               />
@@ -125,7 +167,6 @@ export default function WelcomePage() {
                 </div>
             </div>
         </section>
-
 
         {/* Call to Action Section */}
         <section className="py-20 md:py-28 text-center bg-background">
@@ -155,46 +196,4 @@ export default function WelcomePage() {
     </div>
   );
 }
-
-interface FeatureCardProps {
-  icon: React.ReactNode;
-  title: string;
-  description: string;
-}
-
-function FeatureCard({ icon, title, description }: FeatureCardProps) {
-  return (
-    <Card className="shadow-md hover:shadow-lg transition-shadow duration-300 flex flex-col">
-      <CardHeader className="items-center text-center pb-4">
-        <div className="p-3 rounded-full bg-primary/10 mb-3 inline-block">
-          {icon}
-        </div>
-        <CardTitle className="text-lg font-semibold">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="text-center text-sm flex-grow">
-        <p className="text-muted-foreground">{description}</p>
-      </CardContent>
-    </Card>
-  );
-}
-
-interface StepCardProps {
-  number: string;
-  title: string;
-  description: string;
-  icon: React.ReactNode;
-}
-
-function StepCard({ number, title, description, icon }: StepCardProps) {
-  return (
-    <div className="bg-card p-6 rounded-lg shadow-sm border border-border/50">
-      <div className="flex items-center mb-3">
-        <div className="flex-shrink-0 h-10 w-10 rounded-full bg-primary/10 text-primary flex items-center justify-center mr-4">
-          {icon}
-        </div>
-        <h3 className="text-lg font-semibold text-foreground">{number}. {title}</h3>
-      </div>
-      <p className="text-sm text-muted-foreground">{description}</p>
-    </div>
-  );
-}
+    
