@@ -48,8 +48,8 @@ export default function SignupPage() {
     <div className="flex items-center justify-center min-h-screen bg-background">
       <Card className="w-full max-w-sm">
         <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl font-bold">Create Account</CardTitle>
-          <CardDescription>Enter your email and password to sign up for GoldQuest.</CardDescription>
+          <CardTitle className="text-2xl font-bold">Create GoldQuest Account</CardTitle>
+          <CardDescription>Enter your email and password to start your GoldQuest.</CardDescription>
         </CardHeader>
         <form onSubmit={handleSignup}>
           <CardContent className="space-y-4">
@@ -90,7 +90,7 @@ export default function SignupPage() {
           </CardContent>
           <CardFooter className="flex flex-col gap-2">
             <Button type="submit" className="w-full" disabled={isLoading || !isFirebaseActive}>
-              {isLoading ? 'Signing Up...' : 'Sign Up'}
+              {isLoading ? 'Signing Up...' : 'Start Your Quest'}
             </Button>
             <Link href="/login" className="text-sm text-muted-foreground hover:text-primary">
                 Already have an account? Login
@@ -101,4 +101,3 @@ export default function SignupPage() {
     </div>
   );
 }
-

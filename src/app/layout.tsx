@@ -4,8 +4,8 @@ import { Oxanium } from 'next/font/google';
 import './globals.css';
 import { cn } from '@/lib/utils';
 import { Toaster } from '@/components/ui/toaster';
-import AuthWrapper from '@/components/layout/auth-wrapper'; // This component handles theme application
-import { AuthProvider } from '@/contexts/AuthContext'; // This provides the theme state
+import AuthWrapper from '@/components/layout/auth-wrapper'; 
+import { AuthProvider } from '@/contexts/AuthContext'; 
 
 const oxanium = Oxanium({
   variable: '--font-oxanium',
@@ -13,8 +13,8 @@ const oxanium = Oxanium({
 });
 
 export const metadata: Metadata = {
-  title: 'GoldQuest',
-  description: 'Simple personal finance management',
+  title: 'GoldQuest - Your Financial Adventure',
+  description: 'Embark on your GoldQuest to master personal finances, track investments, and achieve your financial goals.',
 };
 
 export default function RootLayout({
@@ -31,14 +31,13 @@ export default function RootLayout({
       </head>
       <body
       className={cn(
-          // oxanium.className, // Removed from here
-          'font-sans antialiased', // font-sans will use var(--font-oxanium) from html
+          'font-sans antialiased', 
           'min-h-screen flex flex-col'
         )}
-        suppressHydrationWarning // Add this to the body tag
+        suppressHydrationWarning 
       >
-        <AuthProvider> {/* AuthProvider provides theme via AuthContext */}
-          <AuthWrapper>{children}</AuthWrapper> {/* AuthWrapper applies theme to <html> */}
+        <AuthProvider> 
+          <AuthWrapper>{children}</AuthWrapper> 
         </AuthProvider>
         <Toaster />
       </body>

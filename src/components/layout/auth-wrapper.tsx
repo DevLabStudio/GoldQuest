@@ -18,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon } from 'lucide-react';
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon, MapIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -172,7 +172,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <SidebarHeader className="items-center justify-between">
                 <div className="flex items-center">
                 <LogoIcon />
-                <span className="text-lg font-semibold text-primary">The Golden Game</span>
+                <span className="text-lg font-semibold text-primary">GoldQuest</span>
                 </div>
             </SidebarHeader>
             <SidebarContent>
@@ -330,15 +330,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
-  // Fallback for scenarios where nothing else matches (e.g., during extreme initial loading before isClient is true)
-  // Or if AuthWrapper logic leads to an unhandled state.
   return (
       <html lang="en" className={cn(theme === 'dark' ? 'dark' : '')} suppressHydrationWarning>
           <head>
               <meta charSet="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
-              <title>The Golden Game</title>
-              <meta name="description" content="Simple personal finance management" />
+              <title>GoldQuest</title>
+              <meta name="description" content="Embark on your GoldQuest to master personal finances, track investments, and achieve your financial goals." />
           </head>
           <body
           className={cn(
@@ -352,4 +350,3 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     </html>
   );
 }
-
