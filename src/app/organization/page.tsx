@@ -91,7 +91,7 @@ export default function OrganizationPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userCategories', 'userTags', 'userGroups'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log(`Storage change for organization page (key: ${event.key || 'custom'}), refetching data...`);
@@ -115,7 +115,6 @@ export default function OrganizationPage() {
       setIsAddCategoryDialogOpen(false);
       toast({ title: "Success", description: `Category "${categoryName}" added.` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to add category:", err);
       toast({ title: "Error Adding Category", description: err.message || "Could not add category.", variant: "destructive" });
@@ -128,7 +127,6 @@ export default function OrganizationPage() {
       setIsEditCategoryDialogOpen(false); setSelectedCategory(null);
       toast({ title: "Success", description: `Category updated to "${newName}".` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update category:", err);
       toast({ title: "Error Updating Category", description: err.message || "Could not update category.", variant: "destructive" });
@@ -140,7 +138,6 @@ export default function OrganizationPage() {
       await deleteCategory(selectedCategory.id);
       toast({ title: "Category Deleted", description: `Category "${selectedCategory.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete category:", err);
       toast({ title: "Error Deleting Category", description: err.message || "Could not delete category.", variant: "destructive" });
@@ -157,7 +154,6 @@ export default function OrganizationPage() {
       setIsAddTagDialogOpen(false);
       toast({ title: "Success", description: `Tag "${tagName}" added.` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to add tag:", err);
       toast({ title: "Error Adding Tag", description: err.message || "Could not add tag.", variant: "destructive" });
@@ -170,7 +166,6 @@ export default function OrganizationPage() {
       setIsEditTagDialogOpen(false); setSelectedTag(null);
       toast({ title: "Success", description: `Tag updated to "${newName}".` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update tag:", err);
       toast({ title: "Error Updating Tag", description: err.message || "Could not update tag.", variant: "destructive" });
@@ -182,7 +177,6 @@ export default function OrganizationPage() {
       await deleteTag(selectedTag.id);
       toast({ title: "Tag Deleted", description: `Tag "${selectedTag.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete tag:", err);
       toast({ title: "Error Deleting Tag", description: err.message || "Could not delete tag.", variant: "destructive" });
@@ -199,7 +193,6 @@ export default function OrganizationPage() {
       setIsAddGroupDialogOpen(false);
       toast({ title: "Success", description: `Group "${groupName}" added.` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to add group:", err);
       toast({ title: "Error Adding Group", description: err.message || "Could not add group.", variant: "destructive" });
@@ -220,7 +213,6 @@ export default function OrganizationPage() {
         setSelectedGroupForEdit(null);
         toast({ title: "Success", description: `Group name updated to "${newName}".` });
         window.dispatchEvent(new Event('storage'));
-        //fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
         console.error("Failed to update group name:", err);
         toast({ title: "Error Updating Group Name", description: err.message || "Could not update group name.", variant: "destructive" });
@@ -245,7 +237,6 @@ export default function OrganizationPage() {
         setSelectedGroupForCategoryManagement(null);
         toast({ title: "Success", description: "Categories in group updated." });
         window.dispatchEvent(new Event('storage'));
-        //fetchData(); // Let the storage event handle the refetch
       }
     } catch (err: any) {
       console.error("Failed to update group categories:", err);
@@ -267,7 +258,6 @@ export default function OrganizationPage() {
       await deleteGroup(selectedGroupForDeletion.id);
       toast({ title: "Group Deleted", description: `Group "${selectedGroupForDeletion.name}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      //fetchData(); // Let the storage event handle the refetch
     } catch (err:any) {
       console.error("Failed to delete group:", err);
       toast({ title: "Error Deleting Group", description: err.message || "Could not delete group.", variant: "destructive" });
@@ -327,22 +317,40 @@ export default function OrganizationPage() {
                                 <a><Eye className="h-4 w-4" /><span>View Details</span></a>
                              </Link>
                         </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}>
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 cursor-pointer flex items-center gap-1")}
+                            onClick={(e) => { e.stopPropagation(); openEditGroupDialog(group); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openEditGroupDialog(group); }}}
+                        >
                            <Edit3 className="mr-1 h-4 w-4" /> Edit Name
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 px-2" onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}>
+                        </div>
+                        <div
+                            role="button"
+                            tabIndex={0}
+                            className={cn(buttonVariants({ variant: "ghost", size: "sm" }), "h-7 px-2 cursor-pointer flex items-center gap-1")}
+                            onClick={(e) => { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.stopPropagation(); openManageGroupCategoriesDialog(group); }}}
+                        >
                           <Settings2 className="mr-1 h-4 w-4" /> Manage Categories
-                        </Button>
+                        </div>
                         <AlertDialog
                           open={selectedGroupForDeletion?.id === group.id}
                           onOpenChange={(isOpen) => {
                             if (!isOpen) setSelectedGroupForDeletion(null);
                           }}
                         >
-                          <AlertDialogTrigger asChild>
-                             <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}>
+                          <AlertDialogTrigger asChild onClick={(e) => e.stopPropagation()}>
+                             <div 
+                                role="button"
+                                tabIndex={0}
+                                className={cn(buttonVariants({variant: "ghost", size: "icon"}), "h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer")}
+                                onClick={(e) => { e.stopPropagation(); openDeleteGroupDialog(group);}}
+                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') {e.stopPropagation(); openDeleteGroupDialog(group);}}}
+                             >
                                 <Trash2 className="h-4 w-4" /><span className="sr-only">Delete Group</span>
-                             </Button>
+                             </div>
                           </AlertDialogTrigger>
                           {selectedGroupForDeletion?.id === group.id && (
                             <AlertDialogContent>
@@ -448,20 +456,32 @@ export default function OrganizationPage() {
                   <Link key={category.id} href={`/categories/${category.id}`} passHref legacyBehavior>
                     <a className={cn("group relative", buttonVariants({variant: "outline"}), `w-full sm:w-auto justify-between py-2 px-3 text-sm ${color} border items-center cursor-pointer hover:bg-muted/80`)}>
                        <div className="flex items-center gap-1 overflow-hidden mr-8">
-                         <CategoryIcon className="h-4 w-4" /> <span className="capitalize truncate">{category.name}</span>
+                         <CategoryIcon /> <span className="capitalize truncate">{category.name}</span>
                        </div>
                        <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                          <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openEditCategoryDialog(category);}}><span><Edit className="h-4 w-4" /><span className="sr-only">Edit</span></span></Button>
+                          <div
+                             role="button" tabIndex={0}
+                             className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-7 w-7 text-muted-foreground hover:text-primary cursor-pointer")}
+                             onClick={(e) => {e.preventDefault(); e.stopPropagation(); openEditCategoryDialog(category);}}
+                             onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); e.stopPropagation(); openEditCategoryDialog(category);}}}
+                           >
+                             <Edit className="h-4 w-4" /><span className="sr-only">Edit</span>
+                           </div>
                           <AlertDialog
                             open={selectedCategory?.id === category.id && !isEditCategoryDialogOpen && !isDeletingCategory}
                             onOpenChange={(isOpen) => {
                                 if (!isOpen) setSelectedCategory(null);
                             }}
                           >
-                              <AlertDialogTrigger asChild>
-                                  <Button asChild variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openDeleteCategoryDialog(category);}}>
-                                      <span><Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span></span>
-                                  </Button>
+                              <AlertDialogTrigger asChild onClick={(e) => {e.preventDefault(); e.stopPropagation();}}>
+                                  <div 
+                                    role="button" tabIndex={0}
+                                    className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-7 w-7 text-muted-foreground hover:text-destructive cursor-pointer")}
+                                    onClick={(e) => {e.preventDefault(); e.stopPropagation(); openDeleteCategoryDialog(category);}}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); e.stopPropagation(); openDeleteCategoryDialog(category);}}}
+                                   >
+                                      <Trash2 className="h-4 w-4" /><span className="sr-only">Delete</span>
+                                  </div>
                               </AlertDialogTrigger>
                               {selectedCategory?.id === category.id && (
                                 <AlertDialogContent>
@@ -520,17 +540,29 @@ export default function OrganizationPage() {
                         <TagIconStyledComponent /> <span className="truncate">{tag.name}</span>
                       </div>
                       <div className="absolute right-0.5 top-1/2 -translate-y-1/2 flex items-center gap-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
-                        <Button asChild variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openEditTagDialog(tag);}}><span><Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span></span></Button>
+                        <div 
+                            role="button" tabIndex={0}
+                            className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-6 w-6 text-muted-foreground hover:text-primary cursor-pointer")}
+                            onClick={(e) => {e.preventDefault(); e.stopPropagation(); openEditTagDialog(tag);}}
+                            onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); e.stopPropagation(); openEditTagDialog(tag);}}}
+                        >
+                            <Edit className="h-3.5 w-3.5" /><span className="sr-only">Edit</span>
+                        </div>
                         <AlertDialog
                             open={selectedTag?.id === tag.id && !isEditTagDialogOpen && !isDeletingTag}
                             onOpenChange={(isOpen) => {
                                 if (!isOpen) setSelectedTag(null);
                             }}
                         >
-                            <AlertDialogTrigger asChild>
-                                <Button asChild variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-destructive" onClick={(e) => {e.preventDefault(); e.stopPropagation(); openDeleteTagDialog(tag);}}>
-                                    <span><Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span></span>
-                                </Button>
+                            <AlertDialogTrigger asChild onClick={(e) => {e.preventDefault(); e.stopPropagation();}}>
+                                <div 
+                                    role="button" tabIndex={0}
+                                    className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "h-6 w-6 text-muted-foreground hover:text-destructive cursor-pointer")}
+                                    onClick={(e) => {e.preventDefault(); e.stopPropagation(); openDeleteTagDialog(tag);}}
+                                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') {e.preventDefault(); e.stopPropagation(); openDeleteTagDialog(tag);}}}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" /><span className="sr-only">Delete</span>
+                                </div>
                             </AlertDialogTrigger>
                            {selectedTag?.id === tag.id && (
                             <AlertDialogContent>

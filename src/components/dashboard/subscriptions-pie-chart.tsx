@@ -65,8 +65,10 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
     const fetchData = async () => {
       setIsLoading(true);
       try {
-        const prefs = await getUserPreferences();
-        setPreferredCurrency(prefs.preferredCurrency);
+        if (typeof window !== 'undefined') {
+            const prefs = await getUserPreferences();
+            setPreferredCurrency(prefs.preferredCurrency);
+        }
         const [subs, cats] = await Promise.all([
           getSubscriptions(),
           getCategories(),
@@ -91,17 +93,11 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
 
     subscriptions.forEach(sub => {
       if (sub.type === 'expense') {
-        // Consider if subscriptions should be filtered by selectedDateRange
-        // For this chart, we'll consider all active expense subscriptions that start within or before the range end,
-        // and their next payment date is relevant to the period or they are ongoing.
         const subStartDate = parseISO(sub.startDate);
-        const subNextPaymentDate = parseISO(sub.nextPaymentDate);
-
-        let isActiveInRange = true; // Default to true if no specific date range is set (e.g., "All Time")
+        let isActiveInRange = true; 
         if (selectedDateRange.from && selectedDateRange.to) {
-           isActiveInRange = subStartDate <= selectedDateRange.to; // Starts before or during range
+           isActiveInRange = subStartDate <= selectedDateRange.to; 
         }
-
 
         if(isActiveInRange) {
             const monthlyCost = calculateMonthlyEquivalent(
@@ -162,7 +158,7 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
     return (
       <Card className="shadow-lg bg-card text-card-foreground h-full">
         <CardHeader className="pb-2">
-          <CardTitle>Monthly Subscription Costs</CardTitle>
+          <CardTitle>Subscriptions</CardTitle>
           <CardDescription>No expense subscription data for {dateRangeLabel}.</CardDescription>
         </CardHeader>
         <CardContent className="flex-1 flex flex-col items-center justify-center p-0 h-[250px] sm:h-[300px]">
@@ -175,9 +171,9 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
   return (
     <Card className="shadow-lg bg-card text-card-foreground flex flex-col h-full">
       <CardHeader className="pb-2">
-        <CardTitle>Monthly Subscription Costs</CardTitle>
+        <CardTitle>Subscriptions</CardTitle>
         <CardDescription>
-            Total: {formatCurrency(totalMonthlySubscriptionCost, preferredCurrency, preferredCurrency, false)} for {dateRangeLabel}.
+            Total Monthly: {formatCurrency(totalMonthlySubscriptionCost, preferredCurrency, preferredCurrency, false)} ({dateRangeLabel})
         </CardDescription>
       </CardHeader>
       <CardContent className="flex-1 flex flex-col items-center justify-center p-0 h-[250px] sm:h-[300px]">
