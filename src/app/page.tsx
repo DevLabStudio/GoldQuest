@@ -1,12 +1,11 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
-// import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown"; // Removed
-import SubscriptionsPieChart from "@/components/dashboard/subscriptions-pie-chart"; // Added
+import SubscriptionsPieChart from "@/components/dashboard/subscriptions-pie-chart";
 import IncomeSourceChart from "@/components/dashboard/income-source-chart";
 import IncomeExpensesChart from "@/components/dashboard/income-expenses-chart";
 import AssetsChart from "@/components/dashboard/assets-chart";
@@ -19,6 +18,7 @@ import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatD
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 import { useDateRange } from '@/contexts/DateRangeContext';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 
 const assetsData = [
@@ -30,17 +30,22 @@ const assetsData = [
 
 
 export default function DashboardPage() {
+  const { user, isLoadingAuth } = useAuthContext();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
+  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { toast } = useToast();
   const { selectedDateRange } = useDateRange();
 
   const fetchData = useCallback(async () => {
-    if (typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
       setIsLoading(false);
+      if (!user && !isLoadingAuth) {
+        // Optionally set an error or return if you don't want to proceed without a user
+        toast({ title: "Authentication Error", description: "Please log in to view dashboard data.", variant: "destructive" });
+      }
       return;
     }
     setIsLoading(true);
@@ -62,21 +67,29 @@ export default function DashboardPage() {
       } else {
         setAllTransactions([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
-      toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to load dashboard data. " + error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user, isLoadingAuth]);
 
 
   useEffect(() => {
-    fetchData();
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccounts([]);
+        setAllTransactions([]);
+        setCategories([]);
+    }
+
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-', 'userSubscriptions']; // Added userSubscriptions
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-', 'userSubscriptions'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -95,64 +108,64 @@ export default function DashboardPage() {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [fetchData]);
+  }, [fetchData, user, isLoadingAuth]);
 
   const totalNetWorth = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return 0;
+    if (isLoading || typeof window === 'undefined' || !user) return 0;
     return accounts
-        .filter(acc => acc.includeInNetWorth !== false) 
+        .filter(acc => acc.includeInNetWorth !== false)
         .reduce((sum, account) => {
             return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
         }, 0);
-  }, [accounts, preferredCurrency, isLoading]);
+  }, [accounts, preferredCurrency, isLoading, user]);
 
 
   const periodTransactions = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading || !user) return [];
     return allTransactions.filter(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
       if (!selectedDateRange.from || !selectedDateRange.to) return true;
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
-  }, [allTransactions, isLoading, selectedDateRange]);
+  }, [allTransactions, isLoading, selectedDateRange, user]);
 
 
   const monthlyIncome = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return 0;
+    if (isLoading || typeof window === 'undefined' || !user) return 0;
     return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { 
+      if (tx.amount > 0 && tx.category !== 'Transfer') {
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
+        if (account && account.includeInNetWorth !== false) {
           return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
         }
       }
       return sum;
     }, 0);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading, user]);
 
   const monthlyExpenses = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return 0;
+    if (isLoading || typeof window === 'undefined' || !user) return 0;
     return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { 
+      if (tx.amount < 0 && tx.category !== 'Transfer') {
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
+        if (account && account.includeInNetWorth !== false) {
           return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
         }
       }
       return sum;
     }, 0);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading, user]);
 
   const incomeSourceDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !periodTransactions.length) return [];
+    if (isLoading || typeof window === 'undefined' || !periodTransactions.length || !user) return [];
     const incomeCategoryTotals: { [key: string]: number } = {};
     const chartColors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
     let colorIndex = 0;
 
     periodTransactions.forEach(tx => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { 
+      if (tx.amount > 0 && tx.category !== 'Transfer') {
         const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
+        if (account && account.includeInNetWorth !== false) {
           const categoryName = tx.category || 'Uncategorized Income';
           const convertedAmount = convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
           incomeCategoryTotals[categoryName] = (incomeCategoryTotals[categoryName] || 0) + convertedAmount;
@@ -167,11 +180,37 @@ export default function DashboardPage() {
         fill: chartColors[colorIndex++ % chartColors.length],
       }))
       .sort((a, b) => b.amount - a.amount);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading, user]);
+
+  const monthlyExpensesByCategoryData = useMemo(() => {
+    if (isLoading || typeof window === 'undefined' || !periodTransactions.length || !user) return [];
+    const expenseCategoryTotals: { [key: string]: number } = {};
+    const chartColors = ["hsl(var(--chart-5))", "hsl(var(--chart-4))", "hsl(var(--chart-3))", "hsl(var(--chart-2))", "hsl(var(--chart-1))"]; // Slightly different color order for distinction
+    let colorIndex = 0;
+
+    periodTransactions.forEach(tx => {
+      if (tx.amount < 0 && tx.category !== 'Transfer') {
+        const account = accounts.find(acc => acc.id === tx.accountId);
+        if (account && account.includeInNetWorth !== false) {
+          const categoryName = tx.category || 'Uncategorized Expense';
+          const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
+          expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
+        }
+      }
+    });
+
+    return Object.entries(expenseCategoryTotals)
+      .map(([categoryName, amount]) => ({
+        source: categoryName.charAt(0).toUpperCase() + categoryName.slice(1), // 'source' key for IncomeSourceChart compatibility
+        amount,
+        fill: chartColors[colorIndex++ % chartColors.length],
+      }))
+      .sort((a, b) => b.amount - a.amount);
+  }, [periodTransactions, accounts, preferredCurrency, isLoading, user]);
 
 
   const monthlyIncomeExpensesDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !allTransactions.length) return [];
+    if (isLoading || typeof window === 'undefined' || !allTransactions.length || !user) return [];
 
     const monthlyData: { [month: string]: { income: number; expenses: number } } = {};
 
@@ -190,7 +229,7 @@ export default function DashboardPage() {
         const monthKey = formatDateFns(txDate, 'MMM');
         const account = accounts.find(acc => acc.id === tx.accountId);
 
-        if (account && monthlyData[monthKey] && tx.category !== 'Transfer' && account.includeInNetWorth !== false) { 
+        if (account && monthlyData[monthKey] && tx.category !== 'Transfer' && account.includeInNetWorth !== false) {
             if (tx.amount > 0) {
                 monthlyData[monthKey].income += convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
             } else if (tx.amount < 0) {
@@ -204,7 +243,7 @@ export default function DashboardPage() {
         income: monthlyData[monthKey].income,
         expenses: monthlyData[monthKey].expenses,
     }));
-  }, [allTransactions, accounts, preferredCurrency, isLoading]);
+  }, [allTransactions, accounts, preferredCurrency, isLoading, user]);
 
   const dateRangeLabel = useMemo(() => {
     if (selectedDateRange.from && selectedDateRange.to) {
@@ -217,15 +256,16 @@ export default function DashboardPage() {
   }, [selectedDateRange]);
 
 
-  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) {
+  if (isLoadingAuth || (isLoading && typeof window !== 'undefined' && accounts.length === 0 && !user)) {
     return (
       <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
           <div className="xl:col-span-2"><Skeleton className="h-[160px] w-full" /></div>
           <Skeleton className="h-[160px] w-full" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-          <div className="xl:col-span-2"><Skeleton className="h-[300px] w-full" /></div>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6"> {/* Changed from 3 to 2 */}
+          <Skeleton className="h-[300px] w-full" />
+          <Skeleton className="h-[300px] w-full" />
         </div>
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
           <Skeleton className="h-[350px] w-full" />
@@ -245,8 +285,8 @@ export default function DashboardPage() {
          <SubscriptionsPieChart dateRangeLabel={dateRangeLabel} />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6"> {/* Changed from md:grid-cols-2 xl:grid-cols-3 */}
+        <div> {/* Wrapper for Income Source Chart */}
           {isLoading || incomeSourceDataActual.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground h-full">
                  <CardHeader>
@@ -258,6 +298,20 @@ export default function DashboardPage() {
             </Card>
           ) : (
             <IncomeSourceChart data={incomeSourceDataActual} currency={preferredCurrency} />
+          )}
+        </div>
+        <div> {/* Wrapper for Expense Breakdown Chart */}
+          {isLoading || monthlyExpensesByCategoryData.length === 0 ? (
+            <Card className="shadow-lg bg-card text-card-foreground h-full">
+                 <CardHeader>
+                    <CardTitle>Expense Breakdown ({dateRangeLabel})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="h-[250px] pb-0 flex items-center justify-center">
+                    {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No expense data for this period.</p>}
+                  </CardContent>
+            </Card>
+          ) : (
+            <IncomeSourceChart data={monthlyExpensesByCategoryData} currency={preferredCurrency} /> // Re-using IncomeSourceChart for expenses
           )}
         </div>
       </div>
