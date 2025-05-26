@@ -2,11 +2,13 @@
 'use client';
 
 import type { FC } from 'react';
-import Link from 'next/link';
+import Link from 'next/link'; // For the outer card link
+import { useRouter } from 'next/navigation'; // For inner item navigation
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Account } from '@/services/account-sync';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
+// import { cn } from '@/lib/utils'; // cn might not be strictly needed if not using complex conditional classes here
 
 interface TotalNetWorthCardProps {
   accounts: Account[];
@@ -14,6 +16,8 @@ interface TotalNetWorthCardProps {
 }
 
 const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurrency }) => {
+  const router = useRouter(); // Initialize router
+
   const includedAccounts = accounts.filter(acc => acc.includeInNetWorth !== false);
 
   const netWorth = includedAccounts.reduce((sum, account) => {
@@ -21,6 +25,11 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
   }, 0);
 
   const formattedNetWorth = formatCurrency(netWorth, preferredCurrency, preferredCurrency, false);
+
+  const handleAccountItemClick = (accountId: string, e: React.MouseEvent | React.KeyboardEvent) => {
+    e.stopPropagation(); // Prevent the outer card link from firing
+    router.push(`/accounts/${accountId}`);
+  };
 
   return (
     <Link href="/accounts" passHref legacyBehavior>
@@ -36,24 +45,30 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
               <ScrollArea className="flex-grow h-32"> {/* Adjust height as needed */}
                 <div className="space-y-1 pr-3">
                   {includedAccounts.map(account => (
-                    <Link key={account.id} href={`/accounts/${account.id}`} passHref legacyBehavior>
-                      <a
-                        className="text-xs flex justify-between items-center py-0.5 hover:bg-primary-foreground/10 rounded px-1 transition-colors"
-                        onClick={(e) => e.stopPropagation()} // Prevent card link from firing
-                      >
-                        <span className="truncate max-w-[60%]">{account.name}</span>
-                        <div className="text-right">
-                          <span className="font-medium">
-                            {formatCurrency(account.balance, account.currency, account.currency, false)}
+                    <div
+                      key={account.id}
+                      className="text-xs flex justify-between items-center py-0.5 hover:bg-primary-foreground/10 rounded px-1 transition-colors cursor-pointer"
+                      onClick={(e) => handleAccountItemClick(account.id, e)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          handleAccountItemClick(account.id, e);
+                        }
+                      }}
+                      role="link" 
+                      tabIndex={0}
+                    >
+                      <span className="truncate max-w-[60%]">{account.name}</span>
+                      <div className="text-right">
+                        <span className="font-medium">
+                          {formatCurrency(account.balance, account.currency, account.currency, false)}
+                        </span>
+                        {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                          <span className="text-primary-foreground/70 ml-1">
+                            (≈{formatCurrency(account.balance, account.currency, preferredCurrency, true)})
                           </span>
-                          {account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                            <span className="text-primary-foreground/70 ml-1">
-                              (≈{formatCurrency(account.balance, account.currency, preferredCurrency, true)})
-                            </span>
-                          )}
-                        </div>
-                      </a>
-                    </Link>
+                        )}
+                      </div>
+                    </div>
                   ))}
                 </div>
               </ScrollArea>
