@@ -2,7 +2,8 @@
 'use client';
 
 import React from 'react';
-import { Landmark } from 'lucide-react'; // Only import Landmark
+import { Landmark } from 'lucide-react';
+import { SiNubank } from 'react-icons/si'; // Attempting to import only Nubank
 
 const defaultIconSize = 20;
 
@@ -19,22 +20,27 @@ export interface BankInfo {
   dataAiHint?: string;
 }
 
-// ALL banks will use DefaultBankIcon for now to ensure stability
+// Specific icons map
+const specificBankIcons: { [key: string]: React.ElementType } = {
+  Nubank: SiNubank,
+  // Other specific icons would be added here if successfully imported
+};
+
 export const popularBanks: BankInfo[] = [
     // Brazil
     { name: "Banco do Brasil", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Brasil logo" },
-    { name: "Itaú Unibanco", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Itau logo" },
+    { name: "Itaú Unibanco", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Itau logo" }, // Defaulting, SiItauunibanco can be tried later
     { name: "Caixa Econômica Federal", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Caixa Federal" },
     { name: "Bradesco", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Bradesco logo" },
-    { name: "Santander Brasil", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Santander logo" },
-    { name: "Nubank", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Nubank logo" },
+    { name: "Santander Brasil", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Santander logo" }, // Defaulting, SiSantander can be tried later
+    { name: "Nubank", iconComponent: specificBankIcons.Nubank ? React.createElement(specificBankIcons.Nubank, { size: defaultIconSize }) : React.createElement(DefaultBankIcon), dataAiHint: "Nubank logo" },
     { name: "Banco Inter", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Inter logo" },
     { name: "BTG Pactual", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BTG Pactual" },
     { name: "XP Investimentos", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "XP logo" },
     { name: "Banco Safra", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Safra logo" },
     { name: "Banco Original", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Original logo" },
     { name: "C6 Bank", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "C6 Bank" },
-    { name: "PagBank", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "PagBank logo" },
+    { name: "PagBank", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "PagBank logo" }, // Defaulting, SiPagseguro can be tried
     { name: "Banco Neon", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Neon logo" },
     { name: "Banco Pan", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Pan logo" },
 
