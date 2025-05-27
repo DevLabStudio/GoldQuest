@@ -4,9 +4,10 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-// Attempt to import only ExchangeBinance from @token-icons/react
-// All other specific crypto icons will be removed from imports to isolate issues
-import { ExchangeBinance } from '@token-icons/react'; // Assuming @token-icons/react@2.14.0 is installed
+
+// REMOVED all imports from '@token-icons/react' as they were causing errors.
+// Example of removed import:
+// import { ExchangeBinance, ExchangeCoinbase, ...etc } from '@token-icons/react';
 
 const defaultIconSize = 20;
 
@@ -22,7 +23,8 @@ export interface CryptoProviderInfo {
   iconComponent: ReactNode;
 }
 
-// Helper to create icons with fallback, attempting specific icon first
+// Helper to create icons. Since specific icons are removed, this will always use DefaultCryptoIcon.
+// The SpecificIconComponent parameter is kept for potential future re-introduction if issues are resolved.
 const createIcon = (SpecificIconComponent?: React.ElementType, props?: any) => {
   if (SpecificIconComponent) {
     try {
@@ -36,8 +38,9 @@ const createIcon = (SpecificIconComponent?: React.ElementType, props?: any) => {
   return React.createElement(DefaultCryptoIcon);
 };
 
+// All providers will now use the DefaultCryptoIcon
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconComponent: createIcon(ExchangeBinance, { name: "Binance" }) }, // Only Binance attempts a specific icon
+    { name: "Binance", iconComponent: createIcon(undefined, { name: "Binance" }) },
     { name: "Coinbase", iconComponent: createIcon(undefined, { name: "Coinbase" }) },
     { name: "Kraken", iconComponent: createIcon(undefined, { name: "Kraken" }) },
     { name: "OKX", iconComponent: createIcon(undefined, { name: "OKX" }) },
