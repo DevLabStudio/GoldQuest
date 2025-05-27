@@ -12,21 +12,22 @@ export interface Account {
   id: string;
   name: string;
   type: string; // 'checking', 'savings', 'credit card', 'investment', 'other', 'exchange', 'wallet', 'staking'
-  balances: Array<{ currency: string; amount: number }>; // Stores multiple currency balances
-  primaryCurrency: string | null; // The main currency for this account display
+  balances: Array<{ currency: string; amount: number }>;
+  primaryCurrency: string | null;
   providerName?: string;
+  providerDisplayIconUrl?: string; // URL for fetched logo (e.g., from CoinGecko for exchanges)
   isActive?: boolean;
   lastActivity?: string;
-  balanceDifference?: number; // No longer directly used for balance, but kept for now
   category: 'asset' | 'crypto';
   includeInNetWorth?: boolean;
 }
 
 // For adding a new account, we'll specify an initial currency and balance.
-export type NewAccountData = Omit<Account, 'id' | 'balances' | 'primaryCurrency' | 'balanceDifference'> & {
+export type NewAccountData = Omit<Account, 'id' | 'balances' | 'primaryCurrency'> & {
   initialCurrency: string;
   initialBalance: number;
   primaryCurrency?: string; // Optional on creation, will default to initialCurrency
+  providerDisplayIconUrl?: string;
 };
 
 function getAccountsRefPath(currentUser: User | null) {
@@ -39,7 +40,7 @@ function getSingleAccountRefPath(currentUser: User | null, accountId: string) {
   return `users/${currentUser.uid}/accounts/${accountId}`;
 }
 
-function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Omit<Account, 'id' | 'name' | 'type' | 'balances' | 'primaryCurrency'>> {
+function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Omit<Account, 'id' | 'name' | 'type' | 'balances' | 'primaryCurrency' | 'providerDisplayIconUrl'>> {
     return {
         isActive: true,
         lastActivity: new Date().toISOString(),
@@ -51,7 +52,7 @@ function getDefaultAccountValues(category: 'asset' | 'crypto'): Partial<Omit<Acc
 export async function getAccounts(): Promise<Account[]> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
-    console.warn("getAccounts called before user authentication is resolved. Returning empty array.");
+    console.warn("getAccounts called without authenticated user, returning empty array.");
     return [];
   }
   const accountsRefPath = getAccountsRefPath(currentUser);
@@ -62,32 +63,33 @@ export async function getAccounts(): Promise<Account[]> {
     if (snapshot.exists()) {
       const accountsData = snapshot.val();
       return Object.entries(accountsData).map(([id, data]) => {
-        const rawData = data as any; // Cast to any to check for old fields
+        const rawData = data as any;
         let balances: Array<{ currency: string; amount: number }> = [];
         let primaryCurrency: string | null = null;
 
-        if (Array.isArray(rawData.balances)) {
-          // New format: use existing balances array
+        if (Array.isArray(rawData.balances) && rawData.balances.length > 0) {
           balances = rawData.balances.map((b: any) => ({
             currency: String(b.currency || 'USD').toUpperCase(),
             amount: parseFloat(String(b.amount)) || 0,
           }));
           primaryCurrency = rawData.primaryCurrency && balances.some(b => b.currency === rawData.primaryCurrency)
-            ? rawData.primaryCurrency
-            : (balances[0]?.currency || null);
+            ? rawData.primaryCurrency.toUpperCase()
+            : (balances[0]?.currency || 'USD').toUpperCase();
         } else if (rawData.balance !== undefined && rawData.currency !== undefined) {
-          // Old format: convert single balance/currency to new structure
           const singleCurrency = String(rawData.currency).toUpperCase();
           balances = [{ currency: singleCurrency, amount: parseFloat(String(rawData.balance)) || 0 }];
           primaryCurrency = singleCurrency;
         } else {
-          // No balance info at all, default to empty
-          balances = [];
-          primaryCurrency = null;
+          balances = [{ currency: 'USD', amount: 0 }]; // Ensure balances is never empty
+          primaryCurrency = 'USD';
         }
         
         if (!primaryCurrency && balances.length > 0) {
-            primaryCurrency = balances[0].currency; // Fallback primary currency
+            primaryCurrency = balances[0].currency;
+        } else if (!primaryCurrency && balances.length === 0) {
+            // This case should be handled by the default above, but as a safeguard:
+            balances = [{ currency: 'USD', amount: 0 }];
+            primaryCurrency = 'USD';
         }
 
 
@@ -96,6 +98,7 @@ export async function getAccounts(): Promise<Account[]> {
           name: rawData.name || 'Unnamed Account',
           type: rawData.type || (rawData.category === 'crypto' ? 'wallet' : 'checking'),
           providerName: rawData.providerName,
+          providerDisplayIconUrl: rawData.providerDisplayIconUrl || undefined,
           category: rawData.category || 'asset',
           ...getDefaultAccountValues(rawData.category || 'asset'),
           balances,
@@ -107,7 +110,7 @@ export async function getAccounts(): Promise<Account[]> {
     return [];
   } catch (error: any) {
     if (error.message?.toLowerCase().includes("permission_denied")) {
-        console.error(`Firebase Permission Denied: Could not fetch accounts from ${accountsRefPath}.`);
+        console.error(`Firebase Permission Denied: Could not fetch accounts from ${accountsRefPath}. Please check your Firebase Realtime Database security rules to ensure authenticated users have read access to their data under 'users/\${uid}/accounts'. Example rule: { "rules": { "users": { "$uid": { ".read": "$uid === auth.uid", ".write": "$uid === auth.uid" } } } }`);
         throw new Error(`Permission Denied: Cannot read accounts. Please verify Firebase security rules.`);
     }
     console.error("Error fetching accounts from Firebase:", error);
@@ -133,10 +136,11 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
     name: accountData.name,
     type: accountData.type,
     providerName: accountData.providerName,
+    providerDisplayIconUrl: accountData.providerDisplayIconUrl || undefined,
     ...getDefaultAccountValues(accountData.category),
     category: accountData.category,
     balances: [{ currency: initialCurrencyUpper, amount: accountData.initialBalance }],
-    primaryCurrency: accountData.primaryCurrency ? accountData.primaryCurrency.toUpperCase() : initialCurrencyUpper,
+    primaryCurrency: (accountData.primaryCurrency ? accountData.primaryCurrency.toUpperCase() : initialCurrencyUpper),
     includeInNetWorth: accountData.includeInNetWorth === undefined ? true : accountData.includeInNetWorth,
   };
 
@@ -162,11 +166,12 @@ export async function updateAccount(updatedAccountData: Account): Promise<Accoun
     name: updatedAccountData.name,
     type: updatedAccountData.type,
     providerName: updatedAccountData.providerName,
+    providerDisplayIconUrl: updatedAccountData.providerDisplayIconUrl || undefined,
     isActive: updatedAccountData.isActive,
     lastActivity: updatedAccountData.lastActivity || new Date().toISOString(),
     category: updatedAccountData.category,
-    balances: updatedAccountData.balances.map(b => ({...b, currency: b.currency.toUpperCase()})), // Ensure currency is uppercase
-    primaryCurrency: updatedAccountData.primaryCurrency ? updatedAccountData.primaryCurrency.toUpperCase() : (updatedAccountData.balances[0]?.currency.toUpperCase() || null),
+    balances: updatedAccountData.balances.map(b => ({...b, currency: b.currency.toUpperCase()})),
+    primaryCurrency: updatedAccountData.primaryCurrency ? updatedAccountData.primaryCurrency.toUpperCase() : (updatedAccountData.balances[0]?.currency.toUpperCase() || 'USD'),
     includeInNetWorth: updatedAccountData.includeInNetWorth,
   };
 
@@ -198,5 +203,3 @@ export async function deleteAccount(accountId: string): Promise<void> {
     throw error;
   }
 }
-
-    

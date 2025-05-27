@@ -3,10 +3,10 @@
 
 import React from 'react';
 import type { ReactNode } from 'react';
-import { WalletCards } from 'lucide-react'; // Generic icon for ultimate fallback
-
-// Remove all imports from @token-icons/react or @web3icons/react to ensure stability
-// We will default all crypto icons to generic ones for now.
+import { WalletCards } from 'lucide-react'; // Generic icon
+// Only import icons we are confident about for now, or fall back to generic
+// For crypto, we are now trying to fetch logos via API for selected providers
+// and using WalletCards as a general fallback.
 
 const defaultIconSize = 20;
 
@@ -19,50 +19,48 @@ const DefaultCryptoIcon = () => {
 
 export interface CryptoProviderInfo {
   name: string;
-  type: 'exchange' | 'wallet'; // To distinguish for potential future specific icon logic
+  type: 'exchange' | 'wallet';
   iconComponent: ReactNode;
+  coingeckoExchangeId?: string; // For fetching exchange logos
   dataAiHint?: string;
 }
 
-// This map is now empty as we are defaulting all crypto icons.
-// It's kept as a placeholder if we re-introduce specific icons later.
+// This map is less critical now as we try to fetch logos for specific exchanges
+// and use dynamic components or fallbacks for others.
 const specificCryptoIconDetails: {
-  [key: string]: { type: 'exchange' | 'wallet'; nameProp: string; color?: string; iconComponent?: React.ElementType };
-} = {};
+  [key: string]: { type: 'exchange' | 'wallet'; nameProp: string; color?: string, coingeckoExchangeId?: string };
+} = {
+  "Binance": { type: "exchange", nameProp: "binance", color: "#F0B90B", coingeckoExchangeId: "binance" },
+  "Coinbase": { type: "exchange", nameProp: "coinbase", color: "#0052FF", coingeckoExchangeId: "coinbase_exchange" }, // Or just "coinbase" if it's for the general brand
+  "Kraken": { type: "exchange", nameProp: "kraken", color: "#5842C1" },
+  "MetaMask": { type: "wallet", nameProp: "metamask", color: "#E2761B" },
+  "Ledger": { type: "wallet", nameProp: "ledger" }, // Color can be default
+  "Trust Wallet": { type: "wallet", nameProp: "trustwallet", color: "#3375BB" },
+};
 
-// Simplified function: Will always return DefaultCryptoIcon for now.
+// This function will primarily serve as a fallback mechanism now.
+// The forms will attempt to fetch live logos for Binance/Coinbase.
 const createSpecificIcon = (
   providerOfficialName: string,
-  _providerType: 'exchange' | 'wallet' // _providerType is kept for signature consistency if we re-add logic
+  _providerType: 'exchange' | 'wallet'
 ): ReactNode => {
-  // const details = specificCryptoIconDetails[providerOfficialName];
-  // if (details && details.iconComponent) {
-  //   try {
-  //     return React.createElement(details.iconComponent, {
-  //       name: details.nameProp, // 'name' prop for dynamic icons like <ExchangeIcon name="binance" />
-  //       size: defaultIconSize,
-  //       variant: "branded", // Common prop for branded versions
-  //       color: details.color, // Optional color override
-  //     });
-  //   } catch (e) {
-  //     console.warn(`Error creating specific icon for ${providerOfficialName}, falling back to default. Error:`, e);
-  //     return React.createElement(DefaultCryptoIcon);
-  //   }
-  // }
+  // For now, always return the default icon.
+  // The logo fetching will happen in the forms for Binance/Coinbase.
+  // Other icons would require a similar API or a robust library.
   return React.createElement(DefaultCryptoIcon);
 };
 
 
 const popularExchangesRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
-  { name: "Binance", type: "exchange", dataAiHint: "Binance logo" },
-  { name: "Coinbase", type: "exchange", dataAiHint: "Coinbase logo" },
-  { name: "Kraken", type: "exchange", dataAiHint: "Kraken logo" },
-  { name: "OKX", type: "exchange", dataAiHint: "OKX logo" },
-  { name: "KuCoin", type: "exchange", dataAiHint: "KuCoin logo" },
-  { name: "Bitstamp", type: "exchange", dataAiHint: "Bitstamp logo" },
-  { name: "Gate.io", type: "exchange", dataAiHint: "Gate.io logo" },
-  { name: "Huobi (HTX)", type: "exchange", dataAiHint: "Huobi logo" },
-  { name: "Bitfinex", type: "exchange", dataAiHint: "Bitfinex logo" },
+  { name: "Binance", type: "exchange", dataAiHint: "Binance logo", coingeckoExchangeId: "binance" },
+  { name: "Coinbase", type: "exchange", dataAiHint: "Coinbase logo", coingeckoExchangeId: "coinbase_exchange" }, // Note: CoinGecko has "coinbase_exchange"
+  { name: "Kraken", type: "exchange", dataAiHint: "Kraken logo", coingeckoExchangeId: "kraken" },
+  { name: "OKX", type: "exchange", dataAiHint: "OKX logo", coingeckoExchangeId: "okex" }, // okex is the id for OKX
+  { name: "KuCoin", type: "exchange", dataAiHint: "KuCoin logo", coingeckoExchangeId: "kucoin" },
+  { name: "Bitstamp", type: "exchange", dataAiHint: "Bitstamp logo", coingeckoExchangeId: "bitstamp" },
+  { name: "Gate.io", type: "exchange", dataAiHint: "Gate.io logo", coingeckoExchangeId: "gate" }, // gate is id for Gate.io
+  { name: "Huobi (HTX)", type: "exchange", dataAiHint: "Huobi logo", coingeckoExchangeId: "huobi" },
+  { name: "Bitfinex", type: "exchange", dataAiHint: "Bitfinex logo", coingeckoExchangeId: "bitfinex" },
 ];
 
 const popularWalletsRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
@@ -72,7 +70,7 @@ const popularWalletsRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
   { name: "Trust Wallet", type: "wallet", dataAiHint: "Trust Wallet shield" },
   { name: "Exodus", type: "wallet", dataAiHint: "Exodus logo" },
   { name: "Phantom (Solana)", type: "wallet", dataAiHint: "Phantom ghost" },
-  { name: "Coinbase Wallet", type: "wallet", dataAiHint: "Coinbase Wallet logo" },
+  { name: "Coinbase Wallet", type: "wallet", dataAiHint: "Coinbase Wallet logo" }, // This is distinct from Coinbase Exchange
 ];
 
 export const popularExchanges: CryptoProviderInfo[] = popularExchangesRaw.map(provider => ({

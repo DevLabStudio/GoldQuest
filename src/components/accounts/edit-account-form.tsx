@@ -14,7 +14,9 @@ import { popularBanks, type BankInfo } from '@/lib/banks';
 import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { Account } from '@/services/account-sync';
-// Image import removed
+import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import Image from 'next/image';
 
 const allowedFiatCurrenciesForCrypto = ['EUR', 'USD', 'BRL'] as const;
 
@@ -25,6 +27,7 @@ const formSchema = z.object({
   primaryCurrency: z.string().min(3, "Primary currency is required"),
   primaryBalance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
   includeInNetWorth: z.boolean().optional(),
+  providerDisplayIconUrl: z.string().optional(), // For crypto account logo
 });
 
 type EditAccountFormData = z.infer<typeof formSchema>;
@@ -58,6 +61,9 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
 }
 
 const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }) => {
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(account.providerDisplayIconUrl || null);
+  const [isFetchingLogo, setIsFetchingLogo] = useState(false);
+
   const currentPrimaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0] || { currency: 'USD', amount: 0 };
 
   const form = useForm<EditAccountFormData>({
@@ -77,8 +83,64 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
       primaryCurrency: account.primaryCurrency || currentPrimaryBalanceEntry.currency,
       primaryBalance: currentPrimaryBalanceEntry.amount,
       includeInNetWorth: account.includeInNetWorth ?? true,
+      providerDisplayIconUrl: account.providerDisplayIconUrl || undefined,
     },
   });
+
+  const selectedProviderName = form.watch('providerName');
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+      if (account.category !== 'crypto' || !selectedProviderName) {
+        // Only fetch for crypto and if provider is selected
+        if (account.category !== 'crypto') setLogoPreviewUrl(null); // Clear if not crypto
+        form.setValue('providerDisplayIconUrl', undefined);
+        return;
+      }
+      const providerInfo = allCryptoProviders.find(p => p.name === selectedProviderName);
+      if (providerInfo && providerInfo.coingeckoExchangeId) {
+        setIsFetchingLogo(true);
+        // Do not clear existing logoPreviewUrl immediately if it came from initialData.
+        // form.setValue('providerDisplayIconUrl', undefined); // Clear this before setting new one
+        try {
+          const response = await fetch(`https://api.coingecko.com/api/v3/exchanges/${providerInfo.coingeckoExchangeId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.image) {
+              setLogoPreviewUrl(data.image);
+              form.setValue('providerDisplayIconUrl', data.image);
+            } else {
+               // If fetch succeeds but no image, keep existing or clear if no initial
+               if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+            }
+          } else {
+            console.warn(`Failed to fetch logo for ${selectedProviderName}: ${response.status}`);
+            if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+          }
+        } catch (error) {
+          console.error(`Error fetching logo for ${selectedProviderName}:`, error);
+          if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+        } finally {
+          setIsFetchingLogo(false);
+        }
+      } else {
+        // If provider doesn't have coingeckoId, clear preview only if no initial icon
+        if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+        form.setValue('providerDisplayIconUrl', account.providerDisplayIconUrl || undefined); // Keep existing if no new fetch
+      }
+    };
+    
+    // Only fetch if providerName has changed from the initial account.providerName
+    // or if initially there was no providerDisplayIconUrl
+    if (selectedProviderName !== account.providerName || (account.category === 'crypto' && !account.providerDisplayIconUrl)) {
+        fetchLogo();
+    } else if (account.category !== 'crypto') {
+        setLogoPreviewUrl(null); // Ensure it's cleared if category isn't crypto
+        form.setValue('providerDisplayIconUrl', undefined);
+    }
+
+  }, [selectedProviderName, account.category, account.providerName, account.providerDisplayIconUrl, form]);
+
 
   function onSubmit(values: EditAccountFormData) {
     const primaryBalanceIndex = account.balances.findIndex(b => b.currency === values.primaryCurrency.toUpperCase());
@@ -87,10 +149,6 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
     if (primaryBalanceIndex !== -1) {
         updatedBalances[primaryBalanceIndex] = { ...updatedBalances[primaryBalanceIndex], amount: values.primaryBalance, currency: values.primaryCurrency.toUpperCase() };
     } else {
-        // This case should ideally not happen if primaryCurrency is chosen from existing ones.
-        // If it's a new primary currency, we'd need to add it.
-        // For now, we assume primaryCurrency selected is one that already has a balance entry or is the only one.
-        // If the currency was changed to a *new* one not in the balances array:
         const newPrimaryCurrency = values.primaryCurrency.toUpperCase();
         if (!updatedBalances.some(b => b.currency === newPrimaryCurrency)) {
             updatedBalances = [{ currency: newPrimaryCurrency, amount: values.primaryBalance }];
@@ -100,15 +158,11 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
         }
     }
     
-    // Ensure no duplicate currencies in balances if primaryCurrency changed.
-    // This logic might need more refinement if we allow adding/removing multiple balances in this form.
-    // For now, this simplified update focuses on the *primary* balance.
     const uniqueBalances = updatedBalances.reduce((acc, current) => {
         const x = acc.find(item => item.currency === current.currency);
         if (!x) {
             return acc.concat([current]);
         } else {
-            // If primaryCurrency matches, ensure this one is kept/updated
             if(current.currency === values.primaryCurrency.toUpperCase()) {
                 const filtered = acc.filter(item => item.currency !== current.currency);
                 return filtered.concat([current]);
@@ -126,6 +180,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
         balances: uniqueBalances,
         primaryCurrency: values.primaryCurrency.toUpperCase(),
         includeInNetWorth: values.includeInNetWorth ?? true,
+        providerDisplayIconUrl: account.category === 'crypto' ? values.providerDisplayIconUrl : undefined,
     };
     onAccountUpdated(updatedAccountData);
   }
@@ -133,7 +188,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
   const selectedPrimaryCurrency = form.watch('primaryCurrency');
   const providerList = getProviderList(account.category);
   const accountTypes = getAccountTypes(account.category);
-  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : (account.balances.length > 0 ? account.balances.map(b => b.currency) : [account.primaryCurrency || 'USD']);
+  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : (account.balances.length > 0 ? [...new Set(account.balances.map(b => b.currency))] : [account.primaryCurrency || 'USD']);
 
 
   return (
@@ -156,6 +211,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     {providerList.map((provider) => (
                         <SelectItem key={provider.name} value={provider.name}>
                         <div className="flex items-center gap-2">
+                            {/* Icon display logic similar to AddCryptoForm or direct usage if BankInfo is updated */}
                             {provider.iconComponent}
                             {provider.name}
                         </div>
@@ -172,6 +228,13 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     </SelectContent>
                 </Select>
                 <FormMessage />
+                {account.category === 'crypto' && isFetchingLogo && <Skeleton className="h-10 w-10 mt-2 rounded-full" />}
+                {account.category === 'crypto' && logoPreviewUrl && !isFetchingLogo && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Image src={logoPreviewUrl} alt={`${selectedProviderName || account.providerName} logo`} width={24} height={24} className="rounded-full" data-ai-hint={`${selectedProviderName} logo`}/>
+                    <span className="text-xs text-muted-foreground">Logo Preview</span>
+                  </div>
+                )}
                 </FormItem>
             )}
             />
@@ -286,6 +349,8 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
             </FormItem>
           )}
         />
+        {account.category === 'crypto' && <FormField control={form.control} name="providerDisplayIconUrl" render={({ field }) => <Input type="hidden" {...field} />} />}
+
 
         <Button type="submit" className="w-full">Save Changes</Button>
       </form>
