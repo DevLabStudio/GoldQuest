@@ -18,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon, MapIcon } from 'lucide-react';
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon, MapIcon, Bitcoin as BitcoinIcon } from 'lucide-react'; // Added BitcoinIcon
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -59,6 +59,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
   const [isFinancialControlOpen, setIsFinancialControlOpen] = useState(false);
+  const [isInvestmentsOpen, setIsInvestmentsOpen] = useState(false); // New state for Investments dropdown
   const [isClient, setIsClient] = useState(false);
   const [loadingDivClassName, setLoadingDivClassName] = useState("flex items-center justify-center min-h-screen");
 
@@ -79,9 +80,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
               currentTheme = systemPrefersDark ? 'dark' : 'light';
           }
 
-          root.classList.remove('dark', 'light');
-          root.classList.add(currentTheme);
-          root.style.colorScheme = currentTheme;
+          root.classList.remove('dark', 'light', 'goldquest-theme');
+          root.classList.add(currentTheme); // Adds 'light', 'dark', or 'goldquest-theme'
+          root.style.colorScheme = (currentTheme === 'goldquest-theme' || currentTheme === 'dark') ? 'dark' : 'light';
       };
 
       applyTheme();
@@ -99,6 +100,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     if (isClient) {
         setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
         setIsFinancialControlOpen(pathname.startsWith('/financial-control'));
+        setIsInvestmentsOpen(pathname.startsWith('/investments/')); // Expand if any investment sub-page is active
     }
   }, [pathname, isClient]);
 
@@ -126,6 +128,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const isActive = (path: string) => isClient && pathname === path;
   const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
   const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control';
+  const isAnyInvestmentsRouteActive = isClient && pathname.startsWith('/investments/'); // For main group
   const isOrganizationActive = isClient && (pathname === '/organization' || pathname.startsWith('/categories/') || pathname.startsWith('/tags/') || pathname.startsWith('/groups/'));
   const isAccountsActive = isClient && (pathname === '/accounts' || pathname.startsWith('/accounts/'));
   const isDataManagementActive = isClient && pathname === '/data-management';
@@ -149,7 +152,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     if (pathname !== '/signup' && pathname !== '/login' && pathname !== '/welcome') {
         return <LoginPage />;
     }
-    return <>{children}</>; 
+    return <>{children}</>;
   }
 
   if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome') {
@@ -264,13 +267,44 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                     </SidebarGroup>
                     <SidebarGroup>
                         <SidebarMenuItem>
-                            <Link href="/investments" passHref>
-                                <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
-                                    <Wallet />
-                                    <span>Investments</span>
-                                </SidebarMenuButton>
-                            </Link>
+                            <SidebarMenuButton
+                                tooltip="Investments"
+                                onClick={() => setIsInvestmentsOpen(!isInvestmentsOpen)}
+                                className="justify-between"
+                                isActive={isAnyInvestmentsRouteActive}
+                            >
+                                <div className="flex items-center gap-2">
+                                <Wallet />
+                                <span>Investments</span>
+                                </div>
+                                <ChevronDown
+                                    className={cn(
+                                        "h-4 w-4 transition-transform duration-200",
+                                        isInvestmentsOpen && "rotate-180"
+                                    )}
+                                />
+                            </SidebarMenuButton>
                         </SidebarMenuItem>
+                        {isInvestmentsOpen && (
+                            <>
+                                <SidebarMenuItem className="ml-4">
+                                <Link href="/investments/traditional" passHref>
+                                    <SidebarMenuButton tooltip="Traditional Finances" size="sm" isActive={isActive('/investments/traditional')}>
+                                        <Landmark />
+                                        <span>Traditional</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem className="ml-4">
+                                <Link href="/investments/defi" passHref>
+                                    <SidebarMenuButton tooltip="Decentralized Finances" size="sm" isActive={isActive('/investments/defi')}>
+                                        <BitcoinIcon />
+                                        <span>DeFi</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                             </SidebarMenuItem>
+                            </>
+                        )}
                     </SidebarGroup>
                 <SidebarGroup>
                      <SidebarMenuItem>
@@ -330,8 +364,10 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
+  // Fallback for unauthenticated users on public routes (already handled), or if Firebase isn't active on those routes.
+  // For other unhandled cases, this simple layout is a fallback.
   return (
-      <html lang="en" className={cn(theme === 'dark' ? 'dark' : '')} suppressHydrationWarning>
+      <html lang="en" className={cn(oxanium.variable, theme === 'dark' ? 'dark' : theme === 'goldquest-theme' ? 'goldquest-theme' : '')} suppressHydrationWarning>
           <head>
               <meta charSet="utf-8" />
               <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -340,12 +376,20 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
           </head>
           <body
           className={cn(
-              'font-sans antialiased', 
+              'font-sans antialiased',
               'min-h-screen flex flex-col'
             )}
             suppressHydrationWarning
           >
-            <div className="flex items-center justify-center min-h-screen bg-background text-foreground">Preparing application...</div>
+             {/* Only render children if it's a public route that doesn't need AuthWrapper's full layout */}
+            {(pathname === '/login' || pathname === '/signup' || pathname === '/welcome') && children}
+            
+            {/* Fallback for when firebase isn't active and user tries to access a non-public route (should ideally be caught by earlier redirect) */}
+            {!isFirebaseActive && !(pathname === '/login' || pathname === '/signup' || pathname === '/welcome') && (
+                 <div className="flex items-center justify-center min-h-screen">
+                    <p>Service temporarily unavailable. Please try again later.</p>
+                </div>
+            )}
           </body>
     </html>
   );
