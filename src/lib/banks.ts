@@ -1,21 +1,10 @@
-
 'use client';
 
 import React from 'react';
 import { Landmark } from 'lucide-react';
-// Attempt to import only SiNubank and other highly common/stable icons from react-icons/si
-// Comment out or remove others if they cause "Export doesn't exist" errors.
-import {
-  SiNubank,
-  // SiItauunibanco, // For Itaú Unibanco - REMOVED DUE TO ERROR
-  // SiBtgpactual,   // For BTG Pactual - REMOVED DUE TO ERROR
-  // --- Placeholder for other common icons we might verify later ---
-  // SiSantander,
-  // SiPagseguro,
-  // SiHsbc,
-  // SiRevolut,
-  // SiN26
-} from 'react-icons/si';
+// Attempt to import only SiNubank from react-icons/si as it was confirmed working.
+// All other specific Si* icons will be removed from imports to guarantee build stability.
+import { SiNubank } from 'react-icons/si';
 
 const defaultIconSize = 20;
 
@@ -33,26 +22,26 @@ export interface BankInfo {
   dataAiHint?: string;
 }
 
-// Define specific icons and their colors
+// Define specific icons that are confirmed to work and their colors.
 const NUBANK_COLOR = "#820AD1";
-// const ITAU_COLOR = "#EC7000"; // REMOVED as SiItauunibanco caused error
-// const BTG_COLOR = "#00305C"; // REMOVED as SiBtgpactual caused error
+// const ITAU_COLOR = "#EC7000"; // Example, verify SiItauunibanco or SiItau first
+// const BTG_COLOR = "#00305C"; // Example, verify SiBtgpactual first
 
+// Store specific, verified icons here.
 const specificBankIcons: { [key: string]: React.ReactNode } = {
   "Nubank": React.createElement(SiNubank, { size: defaultIconSize, color: NUBANK_COLOR }),
-  // "Itaú Unibanco": React.createElement(SiItauunibanco, { size: defaultIconSize, color: ITAU_COLOR }), // REMOVED
-  // "BTG Pactual": React.createElement(DefaultBankIcon), // Already using fallback due to previous error
+  // Example for when/if Itaú is confirmed:
+  // "Itaú Unibanco": React.createElement(SiItauunibanco, { size: defaultIconSize, color: ITAU_COLOR }),
 };
 
-
 export const popularBanks: BankInfo[] = [
-    // Brazil
+    // Brazil - Defaulting all to generic except Nubank for now
     { name: "Banco do Brasil", iconComponent: specificBankIcons["Banco do Brasil"] || React.createElement(DefaultBankIcon), dataAiHint: "Brasil logo" },
     { name: "Itaú Unibanco", iconComponent: specificBankIcons["Itaú Unibanco"] || React.createElement(DefaultBankIcon), dataAiHint: "Itau logo" },
     { name: "Caixa Econômica Federal", iconComponent: specificBankIcons["Caixa Econômica Federal"] || React.createElement(DefaultBankIcon), dataAiHint: "Caixa Federal" },
     { name: "Bradesco", iconComponent: specificBankIcons["Bradesco"] || React.createElement(DefaultBankIcon), dataAiHint: "Bradesco logo" },
     { name: "Santander Brasil", iconComponent: specificBankIcons["Santander Brasil"] || React.createElement(DefaultBankIcon), dataAiHint: "Santander logo" },
-    { name: "Nubank", iconComponent: specificBankIcons["Nubank"] || React.createElement(DefaultBankIcon), dataAiHint: "Nubank logo" },
+    { name: "Nubank", iconComponent: specificBankIcons["Nubank"], dataAiHint: "Nubank logo" }, // Using specific for Nubank
     { name: "Banco Inter", iconComponent: specificBankIcons["Banco Inter"] || React.createElement(DefaultBankIcon), dataAiHint: "Inter logo" },
     { name: "BTG Pactual", iconComponent: specificBankIcons["BTG Pactual"] || React.createElement(DefaultBankIcon), dataAiHint: "BTG Pactual" },
     { name: "XP Investimentos", iconComponent: specificBankIcons["XP Investimentos"] || React.createElement(DefaultBankIcon), dataAiHint: "XP logo" },
@@ -63,7 +52,7 @@ export const popularBanks: BankInfo[] = [
     { name: "Banco Neon", iconComponent: specificBankIcons["Banco Neon"] || React.createElement(DefaultBankIcon), dataAiHint: "Neon logo" },
     { name: "Banco Pan", iconComponent: specificBankIcons["Banco Pan"] || React.createElement(DefaultBankIcon), dataAiHint: "Pan logo" },
 
-    // Europe
+    // Europe - Defaulting all to generic for now
     { name: "HSBC (UK/Global)", iconComponent: specificBankIcons["HSBC (UK/Global)"] || React.createElement(DefaultBankIcon), dataAiHint: "HSBC logo" },
     { name: "Barclays (UK)", iconComponent: specificBankIcons["Barclays (UK)"] || React.createElement(DefaultBankIcon), dataAiHint: "Barclays logo" },
     { name: "Lloyds Banking Group (UK)", iconComponent: specificBankIcons["Lloyds Banking Group (UK)"] || React.createElement(DefaultBankIcon), dataAiHint: "Lloyds Bank" },

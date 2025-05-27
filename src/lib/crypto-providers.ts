@@ -1,13 +1,10 @@
-
 'use client';
 
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-
-// REMOVED all imports from '@token-icons/react' as they were causing errors.
-// Example of removed import:
-// import { ExchangeBinance, ExchangeCoinbase, ...etc } from '@token-icons/react';
+// REMOVED all imports from '@token-icons/react' to ensure build stability.
+// We will default all crypto providers to the generic icon for now.
 
 const defaultIconSize = 20;
 
@@ -26,15 +23,8 @@ export interface CryptoProviderInfo {
 // Helper to create icons. Since specific icons are removed, this will always use DefaultCryptoIcon.
 // The SpecificIconComponent parameter is kept for potential future re-introduction if issues are resolved.
 const createIcon = (SpecificIconComponent?: React.ElementType, props?: any) => {
-  if (SpecificIconComponent) {
-    try {
-      // @ts-ignore variant prop might not exist on all icons or DefaultCryptoIcon
-      return React.createElement(SpecificIconComponent, { size: defaultIconSize, variant: 'branded', ...props });
-    } catch (e) {
-      console.warn(`Error creating specific crypto icon for ${props?.name || 'unknown provider'}, falling back to default. Ensure the icon component is valid. Error: ${e}`);
-      return React.createElement(DefaultCryptoIcon);
-    }
-  }
+  // For now, always return DefaultCryptoIcon to ensure stability.
+  // When re-introducing specific icons, the try-catch logic can be used.
   return React.createElement(DefaultCryptoIcon);
 };
 
