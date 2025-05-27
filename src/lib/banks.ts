@@ -3,15 +3,15 @@
 
 import React from 'react';
 import { Landmark } from 'lucide-react';
-// Attempt to import only a few, very common and likely stable icons.
-// Others will use the DefaultBankIcon.
+// Import a base set of Si icons that are generally stable.
+// Comment out or remove any that consistently cause "Export doesn't exist" errors.
 import {
-  SiNubank, SiItau, SiSantander, SiPagseguro, SiHsbc, SiBarclays, SiLloydsbank,
-  SiNatwest, SiIng, SiRevolut, SiN26, SiXp, SiSafra, SiNeon, SiPan
-  // Commented out icons that previously caused issues or are less certain:
-  // SiCaixa, SiBradesco, SiBancointer, SiBancodobrasil, SiBbva, SiBnpParibas, SiCreditagricole,
-  // SiSocietegenerale, SiDeutschebank, SiCommerzbank, SiUnicredit, SiIntesasanpaolo,
-  // SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiBtgpactual, SiC6Bank, SiBancooriginal,
+  SiNubank, SiItau, SiSantander, SiPagseguro,
+  SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, /* SiBbva, */ /* SiBnpParibas, */ /* SiCreditagricole, */
+  SiSocietegenerale, SiDeutschebank, SiCommerzbank, SiIng, SiUnicredit, SiIntesasanpaolo,
+  SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, /* SiBtgpactual, */ SiSafra, /* SiC6Bank, */ SiNeon, SiPan
+  // Icons previously causing issues and now defaulted:
+  // SiBradesco, SiCaixa, SiBancointer, SiBancodobrasil, SiBancooriginal
 } from 'react-icons/si';
 
 const defaultIconSize = 20;
@@ -54,19 +54,19 @@ export const popularBanks: BankInfo[] = [
     { name: "NatWest Group (UK)", iconComponent: React.createElement(SiNatwest, { size: defaultIconSize }), dataAiHint: "NatWest logo" },
     { name: "Santander (Spain/Global)", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
     { name: "BBVA (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BBVA logo" },
-    { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" },
+    { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" }, // Assuming SiCaixa might still be an issue
     { name: "BNP Paribas (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BNP Paribas" },
     { name: "Crédit Agricole (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Credit Agricole" },
-    { name: "Société Générale (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Societe Generale" },
-    { name: "Deutsche Bank (Germany)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Deutsche Bank" },
-    { name: "Commerzbank (Germany)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Commerzbank logo" },
+    { name: "Société Générale (France)", iconComponent: React.createElement(SiSocietegenerale, { size: defaultIconSize }), dataAiHint: "Societe Generale" },
+    { name: "Deutsche Bank (Germany)", iconComponent: React.createElement(SiDeutschebank, { size: defaultIconSize }), dataAiHint: "Deutsche Bank" },
+    { name: "Commerzbank (Germany)", iconComponent: React.createElement(SiCommerzbank, { size: defaultIconSize }), dataAiHint: "Commerzbank logo" },
     { name: "ING Group (Netherlands/Global)", iconComponent: React.createElement(SiIng, { size: defaultIconSize }), dataAiHint: "ING logo" },
-    { name: "UniCredit (Italy)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "UniCredit logo" },
-    { name: "Intesa Sanpaolo (Italy)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Intesa Sanpaolo" },
-    { name: "UBS (Switzerland)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "UBS logo" },
-    { name: "Credit Suisse (Switzerland - now part of UBS)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Credit Suisse" },
-    { name: "Nordea (Nordics)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Nordea logo" },
-    { name: "Danske Bank (Denmark/Nordics)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Danske Bank" },
+    { name: "UniCredit (Italy)", iconComponent: React.createElement(SiUnicredit, { size: defaultIconSize }), dataAiHint: "UniCredit logo" },
+    { name: "Intesa Sanpaolo (Italy)", iconComponent: React.createElement(SiIntesasanpaolo, { size: defaultIconSize }), dataAiHint: "Intesa Sanpaolo" },
+    { name: "UBS (Switzerland)", iconComponent: React.createElement(SiUbs, { size: defaultIconSize }), dataAiHint: "UBS logo" },
+    { name: "Credit Suisse (Switzerland - now part of UBS)", iconComponent: React.createElement(SiCreditsuisse, { size: defaultIconSize }), dataAiHint: "Credit Suisse" },
+    { name: "Nordea (Nordics)", iconComponent: React.createElement(SiNordea, { size: defaultIconSize }), dataAiHint: "Nordea logo" },
+    { name: "Danske Bank (Denmark/Nordics)", iconComponent: React.createElement(SiDanskebank, { size: defaultIconSize }), dataAiHint: "Danske Bank" },
     { name: "Revolut (Europe/Global)", iconComponent: React.createElement(SiRevolut, { size: defaultIconSize }), dataAiHint: "Revolut logo" },
     { name: "N26 (Europe/Global)", iconComponent: React.createElement(SiN26, { size: defaultIconSize }), dataAiHint: "N26 logo" },
 ];
