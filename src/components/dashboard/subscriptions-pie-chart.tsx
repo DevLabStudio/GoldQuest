@@ -11,17 +11,16 @@ import { getSubscriptions, type Subscription, type SubscriptionFrequency } from 
 import { getCategories, type Category as CategoryType, getCategoryStyle } from '@/services/categories';
 import { getUserPreferences } from '@/lib/preferences';
 import { convertCurrency, formatCurrency } from '@/lib/currency';
-import { useDateRange } from '@/contexts/DateRangeContext'; // To get dateRangeLabel if needed
+import { useDateRange } from '@/contexts/DateRangeContext'; 
 import { isWithinInterval, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 
 
 export interface SubscriptionPieChartDataPoint {
-  name: string; // Category name
-  value: number; // Total monthly equivalent amount for this category
-  fill: string; // Color for the pie slice
+  name: string; 
+  value: number; 
+  fill: string; 
 }
 
-// Helper to calculate monthly equivalent cost
 const calculateMonthlyEquivalent = (
   amount: number,
   currency: string,
@@ -159,7 +158,7 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
       <Card className="shadow-lg bg-card text-card-foreground h-full">
         <CardHeader className="pb-2">
           <CardTitle>Subscriptions</CardTitle>
-          <CardDescription>No expense subscription data for {dateRangeLabel}.</CardDescription>
+           {/* CardDescription removed */}
         </CardHeader>
         <CardContent className="flex-1 flex flex-col items-center justify-center p-0 h-[250px] sm:h-[300px]">
           <p className="text-muted-foreground">No expense subscription data.</p>
@@ -228,4 +227,3 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
 };
 
 export default SubscriptionsPieChart;
-

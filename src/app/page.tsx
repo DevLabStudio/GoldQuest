@@ -43,8 +43,7 @@ export default function DashboardPage() {
     if (!user || isLoadingAuth || typeof window === 'undefined') {
       setIsLoading(false);
       if (!user && !isLoadingAuth) {
-        // Optionally set an error or return if you don't want to proceed without a user
-        toast({ title: "Authentication Error", description: "Please log in to view dashboard data.", variant: "destructive" });
+        // toast({ title: "Authentication Error", description: "Please log in to view dashboard data.", variant: "destructive" });
       }
       return;
     }
@@ -110,15 +109,6 @@ export default function DashboardPage() {
     };
   }, [fetchData, user, isLoadingAuth]);
 
-  const totalNetWorth = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !user) return 0;
-    return accounts
-        .filter(acc => acc.includeInNetWorth !== false)
-        .reduce((sum, account) => {
-            return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
-        }, 0);
-  }, [accounts, preferredCurrency, isLoading, user]);
-
 
   const periodTransactions = useMemo(() => {
     if (isLoading || !user) return [];
@@ -129,32 +119,6 @@ export default function DashboardPage() {
     });
   }, [allTransactions, isLoading, selectedDateRange, user]);
 
-
-  const monthlyIncome = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !user) return 0;
-    return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') {
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) {
-          return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
-        }
-      }
-      return sum;
-    }, 0);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading, user]);
-
-  const monthlyExpenses = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !user) return 0;
-    return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') {
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) {
-          return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
-        }
-      }
-      return sum;
-    }, 0);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading, user]);
 
   const incomeSourceDataActual = useMemo(() => {
     if (isLoading || typeof window === 'undefined' || !periodTransactions.length || !user) return [];
@@ -263,7 +227,7 @@ export default function DashboardPage() {
           <div className="xl:col-span-2"><Skeleton className="h-[160px] w-full" /></div>
           <Skeleton className="h-[160px] w-full" />
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6"> {/* Changed from 3 to 2 */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-2 gap-6">
           <Skeleton className="h-[300px] w-full" />
           <Skeleton className="h-[300px] w-full" />
         </div>
@@ -285,8 +249,8 @@ export default function DashboardPage() {
          <SubscriptionsPieChart dateRangeLabel={dateRangeLabel} />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6"> {/* Changed from md:grid-cols-2 xl:grid-cols-3 */}
-        <div> {/* Wrapper for Income Source Chart */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <div>
           {isLoading || incomeSourceDataActual.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground h-full">
                  <CardHeader>
@@ -300,7 +264,7 @@ export default function DashboardPage() {
             <IncomeSourceChart data={incomeSourceDataActual} currency={preferredCurrency} />
           )}
         </div>
-        <div> {/* Wrapper for Expense Breakdown Chart */}
+        <div>
           {isLoading || monthlyExpensesByCategoryData.length === 0 ? (
             <Card className="shadow-lg bg-card text-card-foreground h-full">
                  <CardHeader>
@@ -311,7 +275,7 @@ export default function DashboardPage() {
                   </CardContent>
             </Card>
           ) : (
-            <IncomeSourceChart data={monthlyExpensesByCategoryData} currency={preferredCurrency} /> // Re-using IncomeSourceChart for expenses
+            <IncomeSourceChart data={monthlyExpensesByCategoryData} currency={preferredCurrency} />
           )}
         </div>
       </div>

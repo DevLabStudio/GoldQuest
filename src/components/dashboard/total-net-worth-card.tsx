@@ -8,7 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Account } from '@/services/account-sync';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
-// import { cn } from '@/lib/utils'; // cn might not be strictly needed if not using complex conditional classes here
 
 interface TotalNetWorthCardProps {
   accounts: Account[];
@@ -16,7 +15,7 @@ interface TotalNetWorthCardProps {
 }
 
 const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurrency }) => {
-  const router = useRouter(); // Initialize router
+  const router = useRouter();
 
   const includedAccounts = accounts.filter(acc => acc.includeInNetWorth !== false);
 
@@ -27,7 +26,7 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
   const formattedNetWorth = formatCurrency(netWorth, preferredCurrency, preferredCurrency, false);
 
   const handleAccountItemClick = (accountId: string, e: React.MouseEvent | React.KeyboardEvent) => {
-    e.stopPropagation(); // Prevent the outer card link from firing
+    e.stopPropagation(); 
     router.push(`/accounts/${accountId}`);
   };
 
@@ -37,12 +36,12 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
         <Card className="bg-primary text-primary-foreground shadow-xl h-full flex flex-col p-4 hover:bg-primary/90 transition-colors cursor-pointer">
           <CardHeader className="pb-1 pt-2">
             <CardTitle className="text-base font-medium">Total Net Worth</CardTitle>
-            <CardDescription className="text-primary-foreground/80">Sum of all included accounts converted to {getCurrencySymbol(preferredCurrency)}.</CardDescription>
+            {/* CardDescription removed */}
           </CardHeader>
           <CardContent className="pt-2 flex-grow flex flex-col">
             <div className="text-4xl font-bold mb-3">{formattedNetWorth}</div>
             {includedAccounts.length > 0 ? (
-              <ScrollArea className="flex-grow h-32"> {/* Adjust height as needed */}
+              <ScrollArea className="flex-grow h-32">
                 <div className="space-y-1 pr-3">
                   {includedAccounts.map(account => (
                     <div

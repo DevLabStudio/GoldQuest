@@ -24,7 +24,7 @@ const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
         <Card className="shadow-lg bg-card text-card-foreground h-full">
             <CardHeader>
                 <CardTitle>Income Source</CardTitle>
-                 <CardDescription>No income data for the selected period.</CardDescription>
+                {/* CardDescription removed */}
             </CardHeader>
             <CardContent className="h-[250px] pb-0 flex items-center justify-center">
                  <p className="text-muted-foreground">No income data to display.</p>
@@ -48,7 +48,7 @@ const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
     <Card className="shadow-lg bg-card text-card-foreground h-full">
       <CardHeader>
         <CardTitle>Income Source</CardTitle>
-        <CardDescription>Breakdown of income by source for the selected period.</CardDescription>
+        {/* CardDescription removed */}
       </CardHeader>
       <CardContent className="h-[250px] pb-0"> {/* Adjust height as needed */}
         <ChartContainer config={chartConfig} className="w-full h-full">
@@ -100,4 +100,3 @@ const IncomeSourceChart: FC<IncomeSourceChartProps> = ({ data, currency }) => {
 };
 
 export default IncomeSourceChart;
-

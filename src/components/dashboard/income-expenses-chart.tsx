@@ -25,7 +25,7 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
                     <CardTitle>Income & Expenses (Last 12 Months)</CardTitle>
-                    <CardDescription>No income/expense data for the selected period.</CardDescription>
+                    {/* CardDescription removed */}
                 </div>
             </CardHeader>
             <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
@@ -55,7 +55,7 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
       <CardHeader className="flex flex-row items-start justify-between pb-4">
         <div>
             <CardTitle>Income & Expenses (Last 12 Months)</CardTitle>
-            <CardDescription>Overview of income and expenses for the past year.</CardDescription>
+            {/* CardDescription removed */}
         </div>
         <div className="text-right">
             <p className="text-xs text-muted-foreground">Max Income</p>
@@ -133,4 +133,3 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
 };
 
 export default IncomeExpensesChart;
-
