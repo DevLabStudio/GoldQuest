@@ -16,6 +16,7 @@ import { useAuthContext } from '@/contexts/AuthContext';
 export default function PreferencesPage() {
   const { user, isLoadingAuth, userPreferences, refreshUserPreferences } = useAuthContext();
   const [preferredCurrency, setPreferredCurrency] = useState(userPreferences?.preferredCurrency || 'BRL');
+  const [selectedInvestmentsCurrency, setSelectedInvestmentsCurrency] = useState(userPreferences?.investmentsPreferredCurrency || 'USD');
   const [selectedTheme, setSelectedTheme] = useState<UserPreferences['theme']>(userPreferences?.theme || 'system');
   const [isSaving, setIsSaving] = useState(false);
   const { toast } = useToast();
@@ -23,12 +24,17 @@ export default function PreferencesPage() {
   useEffect(() => {
     if (userPreferences) {
       setPreferredCurrency(userPreferences.preferredCurrency);
-      setSelectedTheme(userPreferences.theme);
+      setSelectedInvestmentsCurrency(userPreferences.investmentsPreferredCurrency || 'USD');
+      setSelectedTheme(userPreferences.theme || 'system');
     }
   }, [userPreferences]);
 
   const handleCurrencyChange = (newCurrency: string) => {
     setPreferredCurrency(newCurrency);
+  };
+
+  const handleInvestmentsCurrencyChange = (newCurrency: string) => {
+    setSelectedInvestmentsCurrency(newCurrency);
   };
 
   const handleThemeChange = (newTheme: UserPreferences['theme']) => {
@@ -44,10 +50,11 @@ export default function PreferencesPage() {
     try {
       const newPreferencesToSave: UserPreferences = {
         preferredCurrency: preferredCurrency,
+        investmentsPreferredCurrency: selectedInvestmentsCurrency,
         theme: selectedTheme,
       };
       await saveUserPreferences(newPreferencesToSave);
-      await refreshUserPreferences();
+      await refreshUserPreferences(); // This will update the context and re-apply theme if necessary
       toast({
         title: "Preferences Saved",
         description: "Your preferences have been updated successfully.",
@@ -83,6 +90,10 @@ export default function PreferencesPage() {
               <Skeleton className="h-4 w-32" />
               <Skeleton className="h-10 w-full md:w-1/2" />
             </div>
+            <div className="space-y-2">
+              <Skeleton className="h-4 w-32" />
+              <Skeleton className="h-10 w-full md:w-1/2" />
+            </div>
             <Skeleton className="h-10 w-32" />
           </CardContent>
         </Card>
@@ -107,14 +118,14 @@ export default function PreferencesPage() {
           ) : (
             <>
               <div className="space-y-2">
-                <Label htmlFor="preferred-currency">Preferred Currency</Label>
+                <Label htmlFor="preferred-currency">Main Preferred Currency</Label>
                 <Select
                   value={preferredCurrency}
                   onValueChange={handleCurrencyChange}
                   disabled={!user || isSaving}
                 >
                   <SelectTrigger id="preferred-currency" className="w-full md:w-1/2">
-                    <SelectValue placeholder="Select your preferred currency" />
+                    <SelectValue placeholder="Select your main preferred currency" />
                   </SelectTrigger>
                   <SelectContent>
                     {supportedCurrencies.map((curr) => (
@@ -125,7 +136,30 @@ export default function PreferencesPage() {
                   </SelectContent>
                 </Select>
                 <p className="text-sm text-muted-foreground">
-                  Balances and totals will be converted and displayed in this currency.
+                  General balances and totals will be converted and displayed in this currency.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="investments-preferred-currency">Investments Preferred Currency</Label>
+                <Select
+                  value={selectedInvestmentsCurrency}
+                  onValueChange={handleInvestmentsCurrencyChange}
+                  disabled={!user || isSaving}
+                >
+                  <SelectTrigger id="investments-preferred-currency" className="w-full md:w-1/2">
+                    <SelectValue placeholder="Select currency for investments" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {supportedCurrencies.map((curr) => (
+                      <SelectItem key={curr} value={curr}>
+                        {curr} ({getCurrencySymbol(curr)})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Investment values (like crypto prices) will be displayed in this currency.
                 </p>
               </div>
 
@@ -142,6 +176,7 @@ export default function PreferencesPage() {
                   <SelectContent>
                     <SelectItem value="light">Light</SelectItem>
                     <SelectItem value="dark">Dark</SelectItem>
+                    <SelectItem value="goldquest">GoldQuest</SelectItem>
                     <SelectItem value="system">System Default</SelectItem>
                   </SelectContent>
                 </Select>

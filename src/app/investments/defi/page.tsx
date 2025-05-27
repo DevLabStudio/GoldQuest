@@ -5,8 +5,8 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import InvestmentPricePanel from "@/components/investments/investment-price-panel";
 import { AreaChart, DollarSign, Euro, Bitcoin as BitcoinIcon, WalletCards, LinkIcon, UnlinkIcon, CircleDollarSign } from "lucide-react";
-import { getUserPreferences } from '@/lib/preferences';
-import { convertCurrency, getCurrencySymbol, supportedCurrencies as allAppSupportedCurrencies } from '@/lib/currency';
+// getUserPreferences removed as we get it from AuthContext
+import { convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -17,14 +17,13 @@ const BRLIcon = () => (
   <span className="font-bold text-lg">R$</span>
 );
 
-// Updated icons and names for specific cryptos
 const currencyIcons: { [key: string]: React.ReactNode } = {
-  BRL: <BRLIcon />, // Still useful for preferredCurrency display
-  USD: <DollarSign className="h-6 w-6" />, // Still useful for preferredCurrency display
-  EUR: <Euro className="h-6 w-6" />, // Still useful for preferredCurrency display
+  BRL: <BRLIcon />,
+  USD: <DollarSign className="h-6 w-6" />,
+  EUR: <Euro className="h-6 w-6" />,
   BTC: <BitcoinIcon className="h-6 w-6" />,
-  ETH: <CircleDollarSign className="h-6 w-6 text-blue-500" />, // Placeholder for ETH
-  SOL: <CircleDollarSign className="h-6 w-6 text-purple-500" />, // Placeholder for SOL
+  ETH: <CircleDollarSign className="h-6 w-6 text-blue-500" />,
+  SOL: <CircleDollarSign className="h-6 w-6 text-purple-500" />,
 };
 
 const currencyNames: { [key: string]: string } = {
@@ -36,7 +35,6 @@ const currencyNames: { [key: string]: string } = {
   SOL: "Solana",
 };
 
-// Updated display asset codes
 const displayAssetCodes = ["ETH", "SOL", "BTC"];
 const coingeckoAssetIds = {
   ETH: "ethereum",
@@ -44,13 +42,13 @@ const coingeckoAssetIds = {
   BTC: "bitcoin",
 };
 
-
 export default function DeFiInvestmentsPage() {
-  const { user, isLoadingAuth } = useAuthContext();
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL');
-  const [isLoadingPrefs, setIsLoadingPrefs] = useState(true);
-  
-  // Updated state for crypto prices
+  const { user, isLoadingAuth, userPreferences } = useAuthContext();
+  // Use investment-specific currency from preferences, fallback to global or 'USD'
+  const investmentsDisplayCurrency = useMemo(() => {
+      return userPreferences?.investmentsPreferredCurrency || userPreferences?.preferredCurrency || 'USD';
+  }, [userPreferences]);
+
   const [cryptoPrices, setCryptoPrices] = useState<{ [key: string]: number | null }>({ ETH: null, SOL: null, BTC: null });
   const [isCryptoPricesLoading, setIsCryptoPricesLoading] = useState(true);
   const [cryptoPricesError, setCryptoPricesError] = useState<string | null>(null);
@@ -59,51 +57,30 @@ export default function DeFiInvestmentsPage() {
   const [isConnectingWallet, setIsConnectingWallet] = useState(false);
   const [walletError, setWalletError] = useState<string | null>(null);
 
-  const fetchPrefs = useCallback(async () => {
-    if (!user || isLoadingAuth || typeof window === 'undefined') {
-        setIsLoadingPrefs(false);
-        if (!user && !isLoadingAuth) console.log("User not logged in, using default preferences for DeFi investments page.");
-        return;
-    }
-    setIsLoadingPrefs(true);
-    try {
-        const prefs = await getUserPreferences();
-        setPreferredCurrency(prefs.preferredCurrency.toUpperCase());
-    } catch (error) {
-        console.error("Failed to fetch user preferences:", error);
-    } finally {
-        setIsLoadingPrefs(false);
-    }
-  }, [user, isLoadingAuth]);
 
-  useEffect(() => {
-      fetchPrefs();
-  }, [fetchPrefs]);
-
-  // Renamed and generalized function to fetch prices for ETH, SOL, BTC
   const fetchCryptoPrices = useCallback(async () => {
-    if (!preferredCurrency || typeof window === 'undefined' || isLoadingPrefs) {
+    if (typeof window === 'undefined' || !investmentsDisplayCurrency) {
             setIsCryptoPricesLoading(false);
             return;
     }
 
     setIsCryptoPricesLoading(true);
     setCryptoPricesError(null);
-    setCryptoPrices({ ETH: null, SOL: null, BTC: null }); // Reset prices
+    setCryptoPrices({ ETH: null, SOL: null, BTC: null });
 
-    const preferredCurrencyLower = preferredCurrency.toLowerCase();
-    const directlySupportedVsCurrencies = ['usd', 'eur', 'brl', 'gbp', 'jpy', 'cad', 'aud', 'chf']; // Common CoinGecko vs_currencies
-    let targetCoingeckoCurrency = preferredCurrencyLower;
+    const targetVsCurrencyLower = investmentsDisplayCurrency.toLowerCase();
+    const directlySupportedVsCurrencies = ['usd', 'eur', 'brl', 'gbp', 'jpy', 'cad', 'aud', 'chf'];
+    let fetchAgainstCurrency = targetVsCurrencyLower;
 
-    if (!directlySupportedVsCurrencies.includes(preferredCurrencyLower)) {
-        console.warn(`Preferred currency ${preferredCurrency} might not be directly supported by CoinGecko for all assets. Fetching in USD and will convert.`);
-        targetCoingeckoCurrency = 'usd';
+    if (!directlySupportedVsCurrencies.includes(targetVsCurrencyLower)) {
+        console.warn(`Investments currency ${investmentsDisplayCurrency} might not be directly supported by CoinGecko for all assets. Fetching in USD and will convert.`);
+        fetchAgainstCurrency = 'usd';
     }
     
     const assetIdsString = Object.values(coingeckoAssetIds).join(',');
 
     try {
-        const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${assetIdsString}&vs_currencies=${targetCoingeckoCurrency}`);
+        const response = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${assetIdsString}&vs_currencies=${fetchAgainstCurrency}`);
         if (!response.ok) {
             const errorData = await response.json().catch(() => ({ error: "Unknown API error structure" }));
             throw new Error(`CoinGecko API request failed: ${response.status} ${response.statusText} - ${errorData?.error || 'Details unavailable'}`);
@@ -113,21 +90,16 @@ export default function DeFiInvestmentsPage() {
 
         for (const code of displayAssetCodes) {
             const coingeckoId = (coingeckoAssetIds as any)[code];
-            if (data[coingeckoId] && data[coingeckoId][targetCoingeckoCurrency]) {
-                let priceInTargetCoinGeckoCurrency = data[coingeckoId][targetCoingeckoCurrency];
-                if (targetCoingeckoCurrency.toUpperCase() !== preferredCurrency.toUpperCase()) {
-                    // Convert if fetched currency is not the preferred one (e.g., fetched in USD, need BRL)
-                    newPrices[code] = convertCurrency(priceInTargetCoinGeckoCurrency, targetCoingeckoCurrency.toUpperCase(), preferredCurrency);
+            if (data[coingeckoId] && data[coingeckoId][fetchAgainstCurrency]) {
+                let priceInFetchedCurrency = data[coingeckoId][fetchAgainstCurrency];
+                if (fetchAgainstCurrency.toUpperCase() !== investmentsDisplayCurrency.toUpperCase()) {
+                    newPrices[code] = convertCurrency(priceInFetchedCurrency, fetchAgainstCurrency.toUpperCase(), investmentsDisplayCurrency);
                 } else {
-                    newPrices[code] = priceInTargetCoinGeckoCurrency;
+                    newPrices[code] = priceInFetchedCurrency;
                 }
             } else {
-                 console.warn(`Price for ${code} not found in Coingecko response for target currency '${targetCoingeckoCurrency}'. Will try to convert from static BTC rate if ${code} is BTC.`);
-                 if(code === 'BTC') { // Fallback for BTC if primary fetch fails for it
-                    newPrices[code] = convertCurrency(1, "BTC", preferredCurrency);
-                 } else {
-                    newPrices[code] = null;
-                 }
+                 console.warn(`Price for ${code} not found in Coingecko response for target currency '${fetchAgainstCurrency}'.`);
+                 newPrices[code] = null; // Explicitly set to null if not found
             }
         }
         setCryptoPrices(newPrices);
@@ -135,70 +107,66 @@ export default function DeFiInvestmentsPage() {
     } catch (err: any) {
         console.error("Failed to fetch crypto prices:", err);
         setCryptoPricesError(err.message || "Could not load crypto prices.");
-        // Fallback for all display assets on error
         const fallbackPrices: { [key: string]: number | null } = {};
         displayAssetCodes.forEach(code => {
-            fallbackPrices[code] = convertCurrency(1, code, preferredCurrency); // Assumes convertCurrency can handle BTC, ETH, SOL if static rates for them exist or as a concept
+            fallbackPrices[code] = null; // Ensure fallback is null on error
         });
         setCryptoPrices(fallbackPrices);
     } finally {
         setIsCryptoPricesLoading(false);
     }
-  }, [preferredCurrency, isLoadingPrefs]);
+  }, [investmentsDisplayCurrency]);
 
   useEffect(() => {
-    if (user && !isLoadingAuth && !isLoadingPrefs) {
+    // Fetch prices if user is loaded, not loading auth, and we have the investment display currency
+    if (user && !isLoadingAuth && investmentsDisplayCurrency) {
       fetchCryptoPrices();
-    } else if (!isLoadingAuth && !user && !isLoadingPrefs) { // Also check isLoadingPrefs
-        setIsCryptoPricesLoading(false);
+    } else if (!isLoadingAuth && !user) {
+        setIsCryptoPricesLoading(false); // Stop loading if no user
     }
-  }, [fetchCryptoPrices, user, isLoadingAuth, isLoadingPrefs]);
+  }, [fetchCryptoPrices, user, isLoadingAuth, investmentsDisplayCurrency]);
 
 
   const dynamicPriceData = useMemo(() => {
-    // Filter for the new displayAssetCodes (ETH, SOL, BTC)
-    // No need to filter out preferredCurrency as these are cryptos
     const codesToDisplay = displayAssetCodes;
 
-    if (isLoadingAuth || isLoadingPrefs) {
+    if (isLoadingAuth || !userPreferences) { // Check for userPreferences existence as well
       return codesToDisplay.map(code => ({
         name: currencyNames[code] || code,
         code: code,
         price: null,
         change: "Loading...",
         icon: currencyIcons[code] || <DollarSign className="h-6 w-6" />,
-        against: preferredCurrency,
+        against: investmentsDisplayCurrency,
         isLoading: true,
       }));
     }
 
     return codesToDisplay.map(assetCode => {
       let priceInPreferredCurrency: number | null = cryptoPrices[assetCode];
-      let displayChange = "N/A"; // Real-time change % is complex, setting to N/A for now
+      let displayChange = "N/A"; 
       let isAssetSpecificLoading = isCryptoPricesLoading;
 
       if (isCryptoPricesLoading) {
           displayChange = "Loading...";
-      } else if (cryptoPricesError && cryptoPrices[assetCode] === null) { // Error specific to this asset or general error
+      } else if (cryptoPricesError && cryptoPrices[assetCode] === null) { 
           displayChange = "Error";
-          // Attempt to use static conversion if available, mainly for BTC
-          if (assetCode === "BTC") priceInPreferredCurrency = convertCurrency(1, "BTC", preferredCurrency);
-          else priceInPreferredCurrency = null; // For ETH/SOL, if API fails, show null
+          priceInPreferredCurrency = null; 
       } else if (priceInPreferredCurrency === null && !isCryptoPricesLoading) {
-           displayChange = "N/A"; // Price not found or API issue
+           displayChange = "N/A";
       }
       
       return {
         name: currencyNames[assetCode] || assetCode,
         code: assetCode,
         price: priceInPreferredCurrency,
-        change: displayChange, // Real-time change requires more complex API or websockets
+        change: displayChange,
         icon: currencyIcons[assetCode] || <CircleDollarSign className="h-6 w-6" />,
-        against: preferredCurrency,
+        against: investmentsDisplayCurrency,
         isLoading: isAssetSpecificLoading,
       };
     });
-  }, [preferredCurrency, isLoadingAuth, isLoadingPrefs, cryptoPrices, isCryptoPricesLoading, cryptoPricesError]);
+  }, [investmentsDisplayCurrency, isLoadingAuth, userPreferences, cryptoPrices, isCryptoPricesLoading, cryptoPricesError]);
 
   const handleConnectWallet = async () => {
     if (typeof window.ethereum === 'undefined') {
@@ -232,7 +200,7 @@ export default function DeFiInvestmentsPage() {
     return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`;
   };
 
-  if (isLoadingAuth || isLoadingPrefs) {
+  if (isLoadingAuth || !userPreferences) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8 space-y-8">
         <Skeleton className="h-8 w-1/3 mb-4" />
@@ -317,6 +285,3 @@ export default function DeFiInvestmentsPage() {
     </div>
   );
 }
-
-
-    
