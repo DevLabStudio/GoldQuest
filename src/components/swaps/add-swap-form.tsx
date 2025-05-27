@@ -2,7 +2,8 @@
 'use client';
 
 import type { FC } from 'react';
-import { useForm, useMemo as reactUseMemo } from 'react-hook-form'; // Renamed useMemo to avoid conflict
+import { useForm } from 'react-hook-form';
+import { useMemo } from 'react'; // Corrected import for useMemo
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from "@/components/ui/button";
@@ -81,7 +82,7 @@ const AddSwapForm: FC<AddSwapFormProps> = ({ onSubmit: passedOnSubmit, isLoading
   const fromAssetWatch = form.watch('fromAsset');
   const toAssetWatch = form.watch('toAsset');
 
-  const effectiveRate = reactUseMemo(() => { // Using reactUseMemo
+  const effectiveRate = useMemo(() => {
     if (fromAmount && toAmount && fromAssetWatch && toAssetWatch && fromAmount > 0 && toAmount > 0) {
       const rate = toAmount / fromAmount;
       return `1 ${fromAssetWatch.toUpperCase()} = ${rate.toFixed(Math.max(2, Math.min(8, (rate < 0.0001 ? 10 : 6))))} ${toAssetWatch.toUpperCase()}`;
