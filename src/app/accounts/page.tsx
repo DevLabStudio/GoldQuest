@@ -7,11 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
-import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye, ChevronDown } from "lucide-react"; // Added ChevronDown
+import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye, ChevronDown, Landmark, Bitcoin as BitcoinIcon } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import AddAccountForm from '@/components/accounts/add-account-form';
 import AddCryptoForm from '@/components/accounts/add-crypto-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
@@ -24,6 +24,7 @@ import Link from 'next/link';
 import AccountBalanceHistoryChart from '@/components/accounts/account-balance-history-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
 
 
 export default function AccountsPage() {
@@ -55,7 +56,14 @@ export default function AccountsPage() {
             setPreferredCurrency(prefs.preferredCurrency);
 
             const fetchedAccounts = await getAccounts();
+            // Sort accounts: assets first, then crypto, then by name
+            fetchedAccounts.sort((a, b) => {
+                if (a.category === 'asset' && b.category === 'crypto') return -1;
+                if (a.category === 'crypto' && b.category === 'asset') return 1;
+                return a.name.localeCompare(b.name);
+            });
             setAllAccounts(fetchedAccounts);
+
 
             if (fetchedAccounts.length > 0) {
                 const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
@@ -178,15 +186,12 @@ export default function AccountsPage() {
     setIsEditDialogOpen(true);
   };
 
-  const assetAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'asset'), [allAccounts]);
-  const cryptoAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'crypto'), [allAccounts]);
-
- const accountBalanceHistoryData = useMemo(() => {
+  const accountBalanceHistoryData = useMemo(() => {
     if (isLoading || allAccounts.length === 0 || !preferredCurrency) {
         return { data: [], accountNames: [], chartConfig: {} };
     }
 
-    const relevantAccounts = [...allAccounts];
+    const relevantAccounts = allAccounts.filter(acc => acc.includeInNetWorth !== false);
     if (relevantAccounts.length === 0) return { data: [], accountNames: [], chartConfig: {} };
 
     const accountColors = [
@@ -208,7 +213,8 @@ export default function AccountsPage() {
 
     const initialChartBalances: { [accountId: string]: number } = {};
     relevantAccounts.forEach(acc => {
-        let balanceAtChartStart = acc.balance;
+        let balanceAtChartStart = acc.balance; // This is the current balance
+        // Roll back transactions that happened *after* the chartStartDate
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
@@ -216,14 +222,14 @@ export default function AccountsPage() {
             })
             .forEach(tx => {
                 let amountInAccountCurrency = tx.amount;
-                if (tx.transactionCurrency && acc.currency && tx.transactionCurrency.toUpperCase() !== acc.currency.toUpperCase()) {
-                    amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                // Ensure transaction currency is converted to account's primary currency
+                if (tx.transactionCurrency && acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
+                    amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
                 }
-                balanceAtChartStart -= amountInAccountCurrency;
+                balanceAtChartStart -= amountInAccountCurrency; // Subtract future transactions to get past balance
             });
         initialChartBalances[acc.id] = balanceAtChartStart;
     });
-
 
     const chartDatesSet = new Set<string>();
     chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd'));
@@ -235,7 +241,6 @@ export default function AccountsPage() {
     });
     chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
 
-
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
         .sort(compareAsc)
@@ -244,7 +249,7 @@ export default function AccountsPage() {
     if (sortedUniqueChartDates.length === 0) {
          const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
          relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = acc.currency ? convertCurrency(initialChartBalances[acc.id] || 0, acc.currency, preferredCurrency) : 0;
+             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(initialChartBalances[acc.id] || 0, acc.primaryCurrency, preferredCurrency) : 0;
          });
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
@@ -260,10 +265,10 @@ export default function AccountsPage() {
             })
             .forEach(tx => {
                 const account = relevantAccounts.find(a => a.id === tx.accountId);
-                if (account && account.currency) {
+                if (account && account.primaryCurrency) {
                     let amountInAccountCurrency = tx.amount;
-                     if (tx.transactionCurrency && account.currency && tx.transactionCurrency.toUpperCase() !== account.currency.toUpperCase()) {
-                        amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.currency);
+                     if (tx.transactionCurrency && account.primaryCurrency && tx.transactionCurrency.toUpperCase() !== account.primaryCurrency.toUpperCase()) {
+                        amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.primaryCurrency);
                     }
                     runningBalancesInAccountCurrency[tx.accountId] = (runningBalancesInAccountCurrency[tx.accountId] || 0) + amountInAccountCurrency;
                 }
@@ -272,7 +277,7 @@ export default function AccountsPage() {
         const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
         relevantAccounts.forEach(acc => {
-            dailySnapshot[acc.name] = acc.currency ? convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.currency, preferredCurrency) : 0;
+            dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.primaryCurrency, preferredCurrency) : 0;
         });
         
         const existingEntryIndex = historicalData.findIndex(hd => hd.date === dateStr);
@@ -285,238 +290,16 @@ export default function AccountsPage() {
     
     historicalData.sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)));
 
-
     return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
 
   }, [allAccounts, allTransactions, preferredCurrency, isLoading, selectedDateRange]);
-
-
-
-  interface AccountTableProps {
-      accounts: Account[];
-      title: string;
-      category: 'asset' | 'crypto';
-      onAddClick: () => void;
-      isAddDialogOpen: boolean;
-      onOpenChange: (open: boolean) => void;
-      AddFormComponent: FC<{ onAccountAdded: (data: NewAccountData) => void }>;
-  }
-
-  const AccountTable: FC<AccountTableProps> = ({ accounts, title, category, onAddClick, isAddDialogOpen, onOpenChange, AddFormComponent }) => (
-    <Card className="mb-8">
-      <CardHeader>
-         <div className="flex justify-between items-center">
-            <CardTitle>{title}</CardTitle>
-             <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-               <DialogTrigger asChild>
-                 <Button variant="default" size="sm">
-                   <PlusCircle className="mr-2 h-4 w-4" /> Create new {category} account
-                 </Button>
-               </DialogTrigger>
-               <DialogContent className="sm:max-w-3xl">
-                 <DialogHeader>
-                   <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                   <DialogDescription>
-                     Enter the details of your new {category} account.
-                   </DialogDescription>
-                 </DialogHeader>
-                 <AddFormComponent onAccountAdded={handleAccountAdded} />
-               </DialogContent>
-             </Dialog>
-         </div>
-         <CardDescription>View and manage your manually added {category} accounts.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading ? (
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
-                        <TableHead>Current balance</TableHead>
-                        <TableHead>Last activity</TableHead>
-                        <TableHead>Balance difference</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {[...Array(2)].map((_, i) => (
-                        <TableRow key={`skeleton-${category}-${i}`}>
-                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                        <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
-                        </TableRow>
-                    ))}
-                </TableBody>
-            </Table>
-        ) : accounts.length > 0 ? (
-            <Accordion type="multiple" className="w-full">
-                {accounts.map((account) => (
-                    <AccordionItem value={account.id} key={account.id} className="border-b-0">
-                        <AccordionTrigger className="hover:no-underline hover:bg-muted/50 px-2 py-0 rounded-md -mx-2">
-                             <Table className="w-full table-fixed">{/* Ensure no leading/trailing spaces or newlines inside this JSX tag */}
-                                <colgroup>
-                                    <col style={{ width: '25%' }} />
-                                    <col style={{ width: '20%' }} />
-                                    <col style={{ width: '20%' }} />
-                                    <col style={{ width: '15%' }} />
-                                    <col style={{ width: '10%' }} />
-                                    <col style={{ width: '10%' }} />
-                                </colgroup>
-                                { /* Only render TableHeader for the first item or outside the map if columns are always the same */ }
-                                { accounts.indexOf(account) === 0 && (
-                                    <TableHeader className="invisible h-0">
-                                        <TableRow>
-                                            <TableHead className="py-0">Name</TableHead>
-                                            <TableHead className="py-0">{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
-                                            <TableHead className="py-0">Current balance</TableHead>
-                                            <TableHead className="py-0">Last activity</TableHead>
-                                            <TableHead className="py-0">Balance diff.</TableHead>
-                                            <TableHead className="text-right py-0">Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                )}
-                                <TableBody>
-                                    <TableRow className="border-b-0 hover:bg-transparent data-[state=selected]:bg-transparent">
-                                        <TableCell className="font-medium py-3 truncate">
-                                            <Link href={`/accounts/${account.id}`} passHref>
-                                            <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline" onClick={(e) => e.stopPropagation()}>
-                                                {account.name}
-                                            </Button>
-                                            </Link>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground py-3 truncate">{account.providerName || 'N/A'}</TableCell>
-                                        <TableCell className="py-3">
-                                            <div className="flex flex-col">
-                                            <span className="font-semibold text-primary">
-                                                {account.currency ? formatCurrency(account.balance, account.currency, account.currency, false) : 'N/A'}
-                                            </span>
-                                            {preferredCurrency && account.currency && account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                                                <span className="text-xs text-muted-foreground mt-1">
-                                                    (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
-                                                </span>
-                                            )}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground py-3 truncate">
-                                            {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-muted-foreground py-3 truncate">
-                                            {account.currency ? formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false) : 'N/A'}
-                                        </TableCell>
-                                        <TableCell className="text-right py-3">
-                                            <DropdownMenu>
-                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                                                <span className="sr-only">Open menu</span>
-                                                <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem asChild>
-                                                    <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
-                                                        <Eye className="mr-2 h-4 w-4" />
-                                                        <span>View Transactions</span>
-                                                    </Link>
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openEditDialog(account)}>
-                                                <Edit className="mr-2 h-4 w-4" />
-                                                <span>Edit</span>
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                onClick={() => handleDeleteAccount(account.id)}
-                                                className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                                >
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                <span>Delete</span>
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </TableCell>
-                                    </TableRow>
-                                </TableBody>
-                            </Table>
-                        </AccordionTrigger>
-                        <AccordionContent className="px-4 py-3 bg-muted/20 rounded-b-md">
-                            <p className="text-sm text-muted-foreground mb-2">Sub-accounts for {account.name}:</p>
-                            {/* Placeholder for sub-accounts list */}
-                            <p className="text-xs text-muted-foreground italic">Sub-account display coming soon.</p>
-                            <Button variant="outline" size="sm" className="mt-2">
-                                <PlusCircle className="mr-2 h-3.5 w-3.5" /> Add Sub-Account
-                            </Button>
-                        </AccordionContent>
-                    </AccordionItem>
-                ))}
-            </Accordion>
-        ) : (
-            <Table>
-                <TableHeader>
-                     <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
-                        <TableHead>Current balance</TableHead>
-                        <TableHead>Last activity</TableHead>
-                        <TableHead>Balance difference</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    <TableRow>
-                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                        No {category} accounts added yet.
-                        <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-                            <DialogTrigger asChild>
-                                <Button variant="default" size="sm" className="ml-2">
-                                <PlusCircle className="mr-2 h-4 w-4" /> Add your first {category} account
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-3xl">
-                                <DialogHeader>
-                                <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                                <DialogDescription>
-                                    Enter the details of your new {category} account.
-                                </DialogDescription>
-                                </DialogHeader>
-                                <AddFormComponent onAccountAdded={handleAccountAdded} />
-                            </DialogContent>
-                        </Dialog>
-                        </TableCell>
-                    </TableRow>
-                </TableBody>
-            </Table>
-        )}
-      </CardContent>
-        {!isLoading && accounts.length > 0 && (
-          <CardContent className="pt-4 border-t">
-              <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-                  <DialogTrigger asChild>
-                      <Button variant="default" size="sm">
-                          <PlusCircle className="mr-2 h-4 w-4" /> Create new {category} account
-                      </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-3xl">
-                      <DialogHeader>
-                         <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                           <DialogDescription>
-                              Enter the details of your new {category} account.
-                           </DialogDescription>
-                      </DialogHeader>
-                       <AddFormComponent onAccountAdded={handleAccountAdded} />
-                  </DialogContent>
-              </Dialog>
-          </CardContent>
-        )}
-    </Card>
-  );
 
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
          <h1 className="text-3xl font-bold">Accounts Management</h1>
+         {/* Add buttons are now within the unified table card */}
       </div>
 
         {error && (
@@ -545,26 +328,220 @@ export default function AccountsPage() {
             </CardContent>
         </Card>
 
+        <Card className="mb-8">
+            <CardHeader>
+                <div className="flex justify-between items-center">
+                    <CardTitle>All Your Accounts</CardTitle>
+                    <div className="flex gap-2">
+                        <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="default" size="sm">
+                                <Landmark className="mr-2 h-4 w-4" /> Create Asset Account
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-3xl">
+                                <DialogHeader>
+                                <DialogTitle>Add New Asset Account</DialogTitle>
+                                <DialogDescription>Enter the details of your new asset account.</DialogDescription>
+                                </DialogHeader>
+                                <AddAccountForm onAccountAdded={handleAccountAdded} />
+                            </DialogContent>
+                        </Dialog>
+                        <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="default" size="sm">
+                                <BitcoinIcon className="mr-2 h-4 w-4" /> Create Crypto Account
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-3xl">
+                                <DialogHeader>
+                                <DialogTitle>Add New Crypto Account</DialogTitle>
+                                <DialogDescription>Enter the details of your new crypto account.</DialogDescription>
+                                </DialogHeader>
+                                <AddCryptoForm onAccountAdded={handleAccountAdded} />
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                </div>
+                <CardDescription>View and manage all your financial accounts and platform holdings.</CardDescription>
+            </CardHeader>
+            <CardContent>
+                 {isLoading && allAccounts.length === 0 ? (
+                    <Table>
+                        <TableHeader>
+                            <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Provider</TableHead>
+                                <TableHead>Type</TableHead>
+                                <TableHead>Current balance</TableHead>
+                                <TableHead>Last activity</TableHead>
+                                <TableHead>Balance difference</TableHead>
+                                <TableHead className="text-right">Actions</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            {[...Array(3)].map((_, i) => (
+                                <TableRow key={`skeleton-all-${i}`}>
+                                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                                <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                                <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                                <TableCell><Skeleton className="h-5 w-28" /></TableCell>
+                                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                                <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                                <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
+                                </TableRow>
+                            ))}
+                        </TableBody>
+                    </Table>
+                 ) : allAccounts.length > 0 ? (
+                    <Accordion type="multiple" className="w-full">
+                        {allAccounts.map((account) => {
+                            const primaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0];
+                            const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+                            const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : account.primaryCurrency || 'N/A';
 
-        <AccountTable
-            accounts={assetAccounts}
-            title="Property (Asset Accounts)"
-            category="asset"
-            onAddClick={() => setIsAddAssetDialogOpen(true)}
-            isAddDialogOpen={isAddAssetDialogOpen}
-            onOpenChange={setIsAddAssetDialogOpen}
-            AddFormComponent={AddAccountForm}
-        />
-
-        <AccountTable
-            accounts={cryptoAccounts}
-            title="Self-Custody (Crypto Accounts)"
-            category="crypto"
-            onAddClick={() => setIsAddCryptoDialogOpen(true)}
-            isAddDialogOpen={isAddCryptoDialogOpen}
-            onOpenChange={setIsAddCryptoDialogOpen}
-            AddFormComponent={AddCryptoForm}
-        />
+                            return (
+                            <AccordionItem value={account.id} key={account.id} className="border-b">
+                                <AccordionTrigger className="hover:no-underline hover:bg-muted/30 data-[state=open]:bg-muted/20 px-3 py-2 w-full rounded-md text-sm">
+                                    <Table className="w-full table-fixed -my-1">
+                                        <colgroup>
+                                            <col style={{ width: '20%' }} />
+                                            <col style={{ width: '20%' }} />
+                                            <col style={{ width: '15%' }} />
+                                            <col style={{ width: '20%' }} />
+                                            <col style={{ width: '15%' }} />
+                                            <col style={{ width: '10%' }} />
+                                        </colgroup>
+                                        {/* Only render TableHeader visually for the first item by hiding subsequent ones */}
+                                        { allAccounts.indexOf(account) === 0 && (
+                                            <TableHeader className="[&_tr]:border-0">
+                                                <TableRow className="hover:bg-transparent">
+                                                    <TableHead className="py-1.5">Name</TableHead>
+                                                    <TableHead className="py-1.5">Provider</TableHead>
+                                                    <TableHead className="py-1.5">Type</TableHead>
+                                                    <TableHead className="py-1.5">Balance</TableHead>
+                                                    <TableHead className="py-1.5">Last Activity</TableHead>
+                                                    <TableHead className="text-right py-1.5">Actions</TableHead>
+                                                </TableRow>
+                                            </TableHeader>
+                                        )}
+                                        <TableBody>
+                                            <TableRow className="border-b-0 hover:bg-transparent data-[state=selected]:bg-transparent">
+                                                <TableCell className="font-medium py-1.5 truncate">
+                                                    <Link href={`/accounts/${account.id}`} passHref>
+                                                    <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline" onClick={(e) => e.stopPropagation()}>
+                                                        {account.name}
+                                                    </Button>
+                                                    </Link>
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground py-1.5 truncate">{account.providerName || 'N/A'}</TableCell>
+                                                <TableCell className="text-muted-foreground py-1.5 truncate">
+                                                    <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full", account.category === 'asset' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300")}>
+                                                        {account.category === 'asset' ? 'Asset' : 'Crypto'}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground"> - {account.type}</span>
+                                                </TableCell>
+                                                <TableCell className="py-1.5">
+                                                    <div className="flex flex-col">
+                                                    <span className="font-semibold text-primary">
+                                                        {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
+                                                    </span>
+                                                    {preferredCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                                        <span className="text-xs text-muted-foreground mt-0.5">
+                                                            (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
+                                                        </span>
+                                                    )}
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="text-muted-foreground py-1.5 truncate">
+                                                    {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
+                                                </TableCell>
+                                                <TableCell className="text-right py-1.5">
+                                                    <DropdownMenu>
+                                                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                                                        <span className="sr-only">Open menu</span>
+                                                        <MoreHorizontal className="h-4 w-4" />
+                                                        </Button>
+                                                    </DropdownMenuTrigger>
+                                                    <DropdownMenuContent align="end">
+                                                        <DropdownMenuItem asChild>
+                                                            <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
+                                                                <Eye className="mr-2 h-4 w-4" />
+                                                                <span>View Transactions</span>
+                                                            </Link>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem onClick={() => openEditDialog(account)}>
+                                                        <Edit className="mr-2 h-4 w-4" />
+                                                        <span>Edit</span>
+                                                        </DropdownMenuItem>
+                                                        <DropdownMenuItem
+                                                        onClick={() => handleDeleteAccount(account.id)}
+                                                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                                        >
+                                                        <Trash2 className="mr-2 h-4 w-4" />
+                                                        <span>Delete</span>
+                                                        </DropdownMenuItem>
+                                                    </DropdownMenuContent>
+                                                    </DropdownMenu>
+                                                </TableCell>
+                                            </TableRow>
+                                        </TableBody>
+                                    </Table>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pt-3 pb-4 bg-muted/10 rounded-b-md border-t">
+                                    <p className="text-sm text-muted-foreground mb-2">Other currency balances for {account.name}:</p>
+                                    {account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 ? (
+                                        <ul className="list-disc pl-5 text-xs space-y-1">
+                                            {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
+                                                <li key={bal.currency}>
+                                                    {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
+                                                    {bal.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                                        <span className="text-muted-foreground/80 ml-1">
+                                                            (≈ {formatCurrency(bal.amount, bal.currency, preferredCurrency, true)})
+                                                        </span>
+                                                    )}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground italic">No other currency balances recorded for this account.</p>
+                                    )}
+                                </AccordionContent>
+                            </AccordionItem>
+                        )})}
+                    </Accordion>
+                 ) : (
+                     <div className="text-center py-10">
+                        <p className="text-muted-foreground">No accounts added yet.</p>
+                         <div className="flex gap-2 justify-center mt-4">
+                            <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="default" size="sm">
+                                    <Landmark className="mr-2 h-4 w-4" /> Add Asset Account
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-3xl">
+                                    <DialogHeader><DialogTitle>Add New Asset Account</DialogTitle><DialogDescription>Enter the details of your new asset account.</DialogDescription></DialogHeader>
+                                    <AddAccountForm onAccountAdded={handleAccountAdded} />
+                                </DialogContent>
+                            </Dialog>
+                            <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
+                                <DialogTrigger asChild>
+                                    <Button variant="default" size="sm">
+                                    <BitcoinIcon className="mr-2 h-4 w-4" /> Add Crypto Account
+                                    </Button>
+                                </DialogTrigger>
+                                <DialogContent className="sm:max-w-3xl">
+                                    <DialogHeader><DialogTitle>Add New Crypto Account</DialogTitle><DialogDescription>Enter the details of your new crypto account.</DialogDescription></DialogHeader>
+                                    <AddCryptoForm onAccountAdded={handleAccountAdded} />
+                                </DialogContent>
+                            </Dialog>
+                        </div>
+                     </div>
+                 )}
+            </CardContent>
+        </Card>
 
 
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
@@ -590,4 +567,3 @@ export default function AccountsPage() {
     </div>
   );
 }
-
