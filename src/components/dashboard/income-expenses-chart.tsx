@@ -2,10 +2,10 @@
 'use client';
 
 import type { FC } from 'react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { formatCurrency, getCurrencySymbol } from '@/lib/currency'; // Keep this import
 
 interface MonthlyData {
   month: string;
@@ -15,7 +15,7 @@ interface MonthlyData {
 
 interface IncomeExpensesChartProps {
   data: MonthlyData[];
-  currency: string;
+  currency: string; // This should be the currency SYMBOL e.g. '$', '€', 'R$'
 }
 
 const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) => {
@@ -25,7 +25,6 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
             <CardHeader className="flex flex-row items-start justify-between pb-4">
                 <div>
                     <CardTitle>Income & Expenses (Last 12 Months)</CardTitle>
-                    {/* CardDescription removed */}
                 </div>
             </CardHeader>
             <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
@@ -46,8 +45,9 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
     },
   } satisfies ChartConfig;
 
-  const maxIncome = Math.max(...data.map(d => d.income), 0); // Ensure non-negative
-  const maxExpenses = Math.max(...data.map(d => d.expenses), 0); // Ensure non-negative
+  const maxIncome = Math.max(...data.map(d => d.income), 0);
+  const maxExpenses = Math.max(...data.map(d => d.expenses), 0);
+  const overallMax = Math.max(maxIncome, maxExpenses);
 
 
   return (
@@ -55,19 +55,16 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
       <CardHeader className="flex flex-row items-start justify-between pb-4">
         <div>
             <CardTitle>Income & Expenses (Last 12 Months)</CardTitle>
-            {/* CardDescription removed */}
         </div>
         <div className="text-right">
-            <p className="text-xs text-muted-foreground">Max Income</p>
-            <p className="font-semibold text-green-500">{currency}{maxIncome.toLocaleString()}</p>
-            <p className="text-xs text-muted-foreground mt-1">Max Expenses</p>
-            <p className="font-semibold text-orange-500">{currency}{maxExpenses.toLocaleString()}</p>
+            <p className="text-xs text-muted-foreground">Max Value</p>
+            <p className="font-semibold text-primary">{currency}{overallMax.toLocaleString(undefined, {maximumFractionDigits: 0})}</p>
         </div>
       </CardHeader>
       <CardContent className="h-[300px] w-full p-0">
         <ChartContainer config={chartConfig} className="w-full h-full">
           <ResponsiveContainer>
-            <LineChart
+            <BarChart
               data={data}
               margin={{
                 top: 5,
@@ -88,11 +85,12 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
                 tickLine={false}
                 axisLine={false}
                 tickMargin={8}
-                tickFormatter={(value) => `${currency}${value / 1000}k`}
+                tickFormatter={(value) => `${currency}${(value / 1000).toFixed(0)}k`}
                 className="text-xs fill-muted-foreground"
+                domain={[0, 'dataMax + 1000']} // Ensure y-axis accommodates max value
               />
               <Tooltip
-                cursor={true}
+                cursor={{ fill: 'hsl(var(--muted))' }}
                 content={
                     <ChartTooltipContent
                         formatter={(value, name) => (
@@ -101,30 +99,27 @@ const IncomeExpensesChart: FC<IncomeExpensesChartProps> = ({ data, currency }) =
                             className="w-2.5 h-2.5 rounded-full mr-2"
                             style={{ backgroundColor: name === "income" ? chartConfig.income.color : chartConfig.expenses.color }}
                             />
-                            {name.charAt(0).toUpperCase() + name.slice(1)}: {currency}{Number(value).toLocaleString()}
+                            {name.charAt(0).toUpperCase() + name.slice(1)}: {currency}{Number(value).toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}
                         </>
                         )}
-                        indicator="line"
+                        indicator="dot"
                     />
                 }
               />
-              {/* <Legend content={<ChartLegendContent />} /> */}
-              <Line
+              <Legend content={<ChartLegendContent wrapperStyle={{paddingTop: 10}} />} />
+              <Bar
                 dataKey="income"
-                type="monotone"
-                stroke={chartConfig.income.color}
-                strokeWidth={2.5}
-                dot={false}
-                strokeDasharray="4 4" // Dashed line for income
+                fill={chartConfig.income.color}
+                radius={[4, 4, 0, 0]} // Rounded top corners for bars
+                barSize={20}
               />
-              <Line
+              <Bar
                 dataKey="expenses"
-                type="monotone"
-                stroke={chartConfig.expenses.color}
-                strokeWidth={2.5}
-                dot={false}
+                fill={chartConfig.expenses.color}
+                radius={[4, 4, 0, 0]} // Rounded top corners for bars
+                barSize={20}
               />
-            </LineChart>
+            </BarChart>
           </ResponsiveContainer>
         </ChartContainer>
       </CardContent>
