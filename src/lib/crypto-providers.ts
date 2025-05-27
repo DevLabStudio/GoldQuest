@@ -2,10 +2,8 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-import {
-    SiBinance, SiCoinbase, SiKraken, SiOkx, SiKucoin, SiGateDotIo, SiHuobi, /* SiBitfinex removed */ /* SiBitstamp removed */
-    SiLedger, SiTrezor, SiMetamask, SiTrustwallet, SiExodus, SiPhantom
-} from 'react-icons/si'; // Import from react-icons/si
+// Removed all specific Si* icon imports from 'react-icons/si' to prevent build errors.
+// Specific icons can be re-added carefully one by one if they are confirmed to exist.
 
 const defaultIconSize = 20;
 
@@ -23,30 +21,30 @@ export interface CryptoProviderInfo {
 }
 
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconComponent: React.createElement(SiBinance, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Coinbase", iconComponent: React.createElement(SiCoinbase, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Kraken", iconComponent: React.createElement(SiKraken, { size: defaultIconSize, variant: "branded" }) },
+    { name: "Binance", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Coinbase", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Kraken", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "Bybit", iconComponent: React.createElement(DefaultCryptoIcon) },
-    { name: "OKX", iconComponent: React.createElement(SiOkx, { size: defaultIconSize, variant: "branded" }) },
-    { name: "KuCoin", iconComponent: React.createElement(SiKucoin, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Bitstamp", iconComponent: React.createElement(DefaultCryptoIcon) }, // Fallback
-    { name: "Gate.io", iconComponent: React.createElement(SiGateDotIo, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Huobi (HTX)", iconComponent: React.createElement(SiHuobi, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Bitfinex", iconComponent: React.createElement(DefaultCryptoIcon) }, // Fallback
+    { name: "OKX", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "KuCoin", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Bitstamp", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Gate.io", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Huobi (HTX)", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Bitfinex", iconComponent: React.createElement(DefaultCryptoIcon) },
 ];
 
 export const popularWallets: CryptoProviderInfo[] = [
     // Hardware Wallets
-    { name: "Ledger Nano S/X/Stax", iconComponent: React.createElement(SiLedger, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Trezor Model One/T", iconComponent: React.createElement(SiTrezor, { size: defaultIconSize, variant: "branded" }) },
+    { name: "Ledger Nano S/X/Stax", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Trezor Model One/T", iconComponent: React.createElement(DefaultCryptoIcon) },
     // Software/Mobile Wallets
-    { name: "MetaMask", iconComponent: React.createElement(SiMetamask, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Trust Wallet", iconComponent: React.createElement(SiTrustwallet, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Exodus", iconComponent: React.createElement(SiExodus, { size: defaultIconSize, variant: "branded" }) },
+    { name: "MetaMask", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Trust Wallet", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Exodus", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "Electrum", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "MyEtherWallet (MEW)", iconComponent: React.createElement(DefaultCryptoIcon) },
-    { name: "Phantom (Solana)", iconComponent: React.createElement(SiPhantom, { size: defaultIconSize, variant: "branded" }) },
-    { name: "Coinbase Wallet", iconComponent: React.createElement(SiCoinbase, { size: defaultIconSize, variant: "branded" }) }, // Using SiCoinbase as it's the same brand
+    { name: "Phantom (Solana)", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Coinbase Wallet", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "Atomic Wallet", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "BlueWallet (Bitcoin)", iconComponent: React.createElement(DefaultCryptoIcon) },
 ];
@@ -58,4 +56,3 @@ export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularE
 
 popularExchanges.sort((a, b) => a.name.localeCompare(b.name));
 popularWallets.sort((a, b) => a.name.localeCompare(b.name));
-    
