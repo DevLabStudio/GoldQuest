@@ -89,7 +89,7 @@ export default function DashboardPage() {
         if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-', 'userSubscriptions'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log("Storage changed on main dashboard, refetching data...");
