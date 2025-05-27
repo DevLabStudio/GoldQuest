@@ -4,27 +4,9 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-// Usando @token-icons/react@2.14.0 conforme a instalação bem-sucedida anterior
-// Se os nomes exatos dos ícones abaixo não funcionarem para @token-icons/react@2.14.0, eles usarão o DefaultCryptoIcon.
-import {
-    ExchangeBinance,
-    ExchangeCoinbase,
-    ExchangeKraken,
-    // ExchangeBybit, // Exemplo, verificar se existe
-    ExchangeOkx,
-    ExchangeKucoin,
-    // ExchangeBitstamp, // Verificar
-    // ExchangeGateio,  // Verificar
-    // ExchangeHuobi,   // Verificar
-    // ExchangeBitfinex, // Verificar
-    WalletLedger,
-    WalletTrezor,
-    WalletMetamask,
-    WalletTrust, // Nome comum, verificar se é WalletTrustWallet
-    WalletExodus,
-    WalletPhantom,
-    WalletCoinbase as WalletCoinbaseIcon // Alias para evitar conflito com ExchangeCoinbase
-} from '@token-icons/react'; // Atenção: Este pacote foi renomeado para @web3icons/react
+// Attempt to import only ExchangeBinance from @token-icons/react
+// All other specific crypto icons will be removed from imports to isolate issues
+import { ExchangeBinance } from '@token-icons/react'; // Assuming @token-icons/react@2.14.0 is installed
 
 const defaultIconSize = 20;
 
@@ -40,43 +22,42 @@ export interface CryptoProviderInfo {
   iconComponent: ReactNode;
 }
 
-// Helper para criar ícones com fallback
+// Helper to create icons with fallback, attempting specific icon first
 const createIcon = (SpecificIconComponent?: React.ElementType, props?: any) => {
   if (SpecificIconComponent) {
     try {
+      // @ts-ignore variant prop might not exist on all icons or DefaultCryptoIcon
       return React.createElement(SpecificIconComponent, { size: defaultIconSize, variant: 'branded', ...props });
     } catch (e) {
-      console.warn(`Error creating specific crypto icon for ${props?.name || 'unknown provider'}, falling back to default. Ensure the icon name is correct for @token-icons/react@2.14.0.`, e);
+      console.warn(`Error creating specific crypto icon for ${props?.name || 'unknown provider'}, falling back to default. Ensure the icon component is valid. Error: ${e}`);
       return React.createElement(DefaultCryptoIcon);
     }
   }
   return React.createElement(DefaultCryptoIcon);
 };
 
-// Tentar com nomes que são mais prováveis de existir em @token-icons/react@2.14.0
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconComponent: createIcon(ExchangeBinance, {name: "Binance"}) },
-    { name: "Coinbase", iconComponent: createIcon(ExchangeCoinbase, {name: "Coinbase"}) },
-    { name: "Kraken", iconComponent: createIcon(ExchangeKraken, {name: "Kraken"}) },
-    { name: "OKX", iconComponent: createIcon(ExchangeOkx, {name: "OKX"}) },
-    { name: "KuCoin", iconComponent: createIcon(ExchangeKucoin, {name: "KuCoin"}) },
-    { name: "Bitstamp", iconComponent: createIcon(undefined, {name: "Bitstamp"}) }, // Fallback
-    { name: "Gate.io", iconComponent: createIcon(undefined, {name: "Gate.io"}) },   // Fallback
-    { name: "Huobi (HTX)", iconComponent: createIcon(undefined, {name: "Huobi"}) }, // Fallback
-    { name: "Bitfinex", iconComponent: createIcon(undefined, {name: "Bitfinex"}) },  // Fallback
-    // Adicionar outros conforme necessário, verificando os nomes em @token-icons/react@2.14.0
+    { name: "Binance", iconComponent: createIcon(ExchangeBinance, { name: "Binance" }) }, // Only Binance attempts a specific icon
+    { name: "Coinbase", iconComponent: createIcon(undefined, { name: "Coinbase" }) },
+    { name: "Kraken", iconComponent: createIcon(undefined, { name: "Kraken" }) },
+    { name: "OKX", iconComponent: createIcon(undefined, { name: "OKX" }) },
+    { name: "KuCoin", iconComponent: createIcon(undefined, { name: "KuCoin" }) },
+    { name: "Bitstamp", iconComponent: createIcon(undefined, { name: "Bitstamp" }) },
+    { name: "Gate.io", iconComponent: createIcon(undefined, { name: "Gate.io" }) },
+    { name: "Huobi (HTX)", iconComponent: createIcon(undefined, { name: "Huobi" }) },
+    { name: "Bitfinex", iconComponent: createIcon(undefined, { name: "Bitfinex" }) },
 ];
 
 export const popularWallets: CryptoProviderInfo[] = [
-    { name: "Ledger Nano S/X/Stax", iconComponent: createIcon(WalletLedger, {name: "Ledger"}) },
-    { name: "Trezor Model One/T", iconComponent: createIcon(WalletTrezor, {name: "Trezor"}) },
-    { name: "MetaMask", iconComponent: createIcon(WalletMetamask, {name: "MetaMask"}) },
-    { name: "Trust Wallet", iconComponent: createIcon(WalletTrust, {name: "Trust Wallet"}) }, // WalletTrust pode ser o nome correto
-    { name: "Exodus", iconComponent: createIcon(WalletExodus, {name: "Exodus"}) },
-    { name: "Phantom (Solana)", iconComponent: createIcon(WalletPhantom, {name: "Phantom"}) },
-    { name: "Coinbase Wallet", iconComponent: createIcon(WalletCoinbaseIcon, {name: "Coinbase Wallet"}) },
-    { name: "Atomic Wallet", iconComponent: createIcon(undefined, {name: "Atomic Wallet"}) }, // Fallback
-    { name: "BlueWallet (Bitcoin)", iconComponent: createIcon(undefined, {name: "BlueWallet"}) }, // Fallback
+    { name: "Ledger Nano S/X/Stax", iconComponent: createIcon(undefined, { name: "Ledger" }) },
+    { name: "Trezor Model One/T", iconComponent: createIcon(undefined, { name: "Trezor" }) },
+    { name: "MetaMask", iconComponent: createIcon(undefined, { name: "MetaMask" }) },
+    { name: "Trust Wallet", iconComponent: createIcon(undefined, { name: "Trust Wallet" }) },
+    { name: "Exodus", iconComponent: createIcon(undefined, { name: "Exodus" }) },
+    { name: "Phantom (Solana)", iconComponent: createIcon(undefined, { name: "Phantom" }) },
+    { name: "Coinbase Wallet", iconComponent: createIcon(undefined, { name: "Coinbase Wallet" }) },
+    { name: "Atomic Wallet", iconComponent: createIcon(undefined, { name: "Atomic Wallet" }) },
+    { name: "BlueWallet (Bitcoin)", iconComponent: createIcon(undefined, { name: "BlueWallet" }) },
 ];
 
 export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularExchanges, ...popularWallets])].sort(
