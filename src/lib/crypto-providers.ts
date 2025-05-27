@@ -3,8 +3,9 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
 import {
- ExchangeCoinbase, ExchangeKraken, ExchangeOkx, ExchangeKucoin, ExchangeGateio, ExchangeHuobi, ExchangeBinance, ExchangeBitfinex, ExchangeBitstamp, WalletLedger, WalletTrezor, WalletMetamask, WalletTrust, WalletExodus, WalletPhantom, WalletCoinbase as WalletCoinbaseIcon
-} from '@token-icons/react'; // Reverted to @token-icons/react
+    SiBinance, SiCoinbase, SiKraken, SiOkx, SiKucoin, SiGateDotIo, SiHuobi, SiBitfinex, SiBitstamp,
+    SiLedger, SiTrezor, SiMetamask, SiTrustwallet, SiExodus, SiPhantom
+} from 'react-icons/si'; // Import from react-icons/si
 
 const defaultIconSize = 20;
 
@@ -22,30 +23,30 @@ export interface CryptoProviderInfo {
 }
 
 export const popularExchanges: CryptoProviderInfo[] = [
- { name: "Binance", iconComponent: React.createElement(ExchangeBinance, { size: defaultIconSize }) },
-    { name: "Coinbase", iconComponent: React.createElement(ExchangeCoinbase, { size: defaultIconSize }) },
-    { name: "Kraken", iconComponent: React.createElement(ExchangeKraken, { size: defaultIconSize }) },
+ { name: "Binance", iconComponent: React.createElement(SiBinance, { size: defaultIconSize }) },
+    { name: "Coinbase", iconComponent: React.createElement(SiCoinbase, { size: defaultIconSize }) },
+    { name: "Kraken", iconComponent: React.createElement(SiKraken, { size: defaultIconSize }) },
     { name: "Bybit", iconComponent: React.createElement(DefaultCryptoIcon) },
-    { name: "OKX", iconComponent: React.createElement(ExchangeOkx, { size: defaultIconSize }) },
-    { name: "KuCoin", iconComponent: React.createElement(ExchangeKucoin, { size: defaultIconSize }) },
-    { name: "Bitstamp", iconComponent: React.createElement(ExchangeBitstamp, { size: defaultIconSize }) },
-    { name: "Gate.io", iconComponent: React.createElement(ExchangeGateio, { size: defaultIconSize }) },
-    { name: "Huobi (HTX)", iconComponent: React.createElement(ExchangeHuobi, { size: defaultIconSize }) },
-    { name: "Bitfinex", iconComponent: React.createElement(ExchangeBitfinex, { size: defaultIconSize }) },
+    { name: "OKX", iconComponent: React.createElement(SiOkx, { size: defaultIconSize }) },
+    { name: "KuCoin", iconComponent: React.createElement(SiKucoin, { size: defaultIconSize }) },
+    { name: "Bitstamp", iconComponent: React.createElement(SiBitstamp, { size: defaultIconSize }) },
+    { name: "Gate.io", iconComponent: React.createElement(SiGateDotIo, { size: defaultIconSize }) },
+    { name: "Huobi (HTX)", iconComponent: React.createElement(SiHuobi, { size: defaultIconSize }) },
+    { name: "Bitfinex", iconComponent: React.createElement(SiBitfinex, { size: defaultIconSize }) },
 ];
 
 export const popularWallets: CryptoProviderInfo[] = [
     // Hardware Wallets
-    { name: "Ledger Nano S/X/Stax", iconComponent: React.createElement(WalletLedger, { size: defaultIconSize }) },
-    { name: "Trezor Model One/T", iconComponent: React.createElement(WalletTrezor, { size: defaultIconSize }) },
+    { name: "Ledger Nano S/X/Stax", iconComponent: React.createElement(SiLedger, { size: defaultIconSize }) },
+    { name: "Trezor Model One/T", iconComponent: React.createElement(SiTrezor, { size: defaultIconSize }) },
     // Software/Mobile Wallets
-    { name: "MetaMask", iconComponent: React.createElement(WalletMetamask, { size: defaultIconSize }) },
-    { name: "Trust Wallet", iconComponent: React.createElement(WalletTrust, { size: defaultIconSize }) },
-    { name: "Exodus", iconComponent: React.createElement(WalletExodus, { size: defaultIconSize }) },
+    { name: "MetaMask", iconComponent: React.createElement(SiMetamask, { size: defaultIconSize }) },
+    { name: "Trust Wallet", iconComponent: React.createElement(SiTrustwallet, { size: defaultIconSize }) },
+    { name: "Exodus", iconComponent: React.createElement(SiExodus, { size: defaultIconSize }) },
     { name: "Electrum", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "MyEtherWallet (MEW)", iconComponent: React.createElement(DefaultCryptoIcon) },
-    { name: "Phantom (Solana)", iconComponent: React.createElement(WalletPhantom, { size: defaultIconSize }) },
-    { name: "Coinbase Wallet", iconComponent: React.createElement(WalletCoinbaseIcon, { size: defaultIconSize }) },
+    { name: "Phantom (Solana)", iconComponent: React.createElement(SiPhantom, { size: defaultIconSize }) },
+    { name: "Coinbase Wallet", iconComponent: React.createElement(SiCoinbase, { size: defaultIconSize }) }, // Using SiCoinbase as a general Coinbase wallet icon
     { name: "Atomic Wallet", iconComponent: React.createElement(DefaultCryptoIcon) },
     { name: "BlueWallet (Bitcoin)", iconComponent: React.createElement(DefaultCryptoIcon) },
 ];
