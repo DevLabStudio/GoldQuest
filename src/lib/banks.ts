@@ -1,4 +1,7 @@
 
+'use client';
+
+import React from 'react';
 import type { ReactNode } from 'react';
 import { Landmark } from 'lucide-react';
 import {
@@ -9,12 +12,21 @@ import {
 } from 'react-icons/si';
 
 const defaultIconSize = 20;
-const DefaultBankIcon = () => <Landmark size={defaultIconSize} className="text-muted-foreground" />;
+
+const DefaultBankIcon = () => {
+  const iconSize = defaultIconSize;
+  const iconClassName = "text-muted-foreground";
+  return (
+    <Landmark
+      size={iconSize}
+      className={iconClassName}
+    />
+  );
+};
 
 export interface BankInfo {
   name: string;
   iconComponent: ReactNode;
-  // Removed iconUrl and dataAiHint as we are directly using components
 }
 
 export const popularBanks: BankInfo[] = [
@@ -42,7 +54,7 @@ export const popularBanks: BankInfo[] = [
     { name: "NatWest Group (UK)", iconComponent: <SiNatwest size={defaultIconSize} /> },
     { name: "Santander (Spain/Global)", iconComponent: <SiSantander size={defaultIconSize} /> },
     { name: "BBVA (Spain)", iconComponent: <SiBbva size={defaultIconSize} /> },
-    { name: "CaixaBank (Spain)", iconComponent: <DefaultBankIcon /> }, // Placeholder, specific icon likely not in react-icons/si
+    { name: "CaixaBank (Spain)", iconComponent: <DefaultBankIcon /> },
     { name: "BNP Paribas (France)", iconComponent: <SiBnpParibas size={defaultIconSize} /> },
     { name: "Crédit Agricole (France)", iconComponent: <SiCreditagricole size={defaultIconSize} /> },
     { name: "Société Générale (France)", iconComponent: <SiSocietegenerale size={defaultIconSize} /> },
@@ -61,7 +73,7 @@ export const popularBanks: BankInfo[] = [
 
 // Ensure all banks have an iconComponent, defaulting if necessary
 popularBanks.forEach(bank => {
-    if (!bank.iconComponent) { // Should not happen with current structure, but good safeguard
+    if (!bank.iconComponent) {
         bank.iconComponent = <DefaultBankIcon />;
     }
 });
