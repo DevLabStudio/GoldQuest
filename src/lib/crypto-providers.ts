@@ -3,21 +3,18 @@ import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
 import {
-    ExchangeBinance, ExchangeCoinbase, ExchangeKraken, ExchangeBybit, ExchangeOkx, ExchangeKucoin, ExchangeBitstamp, ExchangeGateio, ExchangeHuobi, ExchangeBitfinex,
-    WalletLedger, WalletTrezor, WalletMetamask, WalletTrust, WalletExodus, WalletPhantom, WalletCoinbase as WalletCoinbaseIcon // Renamed to avoid conflict
-} from '@token-icons/react';
+ ExchangeCoinbase, ExchangeKraken, ExchangeOkx, ExchangeKucoin, ExchangeGateio, ExchangeHuobi, ExchangeBinance, ExchangeBitfinex, ExchangeBitstamp, WalletLedger, WalletTrezor, WalletMetamask, WalletTrust, WalletExodus, WalletPhantom, WalletCoinbase as WalletCoinbaseIcon
+} from '@token-icons/react'; // Reverted to @token-icons/react
 
 const defaultIconSize = 20;
 
+// Define DefaultCryptoIcon using React.createElement
 const DefaultCryptoIcon = () => {
-  return (
-    <WalletCards
-      size={20} // Hardcoded size
-      className="text-muted-foreground"
-    />
-  );
+  return React.createElement(WalletCards, {
+    size: defaultIconSize,
+    className: "text-muted-foreground"
+  });
 };
-
 
 export interface CryptoProviderInfo {
   name: string;
@@ -25,45 +22,33 @@ export interface CryptoProviderInfo {
 }
 
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconComponent: <ExchangeBinance size={defaultIconSize} /> },
-    { name: "Coinbase", iconComponent: <ExchangeCoinbase size={defaultIconSize} /> },
-    { name: "Kraken", iconComponent: <ExchangeKraken size={defaultIconSize} /> },
-    { name: "Bybit", iconComponent: <ExchangeBybit size={defaultIconSize} /> },
-    { name: "OKX", iconComponent: <ExchangeOkx size={defaultIconSize} /> },
-    { name: "KuCoin", iconComponent: <ExchangeKucoin size={defaultIconSize} /> },
-    { name: "Bitstamp", iconComponent: <ExchangeBitstamp size={defaultIconSize} /> },
-    { name: "Gate.io", iconComponent: <ExchangeGateio size={defaultIconSize} /> },
-    { name: "Huobi (HTX)", iconComponent: <ExchangeHuobi size={defaultIconSize} /> },
-    { name: "Bitfinex", iconComponent: <ExchangeBitfinex size={defaultIconSize} /> },
+ { name: "Binance", iconComponent: React.createElement(ExchangeBinance, { size: defaultIconSize }) },
+    { name: "Coinbase", iconComponent: React.createElement(ExchangeCoinbase, { size: defaultIconSize }) },
+    { name: "Kraken", iconComponent: React.createElement(ExchangeKraken, { size: defaultIconSize }) },
+    { name: "Bybit", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "OKX", iconComponent: React.createElement(ExchangeOkx, { size: defaultIconSize }) },
+    { name: "KuCoin", iconComponent: React.createElement(ExchangeKucoin, { size: defaultIconSize }) },
+    { name: "Bitstamp", iconComponent: React.createElement(ExchangeBitstamp, { size: defaultIconSize }) },
+    { name: "Gate.io", iconComponent: React.createElement(ExchangeGateio, { size: defaultIconSize }) },
+    { name: "Huobi (HTX)", iconComponent: React.createElement(ExchangeHuobi, { size: defaultIconSize }) },
+    { name: "Bitfinex", iconComponent: React.createElement(ExchangeBitfinex, { size: defaultIconSize }) },
 ];
 
 export const popularWallets: CryptoProviderInfo[] = [
     // Hardware Wallets
-    { name: "Ledger Nano S/X/Stax", iconComponent: <WalletLedger size={defaultIconSize} /> },
-    { name: "Trezor Model One/T", iconComponent: <WalletTrezor size={defaultIconSize} /> },
+    { name: "Ledger Nano S/X/Stax", iconComponent: React.createElement(WalletLedger, { size: defaultIconSize }) },
+    { name: "Trezor Model One/T", iconComponent: React.createElement(WalletTrezor, { size: defaultIconSize }) },
     // Software/Mobile Wallets
-    { name: "MetaMask", iconComponent: <WalletMetamask size={defaultIconSize} /> },
-    { name: "Trust Wallet", iconComponent: <WalletTrust size={defaultIconSize} /> },
-    { name: "Exodus", iconComponent: <WalletExodus size={defaultIconSize} /> },
-    { name: "Electrum", iconComponent: <DefaultCryptoIcon /> }, // Placeholder, check @token-icons/react
-    { name: "MyEtherWallet (MEW)", iconComponent: <DefaultCryptoIcon /> }, // Placeholder
-    { name: "Phantom (Solana)", iconComponent: <WalletPhantom size={defaultIconSize} /> },
-    { name: "Coinbase Wallet", iconComponent: <WalletCoinbaseIcon size={defaultIconSize} /> },
-    { name: "Atomic Wallet", iconComponent: <DefaultCryptoIcon /> }, // Placeholder
-    { name: "BlueWallet (Bitcoin)", iconComponent: <DefaultCryptoIcon /> }, // Placeholder
+    { name: "MetaMask", iconComponent: React.createElement(WalletMetamask, { size: defaultIconSize }) },
+    { name: "Trust Wallet", iconComponent: React.createElement(WalletTrust, { size: defaultIconSize }) },
+    { name: "Exodus", iconComponent: React.createElement(WalletExodus, { size: defaultIconSize }) },
+    { name: "Electrum", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "MyEtherWallet (MEW)", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "Phantom (Solana)", iconComponent: React.createElement(WalletPhantom, { size: defaultIconSize }) },
+    { name: "Coinbase Wallet", iconComponent: React.createElement(WalletCoinbaseIcon, { size: defaultIconSize }) },
+    { name: "Atomic Wallet", iconComponent: React.createElement(DefaultCryptoIcon) },
+    { name: "BlueWallet (Bitcoin)", iconComponent: React.createElement(DefaultCryptoIcon) },
 ];
-
-// Fallback for icons not found
-popularExchanges.forEach(provider => {
-    if (provider.iconComponent === undefined) {
-        provider.iconComponent = <DefaultCryptoIcon />;
-    }
-});
-popularWallets.forEach(provider => {
-    if (provider.iconComponent === undefined) {
-        provider.iconComponent = <DefaultCryptoIcon />;
-    }
-});
 
 // Combine and sort for potential unified dropdowns or filtering
 export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularExchanges, ...popularWallets])].sort(
@@ -72,3 +57,4 @@ export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularE
 
 popularExchanges.sort((a, b) => a.name.localeCompare(b.name));
 popularWallets.sort((a, b) => a.name.localeCompare(b.name));
+    

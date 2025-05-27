@@ -55,6 +55,13 @@ interface AuthWrapperProps {
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
   const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences, firebaseError } = useAuthContext();
+
+  console.log("AuthWrapper State:");
+  console.log("  isAuthenticated:", isAuthenticated);
+  console.log("  isLoadingAuth:", isLoadingAuth);
+  console.log("  isFirebaseActive:", isFirebaseActive);
+  console.log("  firebaseError:", firebaseError);
+
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
@@ -170,6 +177,8 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
         return <>{children}</>;
       }
 
+    console.log("Rendering main layout. isAuthenticated:", isAuthenticated);
+    console.log("Children type:", typeof children);
     return (
         <DateRangeProvider>
         <SidebarProvider>

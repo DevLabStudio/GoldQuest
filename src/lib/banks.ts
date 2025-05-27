@@ -4,8 +4,8 @@
 import React from 'react';
 import { Landmark } from 'lucide-react';
 import {
-  SiNubank, SiItau, SiBradesco, SiBancointer, SiBancodobrasil, SiCaixa, SiSantander, SiPagseguro,
-  SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, SiBbva, SiBnpParibas, SiCreditagricole,
+ SiNubank, SiItau, SiBradesco, SiCaixa, SiSantander, SiPagseguro,
+ SiBancointer, SiBancodobrasil, SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, SiBbva, SiBnpParibas, SiCreditagricole,
   SiSocietegenerale, SiDeutschebank, SiCommerzbank, SiIng, SiUnicredit, SiIntesasanpaolo,
   SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, SiBtgpactual, SiSafra, SiC6Bank, SiBancooriginal, SiNeon, SiPan
 } from 'react-icons/si';

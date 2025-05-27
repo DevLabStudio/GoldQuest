@@ -459,7 +459,7 @@ export default function AccountsPage() {
                                             <div className="font-semibold text-primary">
                                                 {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
                                             </div>
-                                            {preferredCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                            {preferredCurrency && typeof displayCurrency === 'string' && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                                                 <div className="text-xs text-muted-foreground mt-0.5">
                                                     (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
                                                 </div>
@@ -513,8 +513,8 @@ export default function AccountsPage() {
                                             {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
                                                 <li key={bal.currency}>
                                                     {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
-                                                    {bal.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                                                        <span className="text-muted-foreground/80 ml-1">
+                                                    {bal.currency && typeof bal.currency === 'string' && bal.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                                        <span className="text-muted-foreground/80 ml-1 break-words">
                                                             (≈ {formatCurrency(bal.amount, bal.currency, preferredCurrency, true)})
                                                         </span>
                                                     )}
