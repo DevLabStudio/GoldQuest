@@ -7,17 +7,16 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
-import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon } from "lucide-react"; // Renamed Edit
+import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon, Trash2 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import AddAccountForm from '@/components/accounts/add-account-form';
 import AddCryptoForm from '@/components/accounts/add-crypto-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, convertCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, compareAsc, startOfDay, isSameDay, endOfDay } from 'date-fns';
 import Link from 'next/link';
@@ -25,7 +24,8 @@ import AccountBalanceHistoryChart from '@/components/accounts/account-balance-hi
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { Trash2 } from 'lucide-react'; // Explicitly import Trash2
+import { Badge } from '@/components/ui/badge';
+
 
 export default function AccountsPage() {
   const { user, isLoadingAuth } = useAuthContext();
@@ -173,11 +173,11 @@ export default function AccountsPage() {
   };
 
   const accountBalanceHistoryData = useMemo(() => {
-    if (isLoading || allAccounts.length === 0 || !preferredCurrency) {
+    if (isLoading || allAccounts.length === 0 || !preferredCurrency || !allTransactions) {
         return { data: [], accountNames: [], chartConfig: {} };
     }
 
-    const relevantAccounts = allAccounts.filter(acc => acc.includeInNetWorth !== false);
+    const relevantAccounts = allAccounts.filter(acc => acc.includeInNetWorth !== false && acc.balances && acc.balances.length > 0);
     if (relevantAccounts.length === 0) return { data: [], accountNames: [], chartConfig: {} };
 
     const accountColors = [
@@ -197,53 +197,58 @@ export default function AccountsPage() {
     const chartStartDate = startOfDay(selectedDateRange.from || minTxDateOverall);
     const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall);
 
-    const initialChartBalancesInAccountCurrency: { [accountId: string]: number } = {};
+    const initialChartBalances = new Map<string, number>();
     relevantAccounts.forEach(acc => {
-        let balanceAtChartStart = 0;
-        const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
-        if (primaryBalance) {
-            balanceAtChartStart = primaryBalance.amount;
-        }
+        let balanceAtChartStart = acc.balances.find(b => b.currency === acc.primaryCurrency)?.amount || 0;
 
         allTransactions
             .filter(tx => tx.accountId === acc.id && parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z') >= chartStartDate)
             .forEach(tx => {
                 let amountInAccountPrimaryCurrency = tx.amount;
-                if (tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency?.toUpperCase()) {
-                    amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency!);
+                if (acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
+                    amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
                 }
                 balanceAtChartStart -= amountInAccountPrimaryCurrency;
             });
-        initialChartBalancesInAccountCurrency[acc.id] = balanceAtChartStart;
+        initialChartBalances.set(acc.id, balanceAtChartStart);
     });
 
     const chartDatesSet = new Set<string>();
     chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd'));
     allTransactions.forEach(tx => {
         const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-        if (txDate >= chartStartDate && txDate <= chartEndDate) {
+        if (txDate >= chartStartDate && txDate <= chartEndDate && relevantAccounts.some(ra => ra.id === tx.accountId)) {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
-    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
+    if (allTxDates.length === 0 || chartEndDate > maxTxDateOverall) { // Always include today if range extends beyond last transaction
+        chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
+    }
+
 
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
         .sort(compareAsc)
         .filter(date => date <= chartEndDate);
 
+
+    const historicalData: Array<{ date: string, [key: string]: any }> = [];
+    const runningBalances = new Map<string, number>(initialChartBalances);
+
     if (sortedUniqueChartDates.length === 0) {
          const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
          relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(initialChartBalancesInAccountCurrency[acc.id] || 0, acc.primaryCurrency, preferredCurrency) : 0;
+             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(initialChartBalances.get(acc.id) || 0, acc.primaryCurrency, preferredCurrency) : 0;
          });
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
 
-    const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalancesInAccountCurrency = { ...initialChartBalancesInAccountCurrency };
 
-    sortedUniqueChartDates.forEach((currentDisplayDate) => {
+    sortedUniqueChartDates.forEach((currentDisplayDate, dateIndex) => {
+        const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
+        const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
+
+        // Apply transactions for the currentDisplayDate to update runningBalances
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
@@ -256,25 +261,27 @@ export default function AccountsPage() {
                      if (tx.transactionCurrency.toUpperCase() !== account.primaryCurrency.toUpperCase()) {
                         amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.primaryCurrency);
                     }
-                    runningBalancesInAccountCurrency[tx.accountId] = (runningBalancesInAccountCurrency[tx.accountId] || 0) + amountInAccountPrimaryCurrency;
+                    runningBalances.set(tx.accountId, (runningBalances.get(tx.accountId) || 0) + amountInAccountPrimaryCurrency);
                 }
             });
 
-        const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
-        const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
+        // Create snapshot for this date using the updated runningBalances
         relevantAccounts.forEach(acc => {
-            dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.primaryCurrency, preferredCurrency) : 0;
+            dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(runningBalances.get(acc.id) || 0, acc.primaryCurrency, preferredCurrency) : 0;
         });
         
-        const existingEntryIndex = historicalData.findIndex(hd => hd.date === dateStr);
-        if (existingEntryIndex !== -1) {
-            historicalData[existingEntryIndex] = dailySnapshot;
-        } else {
-            historicalData.push(dailySnapshot);
-        }
+        historicalData.push(dailySnapshot);
     });
     
     historicalData.sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)));
+    
+    if (historicalData.length === 1 && sortedUniqueChartDates.length > 1) {
+        const lastDateStr = formatDateFns(sortedUniqueChartDates[sortedUniqueChartDates.length - 1], 'yyyy-MM-dd');
+        if (historicalData[0].date !== lastDateStr) {
+            historicalData.push({ ...historicalData[0], date: lastDateStr });
+        }
+    }
+
 
     return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
 
@@ -316,7 +323,7 @@ export default function AccountsPage() {
         <Card className="mb-8">
             <CardHeader>
                 <div className="flex justify-between items-center">
-                    <CardTitle>All Your Accounts</CardTitle>
+                    <CardTitle>All Accounts</CardTitle>
                     <div className="flex gap-2">
                         <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
                             <DialogTrigger asChild>
@@ -352,30 +359,19 @@ export default function AccountsPage() {
             </CardHeader>
             <CardContent>
                  {isLoading && allAccounts.length === 0 ? (
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead>Name</TableHead>
-                                <TableHead>Provider</TableHead>
-                                <TableHead>Type</TableHead>
-                                <TableHead>Current balance</TableHead>
-                                <TableHead>Last activity</TableHead>
-                                <TableHead className="text-right">Actions</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {[...Array(3)].map((_, i) => (
-                                <TableRow key={`skeleton-all-${i}`}>
-                                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                                <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                                <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                                <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-                                <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                                <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
+                    <div className="space-y-3">
+                        {[...Array(3)].map((_, i) => (
+                            <Card key={`skeleton-all-${i}`} className="p-4">
+                                <div className="flex justify-between items-center">
+                                    <div className="space-y-1">
+                                        <Skeleton className="h-5 w-24" />
+                                        <Skeleton className="h-4 w-32" />
+                                    </div>
+                                    <Skeleton className="h-8 w-16" />
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
                  ) : allAccounts.length > 0 ? (
                     <Accordion type="multiple" className="w-full">
                         {allAccounts.map((account) => {
@@ -386,94 +382,71 @@ export default function AccountsPage() {
                             const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
 
                             return (
-                            <AccordionItem value={account.id} key={account.id} className="border-b">
-                                <AccordionTrigger className="hover:no-underline hover:bg-muted/30 data-[state=open]:bg-muted/20 px-3 py-2 w-full rounded-md text-sm">
-                                    <Table className="w-full table-fixed -my-1">
-                                        <colgroup>
-                                            <col style={{ width: '20%' }} />
-                                            <col style={{ width: '20%' }} />
-                                            <col style={{ width: '15%' }} />
-                                            <col style={{ width: '20%' }} />
-                                            <col style={{ width: '15%' }} />
-                                            <col style={{ width: '10%' }} />
-                                        </colgroup>
-                                        { allAccounts.indexOf(account) === 0 && (
-                                            <TableHeader className="[&_tr]:border-0">
-                                                <TableRow className="hover:bg-transparent">
-                                                    <TableHead className="py-1.5">Name</TableHead>
-                                                    <TableHead className="py-1.5">Provider</TableHead>
-                                                    <TableHead className="py-1.5">Type</TableHead>
-                                                    <TableHead className="py-1.5">Balance</TableHead>
-                                                    <TableHead className="py-1.5">Last Activity</TableHead>
-                                                    <TableHead className="text-right py-1.5">Actions</TableHead>
-                                                </TableRow>
-                                            </TableHeader>
-                                        )}
-                                        <TableBody>
-                                            <TableRow className="border-b-0 hover:bg-transparent data-[state=selected]:bg-transparent">
-                                                <TableCell className="font-medium py-1.5 truncate">
-                                                    <Link href={`/accounts/${account.id}`} passHref>
-                                                    <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline" onClick={(e) => e.stopPropagation()}>
-                                                        {account.name}
-                                                    </Button>
+                            <AccordionItem value={account.id} key={account.id} className="border rounded-lg shadow-sm mb-3 bg-card overflow-hidden">
+                                <AccordionTrigger className="p-4 hover:bg-muted/50 data-[state=open]:bg-muted/30 data-[state=open]:border-b w-full text-left">
+                                    <div className="flex-1 grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr_auto] items-center gap-4">
+                                        <div className="truncate">
+                                            <Link href={`/accounts/${account.id}`} passHref>
+                                                <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline" onClick={(e) => e.stopPropagation()}>
+                                                    {account.name}
+                                                </Button>
+                                            </Link>
+                                            <p className="text-xs text-muted-foreground truncate">{account.providerName || 'N/A'}</p>
+                                        </div>
+                                        <div className="truncate">
+                                            <Badge variant="outline" className={cn(
+                                                "text-xs font-semibold px-1.5 py-0.5",
+                                                account.category === 'asset' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300"
+                                            )}>
+                                                {account.category === 'asset' ? 'Asset' : 'Crypto'}
+                                            </Badge>
+                                            <p className="text-xs text-muted-foreground truncate">{account.type}</p>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="font-semibold text-primary">
+                                                {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
+                                            </div>
+                                            {preferredCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                                <div className="text-xs text-muted-foreground mt-0.5">
+                                                    (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="text-muted-foreground truncate">
+                                            {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
+                                        </div>
+                                        <div className="flex-shrink-0"> {/* Ensure actions don't cause overflow */}
+                                            <DropdownMenu>
+                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
+                                                <span className="sr-only">Open menu</span>
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem asChild>
+                                                    <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
+                                                        <Eye className="mr-2 h-4 w-4" />
+                                                        <span>View Transactions</span>
                                                     </Link>
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground py-1.5 truncate">{account.providerName || 'N/A'}</TableCell>
-                                                <TableCell className="text-muted-foreground py-1.5 truncate">
-                                                    <span className={cn("text-xs font-semibold px-1.5 py-0.5 rounded-full", account.category === 'asset' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300")}>
-                                                        {account.category === 'asset' ? 'Asset' : 'Crypto'}
-                                                    </span>
-                                                    <span className="text-xs text-muted-foreground"> - {account.type}</span>
-                                                </TableCell>
-                                                <TableCell className="py-1.5">
-                                                    <div className="flex flex-col">
-                                                    <span className="font-semibold text-primary">
-                                                        {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
-                                                    </span>
-                                                    {preferredCurrency && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                                                        <span className="text-xs text-muted-foreground mt-0.5">
-                                                            (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
-                                                        </span>
-                                                    )}
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell className="text-muted-foreground py-1.5 truncate">
-                                                    {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
-                                                </TableCell>
-                                                <TableCell className="text-right py-1.5">
-                                                    <DropdownMenu>
-                                                    <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                        <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                                                        <span className="sr-only">Open menu</span>
-                                                        <MoreHorizontal className="h-4 w-4" />
-                                                        </Button>
-                                                    </DropdownMenuTrigger>
-                                                    <DropdownMenuContent align="end">
-                                                        <DropdownMenuItem asChild>
-                                                            <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
-                                                                <Eye className="mr-2 h-4 w-4" />
-                                                                <span>View Transactions</span>
-                                                            </Link>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem onClick={() => openEditDialog(account)}>
-                                                        <EditIcon className="mr-2 h-4 w-4" />
-                                                        <span>Edit</span>
-                                                        </DropdownMenuItem>
-                                                        <DropdownMenuItem
-                                                        onClick={() => handleDeleteAccount(account.id)}
-                                                        className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                                        >
-                                                        <Trash2 className="mr-2 h-4 w-4" />
-                                                        <span>Delete</span>
-                                                        </DropdownMenuItem>
-                                                    </DropdownMenuContent>
-                                                    </DropdownMenu>
-                                                </TableCell>
-                                            </TableRow>
-                                        </TableBody>
-                                    </Table>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openEditDialog(account)}>
+                                                <EditIcon className="mr-2 h-4 w-4" />
+                                                <span>Edit</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                onClick={() => handleDeleteAccount(account.id)}
+                                                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                                >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                <span>Delete</span>
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </div>
+                                    </div>
                                 </AccordionTrigger>
-                                <AccordionContent className="px-4 pt-3 pb-4 bg-muted/10 rounded-b-md border-t">
+                                <AccordionContent className="px-4 pt-3 pb-4 bg-muted/10">
                                     <p className="text-sm text-muted-foreground mb-2">Other currency balances for {account.name}:</p>
                                     {account.balances && account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 ? (
                                         <ul className="list-disc pl-5 text-xs space-y-1">
@@ -549,5 +522,3 @@ export default function AccountsPage() {
     </div>
   );
 }
-
-    
