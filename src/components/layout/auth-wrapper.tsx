@@ -18,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon, MapIcon, Bitcoin as BitcoinIcon } from 'lucide-react'; // Added BitcoinIcon
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon, MapIcon, Bitcoin as BitcoinIcon, Repeat } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -59,7 +59,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
   const [isFinancialControlOpen, setIsFinancialControlOpen] = useState(false);
-  const [isInvestmentsOpen, setIsInvestmentsOpen] = useState(false); // New state for Investments dropdown
+  const [isInvestmentsOpen, setIsInvestmentsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [loadingDivClassName, setLoadingDivClassName] = useState("flex items-center justify-center min-h-screen");
 
@@ -81,7 +81,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
           }
 
           root.classList.remove('dark', 'light', 'goldquest-theme');
-          root.classList.add(currentTheme); // Adds 'light', 'dark', or 'goldquest-theme'
+          if (currentTheme) {
+            root.classList.add(currentTheme);
+          }
           root.style.colorScheme = (currentTheme === 'goldquest-theme' || currentTheme === 'dark') ? 'dark' : 'light';
       };
 
@@ -98,9 +100,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   useEffect(() => {
     if (isClient) {
-        setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+        setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers') || pathname.startsWith('/transactions/swaps'));
         setIsFinancialControlOpen(pathname.startsWith('/financial-control'));
-        setIsInvestmentsOpen(pathname.startsWith('/investments/')); // Expand if any investment sub-page is active
+        setIsInvestmentsOpen(pathname.startsWith('/investments/'));
     }
   }, [pathname, isClient]);
 
@@ -126,9 +128,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
 
   const isActive = (path: string) => isClient && pathname === path;
-  const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+  const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers') || pathname.startsWith('/transactions/swaps'));
   const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control';
-  const isAnyInvestmentsRouteActive = isClient && pathname.startsWith('/investments/'); // For main group
+  const isAnyInvestmentsRouteActive = isClient && pathname.startsWith('/investments/');
   const isOrganizationActive = isClient && (pathname === '/organization' || pathname.startsWith('/categories/') || pathname.startsWith('/tags/') || pathname.startsWith('/groups/'));
   const isAccountsActive = isClient && (pathname === '/accounts' || pathname.startsWith('/accounts/'));
   const isDataManagementActive = isClient && pathname === '/data-management';
@@ -190,6 +192,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
+
                 <SidebarGroup>
                     <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
@@ -200,6 +203,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                  </SidebarGroup>
+
                  <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/accounts" passHref>
@@ -262,9 +266,18 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                                  </SidebarMenuButton>
                              </Link>
                          </SidebarMenuItem>
+                         <SidebarMenuItem className="ml-4">
+                             <Link href="/transactions/swaps" passHref>
+                                 <SidebarMenuButton tooltip="View Swaps" size="sm" isActive={isActive('/transactions/swaps')}>
+                                     <Repeat />
+                                     <span>Swaps</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
                         </>
                     )}
                     </SidebarGroup>
+
                     <SidebarGroup>
                         <SidebarMenuItem>
                             <SidebarMenuButton
@@ -306,6 +319,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             </>
                         )}
                     </SidebarGroup>
+
                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/organization" passHref>
@@ -316,6 +330,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
+
                 <SidebarGroup>
                     <SidebarGroupLabel>Settings</SidebarGroupLabel>
                     <SidebarMenuItem>
@@ -383,7 +398,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
           >
              {/* Only render children if it's a public route that doesn't need AuthWrapper's full layout */}
             {(pathname === '/login' || pathname === '/signup' || pathname === '/welcome') && children}
-            
+
             {/* Fallback for when firebase isn't active and user tries to access a non-public route (should ideally be caught by earlier redirect) */}
             {!isFirebaseActive && !(pathname === '/login' || pathname === '/signup' || pathname === '/welcome') && (
                  <div className="flex items-center justify-center min-h-screen">
