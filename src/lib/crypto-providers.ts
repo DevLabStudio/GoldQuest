@@ -4,21 +4,9 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon for ultimate fallback
-import { FaExchangeAlt, FaWallet } from 'react-icons/fa'; // Fallback icons from react-icons
 
-// Dynamically and safely import ExchangeIcon and WalletIcon from @token-icons/react
-let ExchangeIcon: React.ElementType | undefined = undefined;
-let WalletIcon: React.ElementType | undefined = undefined;
-try {
-  const tokenIcons = require('@token-icons/react');
-  ExchangeIcon = tokenIcons.ExchangeIcon;
-  WalletIcon = tokenIcons.WalletIcon;
-  if (!ExchangeIcon || !WalletIcon) {
-    console.warn("@token-icons/react loaded, but ExchangeIcon or WalletIcon is undefined. Specific crypto icons might not render.");
-  }
-} catch (e) {
-  console.warn("Could not load '@token-icons/react'. Specific crypto exchange/wallet icons will use fallbacks.", e);
-}
+// Remove all imports from @token-icons/react or @web3icons/react to ensure stability
+// We will default all crypto icons to generic ones for now.
 
 const defaultIconSize = 20;
 
@@ -31,68 +19,38 @@ const DefaultCryptoIcon = () => {
 
 export interface CryptoProviderInfo {
   name: string;
-  type: 'exchange' | 'wallet';
+  type: 'exchange' | 'wallet'; // To distinguish for potential future specific icon logic
   iconComponent: ReactNode;
   dataAiHint?: string;
 }
 
-// This map helps normalize provider names to the 'name' prop expected by @token-icons/react
-const cryptoNamePropMap: { [key: string]: string } = {
-  "Binance": "binance",
-  "Coinbase": "coinbase",
-  "Kraken": "kraken",
-  "OKX": "okx",
-  "KuCoin": "kucoin",
-  "Bitstamp": "bitstamp",
-  "Gate.io": "gateio", // Common variation
-  "Huobi (HTX)": "huobi",
-  "Bitfinex": "bitfinex",
-  "Ledger Nano S/X/Stax": "ledger",
-  "Trezor Model One/T": "trezor",
-  "MetaMask": "metamask",
-  "Trust Wallet": "trustwallet",
-  "Exodus": "exodus",
-  "Phantom (Solana)": "phantom",
-  "Coinbase Wallet": "coinbase", // WalletIcon might also use 'coinbase'
-};
+// This map is now empty as we are defaulting all crypto icons.
+// It's kept as a placeholder if we re-introduce specific icons later.
+const specificCryptoIconDetails: {
+  [key: string]: { type: 'exchange' | 'wallet'; nameProp: string; color?: string; iconComponent?: React.ElementType };
+} = {};
 
-// Brand colors for specific icons
-const cryptoBrandColors: { [key: string]: string } = {
-    "binance": "#F0B90B",
-    "coinbase": "#0052FF",
-    "kraken": "#5842C1",
-    "metamask": "#E2761B",
-    "ledger": "#1A1A1A", // Dark, might need adjustment based on theme
-    "trustwallet": "#3375BB",
-    "phantom": "#4B00C4", // Phantom purple
-    "exodus": "#1A2B6B",  // Exodus dark blue
-};
-
-
-function getProviderIcon({ type, name: providerOfficialName, size = defaultIconSize, variant = 'branded' }: { type: 'exchange' | 'wallet'; name: string; size?: number; variant?: string }): ReactNode {
-  const normalizedNameProp = cryptoNamePropMap[providerOfficialName] || providerOfficialName.toLowerCase().replace(/\s+/g, '');
-  const brandColor = cryptoBrandColors[normalizedNameProp];
-
-  try {
-    if (type === 'exchange' && ExchangeIcon) {
-      return React.createElement(ExchangeIcon, { name: normalizedNameProp, size, variant, color: brandColor });
-    } else if (type === 'wallet' && WalletIcon) {
-      return React.createElement(WalletIcon, { name: normalizedNameProp, size, variant, color: brandColor });
-    }
-  } catch (e) {
-    console.warn(`Error rendering specific @token-icons/react icon for ${providerOfficialName} (nameProp: ${normalizedNameProp}):`, e);
-  }
-
-  // Fallback to react-icons/fa
-  if (type === 'exchange') {
-    return React.createElement(FaExchangeAlt, { size });
-  } else if (type === 'wallet') {
-    return React.createElement(FaWallet, { size });
-  }
-
-  // Ultimate fallback
+// Simplified function: Will always return DefaultCryptoIcon for now.
+const createSpecificIcon = (
+  providerOfficialName: string,
+  _providerType: 'exchange' | 'wallet' // _providerType is kept for signature consistency if we re-add logic
+): ReactNode => {
+  // const details = specificCryptoIconDetails[providerOfficialName];
+  // if (details && details.iconComponent) {
+  //   try {
+  //     return React.createElement(details.iconComponent, {
+  //       name: details.nameProp, // 'name' prop for dynamic icons like <ExchangeIcon name="binance" />
+  //       size: defaultIconSize,
+  //       variant: "branded", // Common prop for branded versions
+  //       color: details.color, // Optional color override
+  //     });
+  //   } catch (e) {
+  //     console.warn(`Error creating specific icon for ${providerOfficialName}, falling back to default. Error:`, e);
+  //     return React.createElement(DefaultCryptoIcon);
+  //   }
+  // }
   return React.createElement(DefaultCryptoIcon);
-}
+};
 
 
 const popularExchangesRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
@@ -119,14 +77,13 @@ const popularWalletsRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
 
 export const popularExchanges: CryptoProviderInfo[] = popularExchangesRaw.map(provider => ({
     ...provider,
-    iconComponent: getProviderIcon({ type: provider.type, name: provider.name, size: defaultIconSize }),
+    iconComponent: createSpecificIcon(provider.name, provider.type),
 }));
 
 export const popularWallets: CryptoProviderInfo[] = popularWalletsRaw.map(provider => ({
     ...provider,
-    iconComponent: getProviderIcon({ type: provider.type, name: provider.name, size: defaultIconSize }),
+    iconComponent: createSpecificIcon(provider.name, provider.type),
 }));
-
 
 const allProvidersRaw = [
     ...popularExchangesRaw,
@@ -137,7 +94,7 @@ const uniqueProviderNames = new Set<string>();
 export const allCryptoProviders: CryptoProviderInfo[] = allProvidersRaw
   .map(provider => ({
     ...provider,
-    iconComponent: getProviderIcon({ type: provider.type, name: provider.name, size: defaultIconSize }),
+    iconComponent: createSpecificIcon(provider.name, provider.type),
   }))
   .filter(provider => {
     if (uniqueProviderNames.has(provider.name)) {
