@@ -1,60 +1,95 @@
+
 'use client'; 
 
 import type { UserPreferences } from './preferences';
 import { supportedCurrencies as staticSupportedCurrencies, getCurrencySymbol as staticGetCurrencySymbol } from './static-currency-data';
 
 // --- Static Exchange Rates (Relative to BRL for simplicity) ---
-// Prices are: 1 unit of KEY currency = VALUE in BRL
-const exchangeRates: { [key: string]: number } = {
-  BRL: 1,    // 1 BRL = 1 BRL (Base)
-  USD: 5.25, // 1 USD = 5.25 BRL
-  EUR: 5.70, // 1 EUR = 5.70 BRL
-  GBP: 6.30, // 1 GBP = 6.30 BRL (Example update)
-  BTC: 350000.00, // 1 BTC = 350,000.00 BRL
-  // Add more currencies as needed
+// These rates are for demonstration and fallback.
+// For real-time rates, integrate a dedicated currency API (see comments below).
+// Current rates based on recent discussion (approximate):
+// 1 USD = 5.40 BRL
+// 1 EUR = 5.80 BRL
+// To maintain BRL as the base for these static rates:
+// 1 BRL = 1 BRL
+// 1 USD = 5.40 BRL
+// 1 EUR = 5.80 BRL
+// 1 GBP = (e.g., if 1 GBP = 1.18 EUR, then 1.18 * 5.80 BRL) approx 6.84 BRL
+// 1 BTC = (e.g., if 1 BTC = 60000 EUR, then 60000 * 5.80 BRL) approx 348,000 BRL (This is fetched dynamically on Investments page)
+
+const staticExchangeRates: { [key: string]: number } = {
+  BRL: 1,
+  USD: 5.40, // Updated based on discussion
+  EUR: 5.80, // Updated based on discussion
+  GBP: 6.84, // Example derived rate, adjust as needed
+  BTC: 348000.00, // Static fallback, actual BTC price is fetched dynamically
 };
 
-export const supportedCurrencies = Object.keys(exchangeRates);
+export const supportedCurrencies = Object.keys(staticExchangeRates);
 
 /**
- * Converts an amount from a source currency to a target currency.
- * Uses BRL as an intermediary if direct rates are not available.
- * @param amount The amount to convert.
- * @param sourceCurrency The currency code of the amount.
- * @param targetCurrency The currency code to convert to.
- * @returns The converted amount in the target currency.
+ * To implement dynamic real-time fiat currency rates:
+ * 1. Choose an API provider (e.g., ExchangeRate-API.com, Open Exchange Rates).
+ * 2. Obtain an API key from the provider.
+ * 3. Store the API key securely as an environment variable (e.g., NEXT_PUBLIC_EXCHANGE_RATE_API_KEY).
+ * 4. Create a function here to fetch rates:
+ *    async function fetchDynamicRates() {
+ *      const apiKey = process.env.NEXT_PUBLIC_EXCHANGE_RATE_API_KEY;
+ *      if (!apiKey) { console.warn("Dynamic rate API key not set."); return null; }
+ *      try {
+ *        const response = await fetch(`YOUR_API_ENDPOINT_HERE?apikey=${apiKey}`);
+ *        const data = await response.json();
+ *        // Process data.rates and store them, perhaps in a global state or cache.
+ *        // Ensure the rates are structured similarly to staticExchangeRates (e.g., relative to BRL or USD).
+ *      } catch (error) { console.error("Failed to fetch dynamic rates:", error); return null; }
+ *    }
+ * 5. Modify `convertCurrency` to use dynamic rates if available, falling back to static.
+ *    This might involve making `convertCurrency` an async function, which would
+ *    require updating all call sites to use `await`.
  */
+
 export function convertCurrency(amount: number, sourceCurrency: string, targetCurrency: string): number {
   const sourceUpper = sourceCurrency?.toUpperCase();
   const targetUpper = targetCurrency?.toUpperCase();
 
-  if (!sourceUpper || !targetUpper || !amount) { // Also check for amount to avoid NaN issues with 0
-    return amount || 0; // Return 0 if amount is undefined/null/0
+  if (!sourceUpper || !targetUpper || typeof amount !== 'number') {
+    return amount || 0;
   }
-
   if (sourceUpper === targetUpper) {
-      return amount;
+    return amount;
   }
 
-  const sourceRateToBRL = exchangeRates[sourceUpper];
-  const targetRateToBRL = exchangeRates[targetUpper];
+  // Using static rates for now
+  const ratesToUse = staticExchangeRates;
+  const baseCurrencyForRates = 'BRL'; // Static rates are BRL-based
 
-  if (sourceRateToBRL === undefined) {
-    console.warn(`Cannot convert currency: Unsupported source currency (${sourceCurrency}). Rates relative to BRL are missing.`);
-    return amount; // Or throw an error, or return NaN
+  let amountInBase: number;
+
+  if (sourceUpper === baseCurrencyForRates) {
+    amountInBase = amount;
+  } else {
+    const sourceRate = ratesToUse[sourceUpper];
+    if (sourceRate === undefined) {
+      console.warn(`Unsupported source currency (${sourceUpper}) in static rate set.`);
+      return amount; // Cannot convert
+    }
+    // Static rates are defined as (X units of BRL for 1 unit of Foreign Currency)
+    // So, to convert Foreign Currency to BRL (base), we multiply.
+    amountInBase = amount * sourceRate;
   }
-  if (targetRateToBRL === undefined) {
-    console.warn(`Cannot convert currency: Unsupported target currency (${targetCurrency}). Rates relative to BRL are missing.`);
-    return amount; // Or throw an error, or return NaN
+
+  // Convert amount in base (BRL) to target currency
+  if (targetUpper === baseCurrencyForRates) {
+    return amountInBase;
+  } else {
+    const targetRate = ratesToUse[targetUpper];
+    if (targetRate === undefined) {
+      console.warn(`Unsupported target currency (${targetUpper}) in static rate set.`);
+      return amount; // Cannot convert
+    }
+    // To convert BRL (base) to Foreign Currency, we divide by (BRL units for 1 Foreign unit).
+    return amountInBase / targetRate;
   }
-
-  // Convert source amount to BRL
-  const amountInBRL = amount * sourceRateToBRL;
-
-  // Convert amount in BRL to target currency
-  const convertedAmount = amountInBRL / targetRateToBRL;
-  
-  return convertedAmount;
 }
 
 
@@ -67,29 +102,16 @@ function getLocaleForCurrency(currencyCode: string | undefined | null): string {
         case 'USD': return 'en-US';
         case 'EUR': return 'de-DE'; 
         case 'GBP': return 'en-GB';
-        case 'BTC': return 'en-US'; // Bitcoin often uses USD-like formatting for subdivision
+        case 'BTC': return 'en-US';
         default: return 'en-US'; 
     }
 }
 
-/**
- * Formats a number as currency.
- *
- * @param amount The numeric amount to format.
- * @param sourceCurrencyOfAmount The currency code of the input `amount` (e.g., 'USD', 'BRL').
- * @param targetFormatOrConversionCurrency Optional. If `convertToTargetCurrency` is true, this is the currency to convert to.
- *                                        If `convertToTargetCurrency` is false, this parameter is largely ignored for currency choice,
- *                                        but can influence locale if `explicitLocale` is not provided. Formatting will be in `sourceCurrencyOfAmount`.
- * @param convertToTargetCurrency If true (default), converts `amount` from `sourceCurrencyOfAmount` to `targetFormatOrConversionCurrency` before formatting.
- *                                If false, `amount` is formatted in `sourceCurrencyOfAmount`.
- * @param explicitLocale Optional. The locale string for formatting (e.g., 'pt-BR', 'en-US'). If omitted, derived from the final formatting currency.
- * @returns A formatted currency string.
- */
 export function formatCurrency(
     amount: number,
     sourceCurrencyOfAmount: string,
     targetFormatOrConversionCurrency?: string,
-    convertToTargetCurrency: boolean = true, // Default to true, common use case
+    convertToTargetCurrency: boolean = true,
     explicitLocale?: string
 ): string {
     let amountToFormat = amount;
@@ -117,13 +139,12 @@ export function formatCurrency(
     };
 
     if (currencyForFormatting === 'BTC') {
-        options.minimumFractionDigits = 2; // Show more precision for BTC
-        options.maximumFractionDigits = 8; // Max for BTC
+        options.minimumFractionDigits = 2; 
+        options.maximumFractionDigits = 8; 
     } else if (currencyForFormatting === 'BRL' || currencyForFormatting === 'USD' || currencyForFormatting === 'EUR' || currencyForFormatting === 'GBP') {
         options.minimumFractionDigits = 2;
         options.maximumFractionDigits = 2;
     }
-
 
     try {
         return new Intl.NumberFormat(displayLocale, options).format(amountToFormat);
@@ -144,8 +165,9 @@ export function getCurrencySymbol(currencyCode: string | undefined | null): stri
         case 'USD': return '$';
         case 'EUR': return '€';
         case 'GBP': return '£';
-        case 'BTC': return '₿'; // Bitcoin symbol
+        case 'BTC': return '₿';
         default: return upperCaseCode; 
     }
 }
 
+    
