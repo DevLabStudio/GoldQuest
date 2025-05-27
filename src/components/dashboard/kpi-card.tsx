@@ -2,26 +2,26 @@
 'use client';
 
 import type { FC, ReactNode } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from '@/lib/utils';
-import { formatCurrency as formatCurrencyUtil } from '@/lib/currency'; // Renamed to avoid conflict
+import { formatCurrency as formatCurrencyUtil } from '@/lib/currency'; 
 
 interface KpiCardProps {
   title: string;
-  value: string | number; // Can be a pre-formatted string or a number
+  value: string | number;
   tooltip: string;
   icon: ReactNode;
   valueClassName?: string;
   isPercentage?: boolean; 
-  currency?: string; // Optional: currency code for formatting if value is a number
-  href?: string; // For navigation link
+  currency?: string; 
+  href?: string;
 }
 
 const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName, isPercentage, currency, href }) => {
   let displayValue = value;
   if (typeof value === 'number' && !isPercentage && currency) {
-    displayValue = formatCurrencyUtil(value, currency, currency, false); // Format in the given currency, don't convert
+    displayValue = formatCurrencyUtil(value, currency, currency, false);
   } else if (typeof value === 'number' && isPercentage) {
     displayValue = `${value.toFixed(1)}%`;
   }
@@ -38,7 +38,7 @@ const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName
           </CardHeader>
           <CardContent className="p-4 pt-0"> 
             <div className={cn("text-2xl font-bold", valueClassName)}>
-              {displayValue}
+              {String(displayValue)}
             </div>
           </CardContent>
         </Card>
@@ -58,3 +58,4 @@ const KpiCard: FC<KpiCardProps> = ({ title, value, tooltip, icon, valueClassName
 
 export default KpiCard;
 
+    

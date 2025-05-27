@@ -7,7 +7,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
-import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye, ChevronDown, Landmark, Bitcoin as BitcoinIcon } from "lucide-react";
+import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon } from "lucide-react"; // Renamed Edit
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -25,7 +25,7 @@ import AccountBalanceHistoryChart from '@/components/accounts/account-balance-hi
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-
+import { Trash2 } from 'lucide-react'; // Explicitly import Trash2
 
 export default function AccountsPage() {
   const { user, isLoadingAuth } = useAuthContext();
@@ -41,52 +41,46 @@ export default function AccountsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { selectedDateRange } = useDateRange();
 
+  const fetchAllData = useCallback(async () => {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
+        setIsLoading(false);
+        if (!user && !isLoadingAuth) setError("Please log in to view accounts.");
+        return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+        const prefs = await getUserPreferences();
+        setPreferredCurrency(prefs.preferredCurrency);
 
-   const fetchAllData = useCallback(async () => {
-        if (!user || isLoadingAuth || typeof window === 'undefined') {
-            setIsLoading(false);
-            if (!user && !isLoadingAuth) setError("Please log in to view accounts.");
-            return;
+        const fetchedAccounts = await getAccounts();
+        fetchedAccounts.sort((a, b) => {
+            if (a.category === 'asset' && b.category === 'crypto') return -1;
+            if (a.category === 'crypto' && b.category === 'asset') return 1;
+            return a.name.localeCompare(b.name);
+        });
+        setAllAccounts(fetchedAccounts);
+
+        if (fetchedAccounts.length > 0) {
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+            const transactionsByAccount = await Promise.all(transactionPromises);
+            const combinedTransactions = transactionsByAccount.flat();
+            setAllTransactions(combinedTransactions);
+        } else {
+            setAllTransactions([]);
         }
-
-        setIsLoading(true);
-        setError(null);
-        try {
-            const prefs = await getUserPreferences();
-            setPreferredCurrency(prefs.preferredCurrency);
-
-            const fetchedAccounts = await getAccounts();
-            // Sort accounts: assets first, then crypto, then by name
-            fetchedAccounts.sort((a, b) => {
-                if (a.category === 'asset' && b.category === 'crypto') return -1;
-                if (a.category === 'crypto' && b.category === 'asset') return 1;
-                return a.name.localeCompare(b.name);
-            });
-            setAllAccounts(fetchedAccounts);
-
-
-            if (fetchedAccounts.length > 0) {
-                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-                const transactionsByAccount = await Promise.all(transactionPromises);
-                const combinedTransactions = transactionsByAccount.flat();
-                setAllTransactions(combinedTransactions);
-            } else {
-                setAllTransactions([]);
-            }
-
-        } catch (err: any) {
-            console.error("Failed to fetch accounts or transactions:", err);
-            setError("Could not load data. Please ensure local storage is accessible and try again. Details: " + err.message);
-            toast({
-                title: "Error",
-                description: "Failed to load accounts or transactions. Details: " + err.message,
-                variant: "destructive",
-            });
-        } finally {
-            setIsLoading(false);
-        }
-    }, [toast, user, isLoadingAuth]);
-
+    } catch (err: any) {
+        console.error("Failed to fetch accounts or transactions:", err);
+        setError("Could not load data. Details: " + err.message);
+        toast({
+            title: "Error",
+            description: "Failed to load accounts or transactions. Details: " + err.message,
+            variant: "destructive",
+        });
+    } finally {
+        setIsLoading(false);
+    }
+  }, [toast, user, isLoadingAuth]);
 
   useEffect(() => {
     if (user && !isLoadingAuth) {
@@ -104,22 +98,14 @@ export default function AccountsPage() {
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
 
-
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
-                console.log(`Storage change (key: ${event.key || 'custom'}), refetching data for accounts page...`);
                 fetchAllData();
             }
         }
     };
-
-    if (typeof window !== 'undefined') {
-        window.addEventListener('storage', handleStorageChange);
-    }
-
+    if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
     return () => {
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('storage', handleStorageChange);
-        }
+        if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
   }, [fetchAllData, user, isLoadingAuth]);
 
@@ -143,7 +129,7 @@ export default function AccountsPage() {
     }
   };
 
-   const handleAccountUpdated = async (updatedAccountData: Account) => {
+  const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
       setIsEditDialogOpen(false);
@@ -163,7 +149,7 @@ export default function AccountsPage() {
     }
   };
 
-   const handleDeleteAccount = async (accountId: string) => {
+  const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
         toast({
@@ -211,24 +197,24 @@ export default function AccountsPage() {
     const chartStartDate = startOfDay(selectedDateRange.from || minTxDateOverall);
     const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall);
 
-    const initialChartBalances: { [accountId: string]: number } = {};
+    const initialChartBalancesInAccountCurrency: { [accountId: string]: number } = {};
     relevantAccounts.forEach(acc => {
-        let balanceAtChartStart = acc.balance; // This is the current balance
-        // Roll back transactions that happened *after* the chartStartDate
+        let balanceAtChartStart = 0;
+        const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
+        if (primaryBalance) {
+            balanceAtChartStart = primaryBalance.amount;
+        }
+
         allTransactions
-            .filter(tx => {
-                const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return tx.accountId === acc.id && txDate >= chartStartDate;
-            })
+            .filter(tx => tx.accountId === acc.id && parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z') >= chartStartDate)
             .forEach(tx => {
-                let amountInAccountCurrency = tx.amount;
-                // Ensure transaction currency is converted to account's primary currency
-                if (tx.transactionCurrency && acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
-                    amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
+                let amountInAccountPrimaryCurrency = tx.amount;
+                if (tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency?.toUpperCase()) {
+                    amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency!);
                 }
-                balanceAtChartStart -= amountInAccountCurrency; // Subtract future transactions to get past balance
+                balanceAtChartStart -= amountInAccountPrimaryCurrency;
             });
-        initialChartBalances[acc.id] = balanceAtChartStart;
+        initialChartBalancesInAccountCurrency[acc.id] = balanceAtChartStart;
     });
 
     const chartDatesSet = new Set<string>();
@@ -249,13 +235,13 @@ export default function AccountsPage() {
     if (sortedUniqueChartDates.length === 0) {
          const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
          relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(initialChartBalances[acc.id] || 0, acc.primaryCurrency, preferredCurrency) : 0;
+             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(initialChartBalancesInAccountCurrency[acc.id] || 0, acc.primaryCurrency, preferredCurrency) : 0;
          });
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalancesInAccountCurrency = { ...initialChartBalances };
+    const runningBalancesInAccountCurrency = { ...initialChartBalancesInAccountCurrency };
 
     sortedUniqueChartDates.forEach((currentDisplayDate) => {
         allTransactions
@@ -266,11 +252,11 @@ export default function AccountsPage() {
             .forEach(tx => {
                 const account = relevantAccounts.find(a => a.id === tx.accountId);
                 if (account && account.primaryCurrency) {
-                    let amountInAccountCurrency = tx.amount;
-                     if (tx.transactionCurrency && account.primaryCurrency && tx.transactionCurrency.toUpperCase() !== account.primaryCurrency.toUpperCase()) {
-                        amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.primaryCurrency);
+                    let amountInAccountPrimaryCurrency = tx.amount;
+                     if (tx.transactionCurrency.toUpperCase() !== account.primaryCurrency.toUpperCase()) {
+                        amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.primaryCurrency);
                     }
-                    runningBalancesInAccountCurrency[tx.accountId] = (runningBalancesInAccountCurrency[tx.accountId] || 0) + amountInAccountCurrency;
+                    runningBalancesInAccountCurrency[tx.accountId] = (runningBalancesInAccountCurrency[tx.accountId] || 0) + amountInAccountPrimaryCurrency;
                 }
             });
 
@@ -299,7 +285,6 @@ export default function AccountsPage() {
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
          <h1 className="text-3xl font-bold">Accounts Management</h1>
-         {/* Add buttons are now within the unified table card */}
       </div>
 
         {error && (
@@ -375,7 +360,6 @@ export default function AccountsPage() {
                                 <TableHead>Type</TableHead>
                                 <TableHead>Current balance</TableHead>
                                 <TableHead>Last activity</TableHead>
-                                <TableHead>Balance difference</TableHead>
                                 <TableHead className="text-right">Actions</TableHead>
                             </TableRow>
                         </TableHeader>
@@ -387,7 +371,6 @@ export default function AccountsPage() {
                                 <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                                 <TableCell><Skeleton className="h-5 w-28" /></TableCell>
                                 <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                                <TableCell><Skeleton className="h-5 w-20" /></TableCell>
                                 <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
                                 </TableRow>
                             ))}
@@ -396,9 +379,11 @@ export default function AccountsPage() {
                  ) : allAccounts.length > 0 ? (
                     <Accordion type="multiple" className="w-full">
                         {allAccounts.map((account) => {
-                            const primaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0];
+                            const primaryBalanceEntry = account.balances && account.balances.length > 0
+                                ? account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0]
+                                : null;
                             const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
-                            const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : account.primaryCurrency || 'N/A';
+                            const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
 
                             return (
                             <AccordionItem value={account.id} key={account.id} className="border-b">
@@ -412,7 +397,6 @@ export default function AccountsPage() {
                                             <col style={{ width: '15%' }} />
                                             <col style={{ width: '10%' }} />
                                         </colgroup>
-                                        {/* Only render TableHeader visually for the first item by hiding subsequent ones */}
                                         { allAccounts.indexOf(account) === 0 && (
                                             <TableHeader className="[&_tr]:border-0">
                                                 <TableRow className="hover:bg-transparent">
@@ -472,7 +456,7 @@ export default function AccountsPage() {
                                                             </Link>
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem onClick={() => openEditDialog(account)}>
-                                                        <Edit className="mr-2 h-4 w-4" />
+                                                        <EditIcon className="mr-2 h-4 w-4" />
                                                         <span>Edit</span>
                                                         </DropdownMenuItem>
                                                         <DropdownMenuItem
@@ -491,7 +475,7 @@ export default function AccountsPage() {
                                 </AccordionTrigger>
                                 <AccordionContent className="px-4 pt-3 pb-4 bg-muted/10 rounded-b-md border-t">
                                     <p className="text-sm text-muted-foreground mb-2">Other currency balances for {account.name}:</p>
-                                    {account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 ? (
+                                    {account.balances && account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 ? (
                                         <ul className="list-disc pl-5 text-xs space-y-1">
                                             {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
                                                 <li key={bal.currency}>
@@ -543,7 +527,6 @@ export default function AccountsPage() {
             </CardContent>
         </Card>
 
-
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
           if (!open) setSelectedAccount(null);
@@ -563,7 +546,8 @@ export default function AccountsPage() {
               )}
           </DialogContent>
       </Dialog>
-
     </div>
   );
 }
+
+    

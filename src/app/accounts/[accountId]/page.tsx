@@ -16,7 +16,7 @@ import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Removed DialogDescription
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, ArrowLeft, CopyPlus } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
@@ -62,7 +62,6 @@ export default function AccountDetailPage() {
   const [selectedTransaction, setSelectedTransaction] = useState<Transaction | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
-
 
   const fetchData = useCallback(async () => {
     if (!user || isLoadingAuth || typeof window === 'undefined' || !accountId) {
@@ -125,22 +124,14 @@ export default function AccountDetailPage() {
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
-
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
-                console.log(`Storage change for account ${accountId} (key: ${event.key || 'custom'}), refetching data...`);
                 fetchData();
             }
         }
     };
-
-    if (typeof window !== 'undefined') {
-        window.addEventListener('storage', handleStorageChange);
-    }
-
+    if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
     return () => {
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('storage', handleStorageChange);
-        }
+        if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
   }, [accountId, fetchData, user, isLoadingAuth]);
 
@@ -156,9 +147,7 @@ export default function AccountDetailPage() {
 
   const spendingData = useMemo(() => {
       if (isLoading || !account || !filteredTransactions.length) return [];
-
       const categoryTotals: { [key: string]: number } = {};
-
       filteredTransactions.forEach(tx => {
           if (tx.amount < 0 && tx.category !== 'Transfer') {
               const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
@@ -166,7 +155,6 @@ export default function AccountDetailPage() {
               categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
           }
       });
-
       return Object.entries(categoryTotals)
           .map(([category, amount]) => ({ category: category.charAt(0).toUpperCase() + category.slice(1), amount }))
           .sort((a, b) => b.amount - a.amount);
@@ -379,6 +367,10 @@ export default function AccountDetailPage() {
     );
   }
 
+  const primaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0];
+  const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+  const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
@@ -387,8 +379,8 @@ export default function AccountDetailPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
             </Button>
             <h1 className="text-3xl font-bold">{account.name} - Transactions</h1>
-            <p className="text-muted-foreground">Balance: {formatCurrency(account.balance, account.currency, account.currency, false)}
-                {account.currency !== preferredCurrency && ` (≈ ${formatCurrency(account.balance, account.currency, preferredCurrency, true)})`}
+            <p className="text-muted-foreground">Balance: {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
+                {displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && ` (≈ ${formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})`}
             </p>
         </div>
         <DropdownMenu>
@@ -618,10 +610,10 @@ export default function AccountDetailPage() {
               initialType={transactionTypeToAdd}
               initialData={
                 clonedTransactionData ||
-                (transactionTypeToAdd !== 'transfer' && account
-                    ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                    : (transactionTypeToAdd === 'transfer' && account 
-                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date(), toAccountCurrency: allAccounts.find(a => a.id !== account.id)?.currency || account.currency }
+                (transactionTypeToAdd !== 'transfer' && account && account.primaryCurrency
+                    ? { accountId: account.id, transactionCurrency: account.primaryCurrency, date: new Date() }
+                    : (transactionTypeToAdd === 'transfer' && account && account.primaryCurrency
+                        ? { fromAccountId: account.id, transactionCurrency: account.primaryCurrency, date: new Date(), toAccountCurrency: allAccounts.find(a => a.id !== account.id)?.primaryCurrency || account.primaryCurrency }
                         : {date: new Date()}) 
                 )
               }
@@ -632,3 +624,5 @@ export default function AccountDetailPage() {
     </div>
   );
 }
+
+    

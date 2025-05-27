@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -6,7 +7,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -18,12 +18,13 @@ import Image from 'next/image';
 
 const allowedFiatCurrenciesForCrypto = ['EUR', 'USD', 'BRL'] as const;
 
+// Updated schema to reflect primary balance editing
 const formSchema = z.object({
   providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
   accountType: z.string().min(1, "Account type is required"),
-  currency: z.string().min(3, "Currency is required"), // Validated dynamically below
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
+  primaryCurrency: z.string().min(3, "Primary currency is required"),
+  primaryBalance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
   includeInNetWorth: z.boolean().optional(),
 });
 
@@ -35,11 +36,7 @@ interface EditAccountFormProps {
 }
 
 const getProviderList = (category: 'asset' | 'crypto'): Array<BankInfo | CryptoProviderInfo> => {
-    if (category === 'asset') {
-        return popularBanks;
-    } else {
-        return allCryptoProviders;
-    }
+    return category === 'asset' ? popularBanks : allCryptoProviders;
 }
 
 const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: string }[] => {
@@ -62,44 +59,67 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
 }
 
 const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }) => {
+  const currentPrimaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0] || { currency: 'USD', amount: 0 };
+
   const form = useForm<EditAccountFormData>({
     resolver: zodResolver(formSchema.refine(data => {
         if (account.category === 'crypto') {
-            return allowedFiatCurrenciesForCrypto.includes(data.currency.toUpperCase() as any);
+            return allowedFiatCurrenciesForCrypto.includes(data.primaryCurrency.toUpperCase() as any);
         }
-        return supportedCurrencies.includes(data.currency.toUpperCase());
+        return supportedCurrencies.includes(data.primaryCurrency.toUpperCase());
     }, {
         message: account.category === 'crypto' ? `Currency for crypto accounts must be one of: ${allowedFiatCurrenciesForCrypto.join(', ')}` : "Unsupported currency",
-        path: ['currency'],
+        path: ['primaryCurrency'],
     })),
     defaultValues: {
       providerName: account.providerName || "",
       accountName: account.name,
       accountType: account.type,
-      currency: account.currency.toUpperCase(),
-      balance: account.balance,
+      primaryCurrency: account.primaryCurrency || currentPrimaryBalanceEntry.currency,
+      primaryBalance: currentPrimaryBalanceEntry.amount,
       includeInNetWorth: account.includeInNetWorth ?? true,
     },
   });
 
   function onSubmit(values: EditAccountFormData) {
+    // Find the index of the primary balance in the existing balances array
+    const primaryBalanceIndex = account.balances.findIndex(b => b.currency === values.primaryCurrency.toUpperCase());
+    let updatedBalances = [...account.balances];
+
+    if (primaryBalanceIndex !== -1) {
+        // Update existing primary balance
+        updatedBalances[primaryBalanceIndex] = { currency: values.primaryCurrency.toUpperCase(), amount: values.primaryBalance };
+    } else {
+        // If the primary currency changed to one not in balances, add/update it.
+        // This case needs careful handling: should we remove old primary, or just add new?
+        // For simplicity, let's assume primaryCurrency must be one of the existing balance currencies or we add it.
+        // A more robust UI might let user pick from existing balance currencies.
+        updatedBalances.push({ currency: values.primaryCurrency.toUpperCase(), amount: values.primaryBalance });
+        // And if the old primaryCurrency is still there and different, it remains as a secondary balance.
+    }
+    
+    // Ensure primaryCurrency is among the ones in the balances array
+    if (!updatedBalances.some(b => b.currency === values.primaryCurrency.toUpperCase())) {
+        updatedBalances.push({ currency: values.primaryCurrency.toUpperCase(), amount: values.primaryBalance });
+    }
+
+
     const updatedAccountData: Account = {
         ...account,
         name: values.accountName,
         type: values.accountType,
-        balance: values.balance,
-        currency: values.currency.toUpperCase(),
         providerName: values.providerName,
+        balances: updatedBalances,
+        primaryCurrency: values.primaryCurrency.toUpperCase(),
         includeInNetWorth: values.includeInNetWorth ?? true,
     };
     onAccountUpdated(updatedAccountData);
   }
 
-  const selectedCurrency = form.watch('currency');
+  const selectedPrimaryCurrency = form.watch('primaryCurrency');
   const providerList = getProviderList(account.category);
   const accountTypes = getAccountTypes(account.category);
   const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : supportedCurrencies;
-
 
   return (
     <Form {...form}>
@@ -192,14 +212,14 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
             />
             <FormField
                 control={form.control}
-                name="currency"
+                name="primaryCurrency"
                 render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Currency</FormLabel>
+                    <FormLabel>Primary Currency</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                         <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
+                        <SelectValue placeholder="Select primary currency" />
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -211,7 +231,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     </SelectContent>
                     </Select>
                     <FormDescription>
-                        {account.category === 'crypto' ? 'Fiat currency for this crypto account.' : 'Account currency.'}
+                        The main currency for this account's display and primary balance.
                     </FormDescription>
                     <FormMessage />
                 </FormItem>
@@ -221,10 +241,10 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
 
         <FormField
             control={form.control}
-            name="balance"
+            name="primaryBalance"
             render={({ field }) => (
             <FormItem>
-                <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                <FormLabel>Primary Balance ({getCurrencySymbol(selectedPrimaryCurrency || 'BRL')})</FormLabel>
                 <FormControl>
                 <Input type="number" placeholder="0.00" step="0.01" {...field} />
                 </FormControl>
@@ -233,7 +253,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
             )}
         />
          <FormDescription>
-            Enter the current balance in the selected currency.
+            Enter the current balance for the selected primary currency.
          </FormDescription>
 
         <FormField
@@ -252,7 +272,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                   Include in Net Worth Calculations
                 </FormLabel>
                 <FormDescription>
-                  If checked, this account's balance will be part of your total net worth and dashboard summaries.
+                  If checked, this account's balances will be part of your total net worth and dashboard summaries.
                 </FormDescription>
               </div>
             </FormItem>
@@ -266,3 +286,5 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
 };
 
 export default EditAccountForm;
+
+    
