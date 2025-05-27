@@ -7,10 +7,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
-import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye } from "lucide-react";
+import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye, ChevronDown } from "lucide-react"; // Added ChevronDown
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion"; // Import Accordion
 import AddAccountForm from '@/components/accounts/add-account-form';
 import AddCryptoForm from '@/components/accounts/add-crypto-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
@@ -203,18 +204,21 @@ export default function AccountsPage() {
     const maxTxDateOverall = allTxDates.length > 0 ? allTxDates.reduce((max, d) => d > max ? d : max, allTxDates[0]) : new Date();
 
     const chartStartDate = startOfDay(selectedDateRange.from || minTxDateOverall);
-    const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall); 
+    const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall);
 
     const initialChartBalances: { [accountId: string]: number } = {};
     relevantAccounts.forEach(acc => {
-        let balanceAtChartStart = acc.balance; 
+        let balanceAtChartStart = acc.balance;
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return tx.accountId === acc.id && txDate >= chartStartDate; 
+                return tx.accountId === acc.id && txDate >= chartStartDate;
             })
             .forEach(tx => {
-                const amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                let amountInAccountCurrency = tx.amount;
+                if (tx.transactionCurrency && acc.currency && tx.transactionCurrency.toUpperCase() !== acc.currency.toUpperCase()) {
+                    amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                }
                 balanceAtChartStart -= amountInAccountCurrency;
             });
         initialChartBalances[acc.id] = balanceAtChartStart;
@@ -222,31 +226,31 @@ export default function AccountsPage() {
 
 
     const chartDatesSet = new Set<string>();
-    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); 
+    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd'));
     allTransactions.forEach(tx => {
         const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
         if (txDate >= chartStartDate && txDate <= chartEndDate) {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
-    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd')); 
+    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
 
 
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
         .sort(compareAsc)
-        .filter(date => date <= chartEndDate); 
+        .filter(date => date <= chartEndDate);
 
     if (sortedUniqueChartDates.length === 0) {
          const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
          relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = convertCurrency(initialChartBalances[acc.id] || 0, acc.currency, preferredCurrency);
+             dataPoint[acc.name] = acc.currency ? convertCurrency(initialChartBalances[acc.id] || 0, acc.currency, preferredCurrency) : 0;
          });
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalancesInAccountCurrency = { ...initialChartBalances }; 
+    const runningBalancesInAccountCurrency = { ...initialChartBalances };
 
     sortedUniqueChartDates.forEach((currentDisplayDate) => {
         allTransactions
@@ -256,8 +260,11 @@ export default function AccountsPage() {
             })
             .forEach(tx => {
                 const account = relevantAccounts.find(a => a.id === tx.accountId);
-                if (account) {
-                    const amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.currency);
+                if (account && account.currency) {
+                    let amountInAccountCurrency = tx.amount;
+                     if (tx.transactionCurrency && account.currency && tx.transactionCurrency.toUpperCase() !== account.currency.toUpperCase()) {
+                        amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.currency);
+                    }
                     runningBalancesInAccountCurrency[tx.accountId] = (runningBalancesInAccountCurrency[tx.accountId] || 0) + amountInAccountCurrency;
                 }
             });
@@ -265,7 +272,7 @@ export default function AccountsPage() {
         const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
         relevantAccounts.forEach(acc => {
-            dailySnapshot[acc.name] = convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.currency, preferredCurrency);
+            dailySnapshot[acc.name] = acc.currency ? convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.currency, preferredCurrency) : 0;
         });
         
         const existingEntryIndex = historicalData.findIndex(hd => hd.date === dateStr);
@@ -320,114 +327,167 @@ export default function AccountsPage() {
          <CardDescription>View and manage your manually added {category} accounts.</CardDescription>
       </CardHeader>
       <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
-              <TableHead>Current balance</TableHead>
-              <TableHead>Last activity</TableHead>
-              <TableHead>Balance difference</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              [...Array(2)].map((_, i) => (
-                <TableRow key={`skeleton-${category}-${i}`}>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
-                </TableRow>
-              ))
-            ) : accounts.length > 0 ? (
-              accounts.map((account) => (
-                <TableRow key={account.id} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">
-                     <Link href={`/accounts/${account.id}`} passHref>
-                       <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline">
-                          {account.name}
-                       </Button>
-                     </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-primary">
-                        {formatCurrency(account.balance, account.currency, account.currency, false)}
-                      </span>
-                      {preferredCurrency && account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                        <span className="text-xs text-muted-foreground mt-1">
-                            (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                   <TableCell className="text-muted-foreground">
-                       {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
-                   </TableCell>
-                   <TableCell className="text-muted-foreground">
-                       {formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false)}
-                   </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                            <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
-                                <Eye className="mr-2 h-4 w-4" />
-                                <span>View Transactions</span>
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEditDialog(account)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          <span>Edit</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDeleteAccount(account.id)}
-                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          <span>Delete</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No {category} accounts added yet.
-                   <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-                     <DialogTrigger asChild>
-                        <Button variant="default" size="sm" className="ml-2">
-                           <PlusCircle className="mr-2 h-4 w-4" /> Add your first {category} account
-                        </Button>
-                      </DialogTrigger>
-                     <DialogContent className="sm:max-w-3xl">
-                        <DialogHeader>
-                          <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                           <DialogDescription>
-                              Enter the details of your new {category} account.
-                           </DialogDescription>
-                        </DialogHeader>
-                         <AddFormComponent onAccountAdded={handleAccountAdded} />
-                     </DialogContent>
-                   </Dialog>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+        {isLoading ? (
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
+                        <TableHead>Current balance</TableHead>
+                        <TableHead>Last activity</TableHead>
+                        <TableHead>Balance difference</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {[...Array(2)].map((_, i) => (
+                        <TableRow key={`skeleton-${category}-${i}`}>
+                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-32" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-28" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-24" /></TableCell>
+                        <TableCell><Skeleton className="h-5 w-20" /></TableCell>
+                        <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
+                        </TableRow>
+                    ))}
+                </TableBody>
+            </Table>
+        ) : accounts.length > 0 ? (
+            <Accordion type="multiple" className="w-full">
+                {accounts.map((account) => (
+                    <AccordionItem value={account.id} key={account.id} className="border-b-0">
+                        <AccordionTrigger className="hover:no-underline hover:bg-muted/50 px-2 py-0 rounded-md -mx-2">
+                             <Table className="w-full table-fixed"> {/* Use table-fixed for consistent column widths */}
+                                <colgroup>
+                                    <col style={{ width: '25%' }} />
+                                    <col style={{ width: '20%' }} />
+                                    <col style={{ width: '20%' }} />
+                                    <col style={{ width: '15%' }} />
+                                    <col style={{ width: '10%' }} />
+                                    <col style={{ width: '10%' }} />
+                                </colgroup>
+                                { /* Only render TableHeader for the first item or outside the map if columns are always the same */ }
+                                { accounts.indexOf(account) === 0 && (
+                                    <TableHeader className="invisible h-0">
+                                        <TableRow>
+                                            <TableHead className="py-0">Name</TableHead>
+                                            <TableHead className="py-0">{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
+                                            <TableHead className="py-0">Current balance</TableHead>
+                                            <TableHead className="py-0">Last activity</TableHead>
+                                            <TableHead className="py-0">Balance diff.</TableHead>
+                                            <TableHead className="text-right py-0">Actions</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                )}
+                                <TableBody>
+                                    <TableRow className="border-b-0 hover:bg-transparent data-[state=selected]:bg-transparent">
+                                        <TableCell className="font-medium py-3 truncate">
+                                            <Link href={`/accounts/${account.id}`} passHref>
+                                            <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline" onClick={(e) => e.stopPropagation()}>
+                                                {account.name}
+                                            </Button>
+                                            </Link>
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground py-3 truncate">{account.providerName || 'N/A'}</TableCell>
+                                        <TableCell className="py-3">
+                                            <div className="flex flex-col">
+                                            <span className="font-semibold text-primary">
+                                                {account.currency ? formatCurrency(account.balance, account.currency, account.currency, false) : 'N/A'}
+                                            </span>
+                                            {preferredCurrency && account.currency && account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                                <span className="text-xs text-muted-foreground mt-1">
+                                                    (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
+                                                </span>
+                                            )}
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground py-3 truncate">
+                                            {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-muted-foreground py-3 truncate">
+                                            {account.currency ? formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false) : 'N/A'}
+                                        </TableCell>
+                                        <TableCell className="text-right py-3">
+                                            <DropdownMenu>
+                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                                <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                                                <span className="sr-only">Open menu</span>
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem asChild>
+                                                    <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
+                                                        <Eye className="mr-2 h-4 w-4" />
+                                                        <span>View Transactions</span>
+                                                    </Link>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => openEditDialog(account)}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                <span>Edit</span>
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem
+                                                onClick={() => handleDeleteAccount(account.id)}
+                                                className="text-destructive focus:text-destructive focus:bg-destructive/10"
+                                                >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                <span>Delete</span>
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                            </DropdownMenu>
+                                        </TableCell>
+                                    </TableRow>
+                                </TableBody>
+                            </Table>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 py-3 bg-muted/20 rounded-b-md">
+                            <p className="text-sm text-muted-foreground mb-2">Sub-accounts for {account.name}:</p>
+                            {/* Placeholder for sub-accounts list */}
+                            <p className="text-xs text-muted-foreground italic">Sub-account display coming soon.</p>
+                            <Button variant="outline" size="sm" className="mt-2">
+                                <PlusCircle className="mr-2 h-3.5 w-3.5" /> Add Sub-Account
+                            </Button>
+                        </AccordionContent>
+                    </AccordionItem>
+                ))}
+            </Accordion>
+        ) : (
+            <Table>
+                <TableHeader>
+                     <TableRow>
+                        <TableHead>Name</TableHead>
+                        <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
+                        <TableHead>Current balance</TableHead>
+                        <TableHead>Last activity</TableHead>
+                        <TableHead>Balance difference</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    <TableRow>
+                        <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                        No {category} accounts added yet.
+                        <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
+                            <DialogTrigger asChild>
+                                <Button variant="default" size="sm" className="ml-2">
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add your first {category} account
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-3xl">
+                                <DialogHeader>
+                                <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
+                                <DialogDescription>
+                                    Enter the details of your new {category} account.
+                                </DialogDescription>
+                                </DialogHeader>
+                                <AddFormComponent onAccountAdded={handleAccountAdded} />
+                            </DialogContent>
+                        </Dialog>
+                        </TableCell>
+                    </TableRow>
+                </TableBody>
+            </Table>
+        )}
       </CardContent>
         {!isLoading && accounts.length > 0 && (
           <CardContent className="pt-4 border-t">
@@ -530,4 +590,3 @@ export default function AccountsPage() {
     </div>
   );
 }
-
