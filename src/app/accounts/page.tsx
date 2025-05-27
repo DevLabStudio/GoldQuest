@@ -357,7 +357,7 @@ export default function AccountsPage() {
                 {accounts.map((account) => (
                     <AccordionItem value={account.id} key={account.id} className="border-b-0">
                         <AccordionTrigger className="hover:no-underline hover:bg-muted/50 px-2 py-0 rounded-md -mx-2">
-                             <Table className="w-full table-fixed"> {/* Use table-fixed for consistent column widths */}
+                             <Table className="w-full table-fixed">{/* Ensure no leading/trailing spaces or newlines inside this JSX tag */}
                                 <colgroup>
                                     <col style={{ width: '25%' }} />
                                     <col style={{ width: '20%' }} />
@@ -590,3 +590,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+
