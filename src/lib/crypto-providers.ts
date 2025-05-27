@@ -1,4 +1,5 @@
 
+import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
 import {
@@ -7,7 +8,15 @@ import {
 } from '@token-icons/react';
 
 const defaultIconSize = 20;
-const DefaultCryptoIcon = () => <WalletCards size={defaultIconSize} className="text-muted-foreground" />;
+
+const DefaultCryptoIcon = () => {
+  return (
+    <WalletCards
+      size={20} // Hardcoded size
+      className="text-muted-foreground"
+    />
+  );
+};
 
 
 export interface CryptoProviderInfo {
