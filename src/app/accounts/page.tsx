@@ -196,56 +196,97 @@ export default function AccountsPage() {
 
     const chartStartDate = startOfDay(selectedDateRange.from || minTxDateOverall);
     const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall);
-
+    
     const initialChartBalances = new Map<string, number>();
 
     relevantAccounts.forEach(acc => {
-        let balanceAtChartStart = acc.balances.find(b => b.currency === acc.primaryCurrency)?.amount || 0;
+        // Start with the current balance and roll back transactions *after* the chart start date
+        const primaryBalanceEntry = acc.balances.find(b => b.currency === acc.primaryCurrency);
+        let balanceAtChartStart = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
 
+        // Subtract transactions that happened between chartStartDate and now (or end of tx data)
         allTransactions
-            .filter(tx => tx.accountId === acc.id && parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z') < chartStartDate)
+            .filter(tx => {
+                const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                return tx.accountId === acc.id && txDate >= chartStartDate && txDate <= maxTxDateOverall;
+            })
             .forEach(tx => {
                 let amountInAccountPrimaryCurrency = tx.amount;
                 if (acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
                     amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
                 }
-                balanceAtChartStart += amountInAccountPrimaryCurrency;
+                balanceAtChartStart -= amountInAccountPrimaryCurrency; // Subtract to roll back
             });
+            
+        // Now add transactions that happened *before* chartStartDate to this rolled-back balance
+        allTransactions
+            .filter(tx => {
+                const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                return tx.accountId === acc.id && txDate < chartStartDate;
+            })
+            .forEach(tx => {
+                let amountInAccountPrimaryCurrency = tx.amount;
+                 if (acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
+                    amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
+                }
+                balanceAtChartStart += amountInAccountPrimaryCurrency; // Add to build up to chart start
+            });
+
         initialChartBalances.set(acc.id, balanceAtChartStart);
     });
 
+
     const chartDatesSet = new Set<string>();
-    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd'));
+    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); // Always include the chart start date
     allTransactions.forEach(tx => {
         const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
         if (txDate >= chartStartDate && txDate <= chartEndDate && relevantAccounts.some(ra => ra.id === tx.accountId)) {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
-    if (allTxDates.length === 0 || isSameDay(chartEndDate, new Date()) || chartEndDate > maxTxDateOverall) {
+     // Always include the chart end date if it's within reasonable bounds or current
+    if (allTxDates.length === 0 || chartEndDate <= new Date() || chartEndDate >= maxTxDateOverall) {
         chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
     }
+
 
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
         .sort(compareAsc)
-        .filter(date => date <= chartEndDate);
+        .filter(date => date >= chartStartDate && date <= chartEndDate);
 
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
     const runningBalances = new Map<string, number>(initialChartBalances);
 
-    if (sortedUniqueChartDates.length === 0) {
+    if (sortedUniqueChartDates.length === 0) { // Handle case with no transactions in range
          const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
          relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(initialChartBalances.get(acc.id) || 0, acc.primaryCurrency, preferredCurrency) : 0;
+             const balanceForChart = initialChartBalances.get(acc.id) || 0;
+             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(balanceForChart, acc.primaryCurrency, preferredCurrency) : 0;
          });
+         // Add a second point for the end of the range if it's different
+         if (!isSameDay(chartStartDate, chartEndDate)) {
+            const endDataPoint = { ...dataPoint, date: formatDateFns(chartEndDate, 'yyyy-MM-dd')};
+            return { data: [dataPoint, endDataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
+         }
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
+    
+    // Ensure the very first point is the chartStartDate with initial balances
+    const firstDataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
+    relevantAccounts.forEach(acc => {
+        const balanceForChart = initialChartBalances.get(acc.id) || 0;
+        firstDataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(balanceForChart, acc.primaryCurrency, preferredCurrency) : 0;
+    });
+    historicalData.push(firstDataPoint);
 
-    sortedUniqueChartDates.forEach((currentDisplayDate, dateIndex) => {
-        const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
-        const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
+
+    sortedUniqueChartDates.forEach((currentDisplayDate) => {
+        // Skip if currentDisplayDate is the same as chartStartDate and we've already added it
+        if (isSameDay(currentDisplayDate, chartStartDate) && historicalData.length > 0 && historicalData[0].date === formatDateFns(chartStartDate, 'yyyy-MM-dd')) {
+            // We only process transactions for chartStartDate, running balances are already set
+        }
 
         allTransactions
             .filter(tx => {
@@ -262,23 +303,37 @@ export default function AccountsPage() {
                     runningBalances.set(tx.accountId, (runningBalances.get(tx.accountId) || 0) + amountInAccountPrimaryCurrency);
                 }
             });
+        
+        const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
+        // Update existing point for chartStartDate or add new point for other dates
+        const existingPointIndex = historicalData.findIndex(p => p.date === dateStr);
+        const dailySnapshot: { date: string, [key: string]: any } = existingPointIndex !== -1 ? historicalData[existingPointIndex] : { date: dateStr };
 
         relevantAccounts.forEach(acc => {
-            dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(runningBalances.get(acc.id) || 0, acc.primaryCurrency, preferredCurrency) : 0;
+            const balanceForChart = runningBalances.get(acc.id) || 0;
+            dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(balanceForChart, acc.primaryCurrency, preferredCurrency) : 0;
         });
         
-        historicalData.push(dailySnapshot);
+        if (existingPointIndex === -1) {
+            historicalData.push(dailySnapshot);
+        }
     });
+    
+    // Ensure the chart extends to chartEndDate if no transactions on that day
+    const lastChartDateStr = formatDateFns(chartEndDate, 'yyyy-MM-dd');
+    if (historicalData.length > 0 && historicalData[historicalData.length -1].date !== lastChartDateStr && !isSameDay(chartStartDate, chartEndDate) ) {
+        const lastKnownBalances = { ...historicalData[historicalData.length - 1], date: lastChartDateStr };
+        historicalData.push(lastKnownBalances);
+    }
     
     historicalData.sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)));
     
-    if (historicalData.length === 1 && sortedUniqueChartDates.length > 1) {
-        const lastDateStr = formatDateFns(sortedUniqueChartDates[sortedUniqueChartDates.length - 1], 'yyyy-MM-dd');
-        if (historicalData[0].date !== lastDateStr) {
-            historicalData.push({ ...historicalData[0], date: lastDateStr });
-        }
-    }
-    return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
+    // Deduplicate if chartStartDate or chartEndDate were added twice
+    const uniqueHistoricalData = historicalData.filter((item, index, self) =>
+        index === self.findIndex((t) => t.date === item.date)
+    );
+
+    return { data: uniqueHistoricalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
 
   }, [allAccounts, allTransactions, preferredCurrency, isLoading, selectedDateRange]);
 
@@ -356,7 +411,7 @@ export default function AccountsPage() {
                  {isLoading && allAccounts.length === 0 ? (
                     <div className="space-y-3">
                         {[...Array(3)].map((_, i) => (
-                            <Card key={`skeleton-all-${i}`} className="p-4">
+                            <Card key={`skeleton-all-${i}`} className="p-4 border rounded-lg shadow-sm bg-card">
                                 <div className="flex justify-between items-center">
                                     <div className="space-y-1">
                                         <Skeleton className="h-5 w-24" />
@@ -383,8 +438,8 @@ export default function AccountsPage() {
                                         <div className="truncate">
                                             <Link
                                                 href={`/accounts/${account.id}`}
+                                                className={cn(buttonVariants({ variant: "link", size: "sm" }), "p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline focus:outline-none focus:ring-1 focus:ring-primary rounded")}
                                                 onClick={(e) => e.stopPropagation()}
-                                                className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline focus:outline-none focus:ring-1 focus:ring-primary rounded"
                                                 aria-label={`View account ${account.name}`}
                                             >
                                                 {account.name}
@@ -416,10 +471,17 @@ export default function AccountsPage() {
                                         <div className="flex-shrink-0"> {/* Ensure actions don't cause overflow */}
                                             <DropdownMenu>
                                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 p-0">
-                                                <span className="sr-only">Open menu</span>
-                                                <MoreHorizontal className="h-4 w-4" />
-                                                </Button>
+                                                <div
+                                                    role="button"
+                                                    tabIndex={0}
+                                                    aria-haspopup="menu"
+                                                    aria-expanded={false} // This should be managed by DropdownMenu state internally
+                                                    className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'h-8 w-8 p-0 cursor-pointer flex items-center justify-center')}
+                                                    // onKeyDown for space/enter if needed for DropdownMenuTrigger if not a button
+                                                >
+                                                    <span className="sr-only">Open menu</span>
+                                                    <MoreHorizontal className="h-4 w-4" />
+                                                </div>
                                             </DropdownMenuTrigger>
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem asChild>
@@ -520,3 +582,4 @@ export default function AccountsPage() {
     </div>
   );
 }
+
