@@ -1,10 +1,10 @@
-
 'use client';
 
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-// Removed all specific icon imports from @token-icons/react and react-icons/si for this file
+// Não importaremos ícones específicos de @token-icons/react ou react-icons/si por enquanto
+// para garantir estabilidade. Todos usarão o ícone genérico.
 
 const defaultIconSize = 20;
 
@@ -21,70 +21,40 @@ export interface CryptoProviderInfo {
   dataAiHint?: string;
 }
 
-// specificCryptoIcons is now empty to ensure no specific icons are attempted
-const specificCryptoIcons: { [key: string]: ReactNode } = {};
-
-// Helper to create icons. Will always fall back to DefaultCryptoIcon in this setup.
-const createIcon = (SpecificIconComponent?: React.ElementType | string, props?: any & { color?: string; name?: string }) => {
-  const providerName = props?.name;
-  if (providerName && specificCryptoIcons[providerName]) {
-    try {
-      return specificCryptoIcons[providerName];
-    } catch (e) {
-        console.warn(`Error rendering specific mapped icon ${providerName}:`, e);
-        return React.createElement(DefaultCryptoIcon);
-    }
-  }
-  if (typeof SpecificIconComponent === 'string' && specificCryptoIcons[SpecificIconComponent]) {
-     try {
-      return specificCryptoIcons[SpecificIconComponent];
-    } catch (e) {
-        console.warn(`Error rendering specific mapped icon string ${SpecificIconComponent}:`, e);
-        return React.createElement(DefaultCryptoIcon);
-    }
-  }
-  // If SpecificIconComponent is an element type (actual component)
-  if (SpecificIconComponent && typeof SpecificIconComponent !== 'string') {
-    try {
-      return React.createElement(SpecificIconComponent, { size: defaultIconSize, variant: "branded", ...props });
-    } catch (e) {
-      console.warn(`Error creating specific icon component ${props?.name || 'Unknown'}:`, e);
-      return React.createElement(DefaultCryptoIcon);
-    }
-  }
-  return React.createElement(DefaultCryptoIcon);
+// Mapa para ícones específicos de cripto. Ficará vazio por enquanto.
+// Adicionar aqui gradualmente após confirmar nomes e cores, e se a biblioteca de ícones estiver estável.
+const specificCryptoIcons: { [key: string]: ReactNode } = {
+  // Exemplo se quisermos adicionar Binance depois de verificar:
+  // "Binance": React.createElement(ExchangeBinance, { size: defaultIconSize, color: "#F0B90B", variant: "branded" }),
 };
 
-// All providers will now use the DefaultCryptoIcon due to empty specificCryptoIcons
-// and no specific components being passed to createIcon in these lists.
-
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconComponent: createIcon(undefined, {name: "Binance"}), dataAiHint: "Binance logo" },
-    { name: "Coinbase", iconComponent: createIcon(undefined, {name: "Coinbase"}), dataAiHint: "Coinbase logo" },
-    { name: "Kraken", iconComponent: createIcon(undefined, {name: "Kraken"}), dataAiHint: "Kraken logo" },
-    { name: "OKX", iconComponent: createIcon(undefined, {name: "OKX"}), dataAiHint: "OKX logo" },
-    { name: "KuCoin", iconComponent: createIcon(undefined, {name: "KuCoin"}), dataAiHint: "KuCoin logo" },
-    { name: "Bitstamp", iconComponent: createIcon(undefined, {name: "Bitstamp"}), dataAiHint: "Bitstamp logo" },
-    { name: "Gate.io", iconComponent: createIcon(undefined, {name: "Gate.io"}), dataAiHint: "Gate.io logo" },
-    { name: "Huobi (HTX)", iconComponent: createIcon(undefined, {name: "Huobi (HTX)"}), dataAiHint: "Huobi logo" },
-    { name: "Bitfinex", iconComponent: createIcon(undefined, {name: "Bitfinex"}), dataAiHint: "Bitfinex logo" },
+    { name: "Binance", iconComponent: specificCryptoIcons["Binance"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Binance logo" },
+    { name: "Coinbase", iconComponent: specificCryptoIcons["Coinbase"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Coinbase logo" },
+    { name: "Kraken", iconComponent: specificCryptoIcons["Kraken"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Kraken logo" },
+    { name: "OKX", iconComponent: specificCryptoIcons["OKX"] || React.createElement(DefaultCryptoIcon), dataAiHint: "OKX logo" },
+    { name: "KuCoin", iconComponent: specificCryptoIcons["KuCoin"] || React.createElement(DefaultCryptoIcon), dataAiHint: "KuCoin logo" },
+    { name: "Bitstamp", iconComponent: specificCryptoIcons["Bitstamp"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Bitstamp logo" },
+    { name: "Gate.io", iconComponent: specificCryptoIcons["Gate.io"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Gate.io logo" },
+    { name: "Huobi (HTX)", iconComponent: specificCryptoIcons["Huobi (HTX)"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Huobi logo" },
+    { name: "Bitfinex", iconComponent: specificCryptoIcons["Bitfinex"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Bitfinex logo" },
 ];
 
 export const popularWallets: CryptoProviderInfo[] = [
-    { name: "Ledger Nano S/X/Stax", iconComponent: createIcon(undefined, {name: "Ledger Nano S/X/Stax"}), dataAiHint: "Ledger wallet" },
-    { name: "Trezor Model One/T", iconComponent: createIcon(undefined, {name: "Trezor Model One/T"}), dataAiHint: "Trezor wallet" },
-    { name: "MetaMask", iconComponent: createIcon(undefined, {name: "MetaMask"}), dataAiHint: "MetaMask fox" },
-    { name: "Trust Wallet", iconComponent: createIcon(undefined, {name: "Trust Wallet"}), dataAiHint: "Trust Wallet shield" },
-    { name: "Exodus", iconComponent: createIcon(undefined, {name: "Exodus"}), dataAiHint: "Exodus logo" },
-    { name: "Phantom (Solana)", iconComponent: createIcon(undefined, {name: "Phantom (Solana)"}), dataAiHint: "Phantom ghost" },
-    { name: "Coinbase Wallet", iconComponent: createIcon(undefined, {name: "Coinbase Wallet"}), dataAiHint: "Coinbase Wallet logo" },
-    { name: "Atomic Wallet", iconComponent: createIcon(undefined, {name: "Atomic Wallet"}), dataAiHint: "Atomic Wallet logo" },
-    { name: "BlueWallet (Bitcoin)", iconComponent: createIcon(undefined, {name: "BlueWallet (Bitcoin)"}), dataAiHint: "BlueWallet logo" },
+    { name: "Ledger Nano S/X/Stax", iconComponent: specificCryptoIcons["Ledger Nano S/X/Stax"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Ledger wallet" },
+    { name: "Trezor Model One/T", iconComponent: specificCryptoIcons["Trezor Model One/T"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Trezor wallet" },
+    { name: "MetaMask", iconComponent: specificCryptoIcons["MetaMask"] || React.createElement(DefaultCryptoIcon), dataAiHint: "MetaMask fox" },
+    { name: "Trust Wallet", iconComponent: specificCryptoIcons["Trust Wallet"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Trust Wallet shield" },
+    { name: "Exodus", iconComponent: specificCryptoIcons["Exodus"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Exodus logo" },
+    { name: "Phantom (Solana)", iconComponent: specificCryptoIcons["Phantom (Solana)"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Phantom ghost" },
+    { name: "Coinbase Wallet", iconComponent: specificCryptoIcons["Coinbase Wallet"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Coinbase Wallet logo" },
+    { name: "Atomic Wallet", iconComponent: specificCryptoIcons["Atomic Wallet"] || React.createElement(DefaultCryptoIcon), dataAiHint: "Atomic Wallet logo" },
+    { name: "BlueWallet (Bitcoin)", iconComponent: specificCryptoIcons["BlueWallet (Bitcoin)"] || React.createElement(DefaultCryptoIcon), dataAiHint: "BlueWallet logo" },
 ];
 
 export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularExchanges, ...popularWallets])].sort(
     (a, b) => a.name.localeCompare(b.name)
 );
 
-popularExchanges.sort((a, b) => a.name.localeCompare(b.name));
-popularWallets.sort((a, b) => a.name.localeCompare(b.name));
+// Não precisamos mais da função createIcon se estamos usando o mapa diretamente.
+// A lógica de fallback está na atribuição do iconComponent.

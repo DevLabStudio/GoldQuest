@@ -2,8 +2,8 @@
 
 import React from 'react';
 import { Landmark } from 'lucide-react';
-// Attempt to import only SiNubank as it was confirmed to be working.
-// All other specific Si* icons will be removed for now to ensure stability.
+// Importar apenas ícones que sabemos que funcionam e foram verificados.
+// Começaremos apenas com Nubank.
 import { SiNubank } from 'react-icons/si';
 
 const defaultIconSize = 20;
@@ -21,10 +21,11 @@ export interface BankInfo {
   dataAiHint?: string;
 }
 
-// Store specific, verified icons here.
+// Mapa para ícones específicos que foram verificados e funcionam.
+// Adicionar outros aqui gradualmente após confirmar o nome exato do componente e a cor.
 const specificBankIcons: { [key: string]: React.ReactNode } = {
   "Nubank": React.createElement(SiNubank, { size: defaultIconSize, color: "#820AD1" }),
-  // Add other verified icons here one by one, e.g.:
+  // Exemplo se encontrarmos e verificarmos o do Itaú:
   // "Itaú Unibanco": React.createElement(SiItauunibanco, { size: defaultIconSize, color: "#EC7000" }),
 };
 
