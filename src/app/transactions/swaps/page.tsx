@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { MoreHorizontal, Edit, Trash2, PlusCircle, Repeat } from 'lucide-react';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 import { useAuthContext } from '@/contexts/AuthContext';
 import { useDateRange } from '@/contexts/DateRangeContext';
@@ -75,8 +75,10 @@ export default function SwapsPage() {
   useEffect(() => {
     fetchData();
     const handleStorage = () => fetchData(); // Re-fetch data on any 'storage' event
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
+    if (typeof window !== 'undefined') window.addEventListener('storage', handleStorage);
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorage);
+    }
   }, [fetchData]);
 
   const filteredSwaps = useMemo(() => {
