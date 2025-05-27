@@ -4,15 +4,15 @@
 import React from 'react';
 import { Landmark } from 'lucide-react';
 import {
- SiNubank, SiItau, SiBradesco, SiCaixa, SiSantander, SiPagseguro,
- SiBancointer, SiBancodobrasil, SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, SiBbva, SiBnpParibas, SiCreditagricole,
+  SiNubank, SiItau, SiBradesco, SiCaixa, SiSantander, SiPagseguro,
+  /* SiBancointer, */ /* SiBancodobrasil, */ SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, SiBbva, SiBnpParibas, SiCreditagricole,
   SiSocietegenerale, SiDeutschebank, SiCommerzbank, SiIng, SiUnicredit, SiIntesasanpaolo,
   SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, SiBtgpactual, SiSafra, SiC6Bank, SiBancooriginal, SiNeon, SiPan
 } from 'react-icons/si';
 
 const defaultIconSize = 20;
 
-// Define DefaultBankIcon using React.createElement
+// Define DefaultBankIcon using React.createElement to avoid potential JSX parsing issues
 const DefaultBankIcon = () => {
   return React.createElement(Landmark, {
     size: defaultIconSize,
@@ -28,13 +28,13 @@ export interface BankInfo {
 
 export const popularBanks: BankInfo[] = [
     // Brazil
-    { name: "Banco do Brasil", iconComponent: React.createElement(SiBancodobrasil, { size: defaultIconSize }), dataAiHint: "Brasil logo" },
+    { name: "Banco do Brasil", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Brasil logo" },
     { name: "Itaú Unibanco", iconComponent: React.createElement(SiItau, { size: defaultIconSize }), dataAiHint: "Itau logo" },
     { name: "Caixa Econômica Federal", iconComponent: React.createElement(SiCaixa, { size: defaultIconSize }), dataAiHint: "Caixa Federal" },
     { name: "Bradesco", iconComponent: React.createElement(SiBradesco, { size: defaultIconSize }), dataAiHint: "Bradesco logo" },
     { name: "Santander Brasil", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
     { name: "Nubank", iconComponent: React.createElement(SiNubank, { size: defaultIconSize }), dataAiHint: "Nubank logo" },
-    { name: "Banco Inter", iconComponent: React.createElement(SiBancointer, { size: defaultIconSize }), dataAiHint: "Inter logo" },
+    { name: "Banco Inter", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Inter logo" },
     { name: "BTG Pactual", iconComponent: React.createElement(SiBtgpactual, { size: defaultIconSize }), dataAiHint: "BTG Pactual" },
     { name: "XP Investimentos", iconComponent: React.createElement(SiXp, { size: defaultIconSize }), dataAiHint: "XP logo" },
     { name: "Banco Safra", iconComponent: React.createElement(SiSafra, { size: defaultIconSize }), dataAiHint: "Safra logo" },
@@ -49,9 +49,9 @@ export const popularBanks: BankInfo[] = [
     { name: "Barclays (UK)", iconComponent: React.createElement(SiBarclays, { size: defaultIconSize }), dataAiHint: "Barclays logo" },
     { name: "Lloyds Banking Group (UK)", iconComponent: React.createElement(SiLloydsbank, { size: defaultIconSize }), dataAiHint: "Lloyds Bank" },
     { name: "NatWest Group (UK)", iconComponent: React.createElement(SiNatwest, { size: defaultIconSize }), dataAiHint: "NatWest logo" },
-    { name: "Santander (Spain/Global)", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" }, // Using generic Santander for Spain too
+    { name: "Santander (Spain/Global)", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
     { name: "BBVA (Spain)", iconComponent: React.createElement(SiBbva, { size: defaultIconSize }), dataAiHint: "BBVA logo" },
-    { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" },
+    { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" }, // Placeholder
     { name: "BNP Paribas (France)", iconComponent: React.createElement(SiBnpParibas, { size: defaultIconSize }), dataAiHint: "BNP Paribas" },
     { name: "Crédit Agricole (France)", iconComponent: React.createElement(SiCreditagricole, { size: defaultIconSize }), dataAiHint: "Credit Agricole" },
     { name: "Société Générale (France)", iconComponent: React.createElement(SiSocietegenerale, { size: defaultIconSize }), dataAiHint: "Societe Generale" },
