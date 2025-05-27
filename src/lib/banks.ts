@@ -4,10 +4,10 @@
 import React from 'react';
 import { Landmark } from 'lucide-react';
 import {
-  SiNubank, SiItau, /* SiBradesco, */ SiCaixa, SiSantander, SiPagseguro,
-  SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, /* SiBbva, */ SiCreditagricole,
+  SiNubank, SiItau, /* SiBradesco (removed), */ SiCaixa, SiSantander, SiPagseguro,
+  SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, /* SiBbva (removed), */ SiCreditagricole,
   SiSocietegenerale, SiDeutschebank, SiCommerzbank, SiIng, SiUnicredit, SiIntesasanpaolo,
-  SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, SiBtgpactual, SiSafra, SiC6Bank, SiNeon, SiPan
+  SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, /* SiBtgpactual (removed), */ SiSafra, /* SiC6Bank (removed), */ SiNeon, SiPan
   // SiBancointer, SiBancodobrasil, SiBancooriginal, SiBnpParibas have been removed if they caused errors
 } from 'react-icons/si';
 
@@ -36,11 +36,11 @@ export const popularBanks: BankInfo[] = [
     { name: "Santander Brasil", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
     { name: "Nubank", iconComponent: React.createElement(SiNubank, { size: defaultIconSize }), dataAiHint: "Nubank logo" },
     { name: "Banco Inter", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Inter logo" },
-    { name: "BTG Pactual", iconComponent: React.createElement(SiBtgpactual, { size: defaultIconSize }), dataAiHint: "BTG Pactual" },
+    { name: "BTG Pactual", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BTG Pactual" },
     { name: "XP Investimentos", iconComponent: React.createElement(SiXp, { size: defaultIconSize }), dataAiHint: "XP logo" },
     { name: "Banco Safra", iconComponent: React.createElement(SiSafra, { size: defaultIconSize }), dataAiHint: "Safra logo" },
     { name: "Banco Original", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Original logo" },
-    { name: "C6 Bank", iconComponent: React.createElement(SiC6Bank, { size: defaultIconSize }), dataAiHint: "C6 Bank" },
+    { name: "C6 Bank", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "C6 Bank" },
     { name: "PagBank", iconComponent: React.createElement(SiPagseguro, { size: defaultIconSize }), dataAiHint: "PagBank logo" },
     { name: "Banco Neon", iconComponent: React.createElement(SiNeon, { size: defaultIconSize }), dataAiHint: "Neon logo" },
     { name: "Banco Pan", iconComponent: React.createElement(SiPan, { size: defaultIconSize }), dataAiHint: "Pan logo" },
@@ -51,9 +51,9 @@ export const popularBanks: BankInfo[] = [
     { name: "Lloyds Banking Group (UK)", iconComponent: React.createElement(SiLloydsbank, { size: defaultIconSize }), dataAiHint: "Lloyds Bank" },
     { name: "NatWest Group (UK)", iconComponent: React.createElement(SiNatwest, { size: defaultIconSize }), dataAiHint: "NatWest logo" },
     { name: "Santander (Spain/Global)", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
-    { name: "BBVA (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BBVA logo" }, // Fallback
+    { name: "BBVA (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BBVA logo" },
     { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" },
-    { name: "BNP Paribas (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BNP Paribas" }, // Fallback for SiBnpParibas
+    { name: "BNP Paribas (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BNP Paribas" },
     { name: "Crédit Agricole (France)", iconComponent: React.createElement(SiCreditagricole, { size: defaultIconSize }), dataAiHint: "Credit Agricole" },
     { name: "Société Générale (France)", iconComponent: React.createElement(SiSocietegenerale, { size: defaultIconSize }), dataAiHint: "Societe Generale" },
     { name: "Deutsche Bank (Germany)", iconComponent: React.createElement(SiDeutschebank, { size: defaultIconSize }), dataAiHint: "Deutsche Bank" },
