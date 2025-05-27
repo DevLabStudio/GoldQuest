@@ -3,8 +3,10 @@
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-// REMOVED all imports from '@token-icons/react' to ensure build stability.
-// We will default all crypto providers to the generic icon for now.
+
+// Attempt to import only ExchangeBinance from @token-icons/react
+// All other specific crypto icons will be removed from imports to isolate issues
+import { ExchangeBinance } from '@token-icons/react'; // Assuming @token-icons/react@2.14.0 is installed
 
 const defaultIconSize = 20;
 
@@ -20,17 +22,23 @@ export interface CryptoProviderInfo {
   iconComponent: ReactNode;
 }
 
-// Helper to create icons. Since specific icons are removed, this will always use DefaultCryptoIcon.
-// The SpecificIconComponent parameter is kept for potential future re-introduction if issues are resolved.
-const createIcon = (SpecificIconComponent?: React.ElementType, props?: any) => {
-  // For now, always return DefaultCryptoIcon to ensure stability.
-  // When re-introducing specific icons, the try-catch logic can be used.
+// Helper to create icons. Includes a try-catch for safety, falling back to DefaultCryptoIcon.
+const createIcon = (SpecificIconComponent?: React.ElementType, props?: any & { color?: string }) => {
+  if (SpecificIconComponent) {
+    try {
+      // If a color is provided in props, pass it to the SpecificIconComponent
+      return React.createElement(SpecificIconComponent, { size: defaultIconSize, variant: "branded", ...props });
+    } catch (e) {
+      console.warn(`Error creating specific icon ${props?.name || 'Unknown'}:`, e);
+      return React.createElement(DefaultCryptoIcon);
+    }
+  }
   return React.createElement(DefaultCryptoIcon);
 };
 
-// All providers will now use the DefaultCryptoIcon
+// Updated lists: Try specific for Binance, default for others.
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconComponent: createIcon(undefined, { name: "Binance" }) },
+    { name: "Binance", iconComponent: createIcon(ExchangeBinance, { name: "Binance", color: "#F0B90B" }) },
     { name: "Coinbase", iconComponent: createIcon(undefined, { name: "Coinbase" }) },
     { name: "Kraken", iconComponent: createIcon(undefined, { name: "Kraken" }) },
     { name: "OKX", iconComponent: createIcon(undefined, { name: "OKX" }) },
