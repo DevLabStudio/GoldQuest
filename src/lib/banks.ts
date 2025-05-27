@@ -4,11 +4,13 @@
 import React from 'react';
 import { Landmark } from 'lucide-react';
 import {
-  SiNubank, SiItau, /* SiBradesco (removed), */ SiCaixa, SiSantander, SiPagseguro,
-  SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, /* SiBbva (removed), */ SiCreditagricole,
+  SiNubank, SiItau, SiSantander, SiPagseguro,
+  SiHsbc, SiBarclays, SiLloydsbank, SiNatwest, /* SiCreditagricole removed */
   SiSocietegenerale, SiDeutschebank, SiCommerzbank, SiIng, SiUnicredit, SiIntesasanpaolo,
-  SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, /* SiBtgpactual (removed), */ SiSafra, /* SiC6Bank (removed), */ SiNeon, SiPan
-  // SiBancointer, SiBancodobrasil, SiBancooriginal, SiBnpParibas have been removed if they caused errors
+  SiUbs, SiCreditsuisse, SiNordea, SiDanskebank, SiRevolut, SiN26, SiXp, SiSafra, SiNeon, SiPan
+  // Icons removed due to "Export doesn't exist" errors:
+  // SiBradesco, SiCaixa, SiBbva, SiBnpParibas
+  // SiBancointer, SiBancodobrasil, SiBancooriginal, SiBtgpactual, SiC6Bank
 } from 'react-icons/si';
 
 const defaultIconSize = 20;
@@ -31,7 +33,7 @@ export const popularBanks: BankInfo[] = [
     // Brazil
     { name: "Banco do Brasil", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Brasil logo" },
     { name: "Itaú Unibanco", iconComponent: React.createElement(SiItau, { size: defaultIconSize }), dataAiHint: "Itau logo" },
-    { name: "Caixa Econômica Federal", iconComponent: React.createElement(SiCaixa, { size: defaultIconSize }), dataAiHint: "Caixa Federal" },
+    { name: "Caixa Econômica Federal", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Caixa Federal" },
     { name: "Bradesco", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Bradesco logo" },
     { name: "Santander Brasil", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
     { name: "Nubank", iconComponent: React.createElement(SiNubank, { size: defaultIconSize }), dataAiHint: "Nubank logo" },
@@ -52,9 +54,9 @@ export const popularBanks: BankInfo[] = [
     { name: "NatWest Group (UK)", iconComponent: React.createElement(SiNatwest, { size: defaultIconSize }), dataAiHint: "NatWest logo" },
     { name: "Santander (Spain/Global)", iconComponent: React.createElement(SiSantander, { size: defaultIconSize }), dataAiHint: "Santander logo" },
     { name: "BBVA (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BBVA logo" },
-    { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" },
+    { name: "CaixaBank (Spain)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "CaixaBank logo" }, // Potentially different from Caixa BR
     { name: "BNP Paribas (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "BNP Paribas" },
-    { name: "Crédit Agricole (France)", iconComponent: React.createElement(SiCreditagricole, { size: defaultIconSize }), dataAiHint: "Credit Agricole" },
+    { name: "Crédit Agricole (France)", iconComponent: React.createElement(DefaultBankIcon), dataAiHint: "Credit Agricole" },
     { name: "Société Générale (France)", iconComponent: React.createElement(SiSocietegenerale, { size: defaultIconSize }), dataAiHint: "Societe Generale" },
     { name: "Deutsche Bank (Germany)", iconComponent: React.createElement(SiDeutschebank, { size: defaultIconSize }), dataAiHint: "Deutsche Bank" },
     { name: "Commerzbank (Germany)", iconComponent: React.createElement(SiCommerzbank, { size: defaultIconSize }), dataAiHint: "Commerzbank logo" },
