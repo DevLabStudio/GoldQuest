@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -13,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { popularBanks, type BankInfo } from '@/lib/banks';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { NewAccountData } from '@/services/account-sync';
-import Image from 'next/image';
+// Image import removed as we are using iconComponent
 
 // Define Zod schema for form validation
 const formSchema = z.object({
@@ -26,7 +27,7 @@ const formSchema = z.object({
       (val) => supportedCurrencies.includes(val.toUpperCase()),
       { message: "Unsupported currency" }
   ),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative for initial setup"),
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
   includeInNetWorth: z.boolean().optional(),
 });
 
@@ -53,8 +54,8 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
     const newAccountData: NewAccountData = {
         name: values.accountName,
         type: values.accountType,
-        balance: values.balance,
-        currency: values.currency.toUpperCase(),
+        initialBalance: values.balance,
+        initialCurrency: values.currency.toUpperCase(),
         providerName: values.providerName,
         category: 'asset',
         includeInNetWorth: values.includeInNetWorth ?? true,
@@ -84,22 +85,15 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                   <SelectContent>
                     {popularBanks.map((bank: BankInfo) => (
                       <SelectItem key={bank.name} value={bank.name}>
-                        <div className="flex items-center">
-                          <Image
-                              src={bank.iconUrl}
-                              alt={`${bank.name} logo`}
-                              width={20}
-                              height={20}
-                              className="mr-2 rounded-sm object-contain"
-                              data-ai-hint={bank.dataAiHint}
-                          />
+                        <div className="flex items-center gap-2">
+                          {bank.iconComponent}
                           {bank.name}
                         </div>
                       </SelectItem>
                     ))}
                     <SelectItem value="Other">
-                      <div className="flex items-center">
-                          <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span>
+                      <div className="flex items-center gap-2">
+                          <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">🏦</span>
                           Other (Specify in Name)
                         </div>
                       </SelectItem>
@@ -157,7 +151,7 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
                 name="currency"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Currency</FormLabel>
+                    <FormLabel>Initial Currency</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
@@ -183,16 +177,16 @@ const AddAccountForm: FC<AddAccountFormProps> = ({ onAccountAdded }) => {
             name="balance"
             render={({ field }) => (
             <FormItem>
-                <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                <FormLabel>Initial Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
                 <FormControl>
-                <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''}/>
                 </FormControl>
                 <FormMessage />
             </FormItem>
             )}
         />
          <FormDescription>
-            Enter the current balance in the selected currency.
+            Enter the current balance in the selected currency. This will be the starting balance for this account.
          </FormDescription>
 
         <FormField

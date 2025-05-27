@@ -14,11 +14,10 @@ import { popularBanks, type BankInfo } from '@/lib/banks';
 import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { Account } from '@/services/account-sync';
-import Image from 'next/image';
+// Image import removed
 
 const allowedFiatCurrenciesForCrypto = ['EUR', 'USD', 'BRL'] as const;
 
-// Updated schema to reflect primary balance editing
 const formSchema = z.object({
   providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
@@ -82,26 +81,41 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
   });
 
   function onSubmit(values: EditAccountFormData) {
-    // Find the index of the primary balance in the existing balances array
     const primaryBalanceIndex = account.balances.findIndex(b => b.currency === values.primaryCurrency.toUpperCase());
     let updatedBalances = [...account.balances];
 
     if (primaryBalanceIndex !== -1) {
-        // Update existing primary balance
-        updatedBalances[primaryBalanceIndex] = { currency: values.primaryCurrency.toUpperCase(), amount: values.primaryBalance };
+        updatedBalances[primaryBalanceIndex] = { ...updatedBalances[primaryBalanceIndex], amount: values.primaryBalance, currency: values.primaryCurrency.toUpperCase() };
     } else {
-        // If the primary currency changed to one not in balances, add/update it.
-        // This case needs careful handling: should we remove old primary, or just add new?
-        // For simplicity, let's assume primaryCurrency must be one of the existing balance currencies or we add it.
-        // A more robust UI might let user pick from existing balance currencies.
-        updatedBalances.push({ currency: values.primaryCurrency.toUpperCase(), amount: values.primaryBalance });
-        // And if the old primaryCurrency is still there and different, it remains as a secondary balance.
+        // This case should ideally not happen if primaryCurrency is chosen from existing ones.
+        // If it's a new primary currency, we'd need to add it.
+        // For now, we assume primaryCurrency selected is one that already has a balance entry or is the only one.
+        // If the currency was changed to a *new* one not in the balances array:
+        const newPrimaryCurrency = values.primaryCurrency.toUpperCase();
+        if (!updatedBalances.some(b => b.currency === newPrimaryCurrency)) {
+            updatedBalances = [{ currency: newPrimaryCurrency, amount: values.primaryBalance }];
+        } else {
+             const existingIdx = updatedBalances.findIndex(b => b.currency === newPrimaryCurrency);
+             updatedBalances[existingIdx] = { ...updatedBalances[existingIdx], amount: values.primaryBalance };
+        }
     }
     
-    // Ensure primaryCurrency is among the ones in the balances array
-    if (!updatedBalances.some(b => b.currency === values.primaryCurrency.toUpperCase())) {
-        updatedBalances.push({ currency: values.primaryCurrency.toUpperCase(), amount: values.primaryBalance });
-    }
+    // Ensure no duplicate currencies in balances if primaryCurrency changed.
+    // This logic might need more refinement if we allow adding/removing multiple balances in this form.
+    // For now, this simplified update focuses on the *primary* balance.
+    const uniqueBalances = updatedBalances.reduce((acc, current) => {
+        const x = acc.find(item => item.currency === current.currency);
+        if (!x) {
+            return acc.concat([current]);
+        } else {
+            // If primaryCurrency matches, ensure this one is kept/updated
+            if(current.currency === values.primaryCurrency.toUpperCase()) {
+                const filtered = acc.filter(item => item.currency !== current.currency);
+                return filtered.concat([current]);
+            }
+            return acc;
+        }
+    }, [] as Array<{ currency: string; amount: number }>);
 
 
     const updatedAccountData: Account = {
@@ -109,7 +123,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
         name: values.accountName,
         type: values.accountType,
         providerName: values.providerName,
-        balances: updatedBalances,
+        balances: uniqueBalances,
         primaryCurrency: values.primaryCurrency.toUpperCase(),
         includeInNetWorth: values.includeInNetWorth ?? true,
     };
@@ -119,7 +133,8 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
   const selectedPrimaryCurrency = form.watch('primaryCurrency');
   const providerList = getProviderList(account.category);
   const accountTypes = getAccountTypes(account.category);
-  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : supportedCurrencies;
+  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : (account.balances.length > 0 ? account.balances.map(b => b.currency) : [account.primaryCurrency || 'USD']);
+
 
   return (
     <Form {...form}>
@@ -140,22 +155,15 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     <SelectContent>
                     {providerList.map((provider) => (
                         <SelectItem key={provider.name} value={provider.name}>
-                        <div className="flex items-center">
-                            <Image
-                                src={provider.iconUrl}
-                                alt={`${provider.name} logo`}
-                                width={20}
-                                height={20}
-                                className="mr-2 rounded-sm object-contain"
-                                data-ai-hint={provider.dataAiHint}
-                            />
+                        <div className="flex items-center gap-2">
+                            {provider.iconComponent}
                             {provider.name}
                         </div>
                         </SelectItem>
                     ))}
                     <SelectItem value="Other">
-                        <div className="flex items-center">
-                            <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">
                                 {account.category === 'asset' ? '🏦' : '💠'}
                             </span>
                             Other (Specify in Name)
@@ -244,9 +252,9 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
             name="primaryBalance"
             render={({ field }) => (
             <FormItem>
-                <FormLabel>Primary Balance ({getCurrencySymbol(selectedPrimaryCurrency || 'BRL')})</FormLabel>
+                <FormLabel>Primary Balance ({getCurrencySymbol(selectedPrimaryCurrency || 'USD')})</FormLabel>
                 <FormControl>
-                <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''} />
                 </FormControl>
                 <FormMessage />
             </FormItem>
@@ -286,5 +294,3 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
 };
 
 export default EditAccountForm;
-
-    

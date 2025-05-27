@@ -1,43 +1,60 @@
 
-/**
- * Lists of popular cryptocurrency exchanges and self-custody wallets, now with icon placeholders.
- * These lists are not exhaustive and can be expanded.
- */
+import type { ReactNode } from 'react';
+import { WalletCards } from 'lucide-react'; // Generic icon
+import {
+    ExchangeBinance, ExchangeCoinbase, ExchangeKraken, ExchangeBybit, ExchangeOkx, ExchangeKucoin, ExchangeBitstamp, ExchangeGateio, ExchangeHuobi, ExchangeBitfinex,
+    WalletLedger, WalletTrezor, WalletMetamask, WalletTrust, WalletExodus, WalletPhantom, WalletCoinbase as WalletCoinbaseIcon // Renamed to avoid conflict
+} from '@token-icons/react';
+
+const defaultIconSize = 20;
+const DefaultCryptoIcon = () => <WalletCards size={defaultIconSize} className="text-muted-foreground" />;
+
 
 export interface CryptoProviderInfo {
   name: string;
-  iconUrl: string;
-  dataAiHint: string;
+  iconComponent: ReactNode;
 }
 
 export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconUrl: "https://picsum.photos/seed/binance/40/40", dataAiHint: "Binance logo" },
-    { name: "Coinbase", iconUrl: "https://picsum.photos/seed/coinbaseexchange/40/40", dataAiHint: "Coinbase logo" },
-    { name: "Kraken", iconUrl: "https://picsum.photos/seed/kraken/40/40", dataAiHint: "Kraken logo" },
-    { name: "Bybit", iconUrl: "https://picsum.photos/seed/bybit/40/40", dataAiHint: "Bybit logo" },
-    { name: "OKX", iconUrl: "https://picsum.photos/seed/okx/40/40", dataAiHint: "OKX logo" },
-    { name: "KuCoin", iconUrl: "https://picsum.photos/seed/kucoin/40/40", dataAiHint: "KuCoin logo" },
-    { name: "Bitstamp", iconUrl: "https://picsum.photos/seed/bitstamp/40/40", dataAiHint: "Bitstamp logo" },
-    { name: "Gate.io", iconUrl: "https://picsum.photos/seed/gateio/40/40", dataAiHint: "Gateio logo" },
-    { name: "Huobi (HTX)", iconUrl: "https://picsum.photos/seed/huobi/40/40", dataAiHint: "Huobi logo" },
-    { name: "Bitfinex", iconUrl: "https://picsum.photos/seed/bitfinex/40/40", dataAiHint: "Bitfinex logo" },
+    { name: "Binance", iconComponent: <ExchangeBinance size={defaultIconSize} /> },
+    { name: "Coinbase", iconComponent: <ExchangeCoinbase size={defaultIconSize} /> },
+    { name: "Kraken", iconComponent: <ExchangeKraken size={defaultIconSize} /> },
+    { name: "Bybit", iconComponent: <ExchangeBybit size={defaultIconSize} /> },
+    { name: "OKX", iconComponent: <ExchangeOkx size={defaultIconSize} /> },
+    { name: "KuCoin", iconComponent: <ExchangeKucoin size={defaultIconSize} /> },
+    { name: "Bitstamp", iconComponent: <ExchangeBitstamp size={defaultIconSize} /> },
+    { name: "Gate.io", iconComponent: <ExchangeGateio size={defaultIconSize} /> },
+    { name: "Huobi (HTX)", iconComponent: <ExchangeHuobi size={defaultIconSize} /> },
+    { name: "Bitfinex", iconComponent: <ExchangeBitfinex size={defaultIconSize} /> },
 ];
 
 export const popularWallets: CryptoProviderInfo[] = [
     // Hardware Wallets
-    { name: "Ledger Nano S/X/Stax", iconUrl: "https://picsum.photos/seed/ledger/40/40", dataAiHint: "Ledger logo" },
-    { name: "Trezor Model One/T", iconUrl: "https://picsum.photos/seed/trezor/40/40", dataAiHint: "Trezor logo" },
+    { name: "Ledger Nano S/X/Stax", iconComponent: <WalletLedger size={defaultIconSize} /> },
+    { name: "Trezor Model One/T", iconComponent: <WalletTrezor size={defaultIconSize} /> },
     // Software/Mobile Wallets
-    { name: "MetaMask", iconUrl: "https://picsum.photos/seed/metamask/40/40", dataAiHint: "MetaMask logo" },
-    { name: "Trust Wallet", iconUrl: "https://picsum.photos/seed/trustwallet/40/40", dataAiHint: "Trust Wallet" },
-    { name: "Exodus", iconUrl: "https://picsum.photos/seed/exodus/40/40", dataAiHint: "Exodus logo" },
-    { name: "Electrum", iconUrl: "https://picsum.photos/seed/electrum/40/40", dataAiHint: "Electrum logo" },
-    { name: "MyEtherWallet (MEW)", iconUrl: "https://picsum.photos/seed/mew/40/40", dataAiHint: "MEW logo" },
-    { name: "Phantom (Solana)", iconUrl: "https://picsum.photos/seed/phantom/40/40", dataAiHint: "Phantom Wallet" },
-    { name: "Coinbase Wallet", iconUrl: "https://picsum.photos/seed/coinbasewallet/40/40", dataAiHint: "Coinbase Wallet" },
-    { name: "Atomic Wallet", iconUrl: "https://picsum.photos/seed/atomicwallet/40/40", dataAiHint: "Atomic Wallet" },
-    { name: "BlueWallet (Bitcoin)", iconUrl: "https://picsum.photos/seed/bluewallet/40/40", dataAiHint: "BlueWallet logo" },
+    { name: "MetaMask", iconComponent: <WalletMetamask size={defaultIconSize} /> },
+    { name: "Trust Wallet", iconComponent: <WalletTrust size={defaultIconSize} /> },
+    { name: "Exodus", iconComponent: <WalletExodus size={defaultIconSize} /> },
+    { name: "Electrum", iconComponent: <DefaultCryptoIcon /> }, // Placeholder, check @token-icons/react
+    { name: "MyEtherWallet (MEW)", iconComponent: <DefaultCryptoIcon /> }, // Placeholder
+    { name: "Phantom (Solana)", iconComponent: <WalletPhantom size={defaultIconSize} /> },
+    { name: "Coinbase Wallet", iconComponent: <WalletCoinbaseIcon size={defaultIconSize} /> },
+    { name: "Atomic Wallet", iconComponent: <DefaultCryptoIcon /> }, // Placeholder
+    { name: "BlueWallet (Bitcoin)", iconComponent: <DefaultCryptoIcon /> }, // Placeholder
 ];
+
+// Fallback for icons not found
+popularExchanges.forEach(provider => {
+    if (provider.iconComponent === undefined) {
+        provider.iconComponent = <DefaultCryptoIcon />;
+    }
+});
+popularWallets.forEach(provider => {
+    if (provider.iconComponent === undefined) {
+        provider.iconComponent = <DefaultCryptoIcon />;
+    }
+});
 
 // Combine and sort for potential unified dropdowns or filtering
 export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularExchanges, ...popularWallets])].sort(

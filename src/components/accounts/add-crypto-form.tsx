@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -13,7 +14,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers';
 import { getCurrencySymbol } from '@/lib/currency';
 import type { NewAccountData } from '@/services/account-sync';
-import Image from 'next/image';
+// Image import removed
 
 const allowedFiatCurrencies = ['EUR', 'USD', 'BRL'] as const;
 
@@ -24,9 +25,9 @@ const formSchema = z.object({
     required_error: "Account type is required",
   }),
   currency: z.enum(allowedFiatCurrencies, {
-      required_error: "Fiat currency is required",
+      required_error: "Fiat currency for initial balance is required",
   }),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative"),
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}), // Allow negative for consistency, but usually positive for crypto
   includeInNetWorth: z.boolean().optional(),
 });
 
@@ -43,7 +44,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
       providerName: "",
       accountName: "",
       accountType: undefined,
-      currency: "BRL",
+      currency: "BRL", // Initial balance currency
       balance: 0,
       includeInNetWorth: true,
     },
@@ -53,8 +54,8 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
     const newAccountData: NewAccountData = {
         name: values.accountName,
         type: values.accountType,
-        balance: values.balance,
-        currency: values.currency.toUpperCase(),
+        initialBalance: values.balance,
+        initialCurrency: values.currency.toUpperCase(), // This is the currency of the initialBalance
         providerName: values.providerName,
         category: 'crypto',
         includeInNetWorth: values.includeInNetWorth ?? true,
@@ -84,22 +85,15 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                     <SelectContent>
                     {allCryptoProviders.map((provider: CryptoProviderInfo) => (
                         <SelectItem key={provider.name} value={provider.name}>
-                        <div className="flex items-center">
-                            <Image
-                                src={provider.iconUrl}
-                                alt={`${provider.name} logo`}
-                                width={20}
-                                height={20}
-                                className="mr-2 rounded-sm object-contain"
-                                data-ai-hint={provider.dataAiHint}
-                            />
+                        <div className="flex items-center gap-2">
+                            {provider.iconComponent}
                             {provider.name}
                         </div>
                         </SelectItem>
                     ))}
                     <SelectItem value="Other">
-                        <div className="flex items-center">
-                            <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">💠</span>
+                        <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">💠</span>
                             Other (Specify in Name)
                         </div>
                     </SelectItem>
@@ -156,7 +150,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                 name="currency"
                 render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Fiat Currency</FormLabel>
+                    <FormLabel>Initial Balance Currency</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                         <SelectTrigger>
@@ -172,7 +166,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                         </SelectContent>
                     </Select>
                     <FormDescription>
-                        Select the fiat currency for this account.
+                        Fiat currency for the initial balance entry.
                     </FormDescription>
                     <FormMessage />
                 </FormItem>
@@ -185,12 +179,12 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
             name="balance"
             render={({ field }) => (
             <FormItem>
-                <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                <FormLabel>Initial Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
                 <FormControl>
-                <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''}/>
                 </FormControl>
                 <FormDescription>
-                    Amount in the selected currency.
+                    Enter the current fiat value of your crypto holdings for this account.
                 </FormDescription>
                 <FormMessage />
             </FormItem>
@@ -213,7 +207,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                   Include in Net Worth Calculations
                 </FormLabel>
                 <FormDescription>
-                  If checked, this crypto account's balance will be part of your total net worth.
+                  If checked, this crypto account's balance (in its fiat equivalent) will be part of your total net worth.
                 </FormDescription>
               </div>
             </FormItem>
