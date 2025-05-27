@@ -4,7 +4,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
 import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon, Trash2 } from "lucide-react";
@@ -93,10 +93,10 @@ export default function AccountsPage() {
     }
 
     const handleStorageChange = (event: StorageEvent) => {
-         if (event.type === 'storage' && user && !isLoadingAuth) {
+         if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 fetchAllData();
@@ -198,17 +198,18 @@ export default function AccountsPage() {
     const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall);
 
     const initialChartBalances = new Map<string, number>();
+
     relevantAccounts.forEach(acc => {
         let balanceAtChartStart = acc.balances.find(b => b.currency === acc.primaryCurrency)?.amount || 0;
 
         allTransactions
-            .filter(tx => tx.accountId === acc.id && parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z') >= chartStartDate)
+            .filter(tx => tx.accountId === acc.id && parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z') < chartStartDate)
             .forEach(tx => {
                 let amountInAccountPrimaryCurrency = tx.amount;
                 if (acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
                     amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
                 }
-                balanceAtChartStart -= amountInAccountPrimaryCurrency;
+                balanceAtChartStart += amountInAccountPrimaryCurrency;
             });
         initialChartBalances.set(acc.id, balanceAtChartStart);
     });
@@ -221,10 +222,9 @@ export default function AccountsPage() {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
-    if (allTxDates.length === 0 || chartEndDate > maxTxDateOverall) { // Always include today if range extends beyond last transaction
+    if (allTxDates.length === 0 || isSameDay(chartEndDate, new Date()) || chartEndDate > maxTxDateOverall) {
         chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
     }
-
 
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
@@ -243,12 +243,10 @@ export default function AccountsPage() {
          return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
     }
 
-
     sortedUniqueChartDates.forEach((currentDisplayDate, dateIndex) => {
         const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
         const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
 
-        // Apply transactions for the currentDisplayDate to update runningBalances
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
@@ -265,7 +263,6 @@ export default function AccountsPage() {
                 }
             });
 
-        // Create snapshot for this date using the updated runningBalances
         relevantAccounts.forEach(acc => {
             dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(runningBalances.get(acc.id) || 0, acc.primaryCurrency, preferredCurrency) : 0;
         });
@@ -281,8 +278,6 @@ export default function AccountsPage() {
             historicalData.push({ ...historicalData[0], date: lastDateStr });
         }
     }
-
-
     return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
 
   }, [allAccounts, allTransactions, preferredCurrency, isLoading, selectedDateRange]);
@@ -386,10 +381,13 @@ export default function AccountsPage() {
                                 <AccordionTrigger className="p-4 hover:bg-muted/50 data-[state=open]:bg-muted/30 data-[state=open]:border-b w-full text-left">
                                     <div className="flex-1 grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr_auto] items-center gap-4">
                                         <div className="truncate">
-                                            <Link href={`/accounts/${account.id}`} passHref>
-                                                <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline" onClick={(e) => e.stopPropagation()}>
-                                                    {account.name}
-                                                </Button>
+                                            <Link
+                                                href={`/accounts/${account.id}`}
+                                                onClick={(e) => e.stopPropagation()}
+                                                className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline focus:outline-none focus:ring-1 focus:ring-primary rounded"
+                                                aria-label={`View account ${account.name}`}
+                                            >
+                                                {account.name}
                                             </Link>
                                             <p className="text-xs text-muted-foreground truncate">{account.providerName || 'N/A'}</p>
                                         </div>
