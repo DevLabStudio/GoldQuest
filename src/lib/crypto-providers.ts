@@ -1,10 +1,25 @@
+
 'use client';
 
 import React from 'react';
 import type { ReactNode } from 'react';
 import { WalletCards } from 'lucide-react'; // Generic icon
-// Não importaremos ícones específicos de @token-icons/react ou react-icons/si por enquanto
-// para garantir estabilidade. Todos usarão o ícone genérico.
+
+// Attempt to import specific icons from @token-icons/react@2.14.0
+// If any of these cause "Export doesn't exist" errors during build,
+// it means the name is incorrect for v2.14.0 or the icon isn't in that version.
+// In that case, it should be removed from this import list and its corresponding
+// entry in specificCryptoIcons should also be removed, so it defaults to DefaultCryptoIcon.
+import {
+    ExchangeBinance,
+    ExchangeCoinbase,
+    ExchangeKraken,
+    WalletMetamask,
+    WalletLedger,
+    WalletTrustwallet
+    // Add other specific exchange/wallet icons here if verified for v2.14.0
+    // Example: ExchangeOkx, ExchangeKucoin, WalletExodus, WalletPhantom etc.
+} from '@token-icons/react'; // Assuming @token-icons/react@2.14.0 is installed
 
 const defaultIconSize = 20;
 
@@ -21,11 +36,17 @@ export interface CryptoProviderInfo {
   dataAiHint?: string;
 }
 
-// Mapa para ícones específicos de cripto. Ficará vazio por enquanto.
-// Adicionar aqui gradualmente após confirmar nomes e cores, e se a biblioteca de ícones estiver estável.
+// Map of crypto provider names (as used in your app) to their specific icon components
+// This map should only contain entries for icons that are confirmed to be correctly imported above.
 const specificCryptoIcons: { [key: string]: ReactNode } = {
-  // Exemplo se quisermos adicionar Binance depois de verificar:
-  // "Binance": React.createElement(ExchangeBinance, { size: defaultIconSize, color: "#F0B90B", variant: "branded" }),
+  "Binance": React.createElement(ExchangeBinance, { size: defaultIconSize, variant: "branded", color: "#F0B90B" }),
+  "Coinbase": React.createElement(ExchangeCoinbase, { size: defaultIconSize, variant: "branded", color: "#0052FF" }),
+  "Kraken": React.createElement(ExchangeKraken, { size: defaultIconSize, variant: "branded", color: "#5842C1" }),
+  "MetaMask": React.createElement(WalletMetamask, { size: defaultIconSize, variant: "branded", color: "#E2761B" }),
+  "Ledger Nano S/X/Stax": React.createElement(WalletLedger, { size: defaultIconSize, variant: "branded" }), // Ledger logo is often monochrome or uses context color
+  "Trust Wallet": React.createElement(WalletTrustwallet, { size: defaultIconSize, variant: "branded", color: "#3375BB" }),
+  // "Coinbase Wallet" might use ExchangeCoinbase or a specific WalletCoinbase if available
+  // "Phantom (Solana)" would need WalletPhantom
 };
 
 export const popularExchanges: CryptoProviderInfo[] = [
@@ -55,6 +76,3 @@ export const popularWallets: CryptoProviderInfo[] = [
 export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularExchanges, ...popularWallets])].sort(
     (a, b) => a.name.localeCompare(b.name)
 );
-
-// Não precisamos mais da função createIcon se estamos usando o mapa diretamente.
-// A lógica de fallback está na atribuição do iconComponent.
