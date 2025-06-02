@@ -435,7 +435,7 @@ export default function AccountsPage() {
                                         <div className="truncate">
                                             <Link
                                                 href={`/accounts/${account.id}`}
-                                                className={cn(buttonVariants({ variant: "link", size: "sm" }), "p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline focus:outline-none focus:ring-1 focus:ring-primary rounded")}
+                                                className="font-medium text-primary hover:text-primary/80 hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded text-base p-0.5"
                                                 onClick={(e) => e.stopPropagation()}
                                                 aria-label={`View account ${account.name}`}
                                             >

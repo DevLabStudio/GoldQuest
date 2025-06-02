@@ -68,13 +68,19 @@ export async function getAccounts(): Promise<Account[]> {
         let primaryCurrency: string | null = null;
 
         if (Array.isArray(rawData.balances) && rawData.balances.length > 0) {
-          balances = rawData.balances.map((b: any) => ({
-            currency: String(b.currency || 'USD').toUpperCase(),
-            amount: parseFloat(String(b.amount)) || 0,
-          }));
-          primaryCurrency = rawData.primaryCurrency && balances.some(b => b.currency === rawData.primaryCurrency)
+          // Consolidate balances: sum amounts for the same currency
+          const consolidatedBalancesMap = rawData.balances.reduce((acc: Record<string, number>, b: any) => {
+            const currency = String(b.currency || 'USD').toUpperCase();
+            const amount = parseFloat(String(b.amount)) || 0;
+            acc[currency] = (acc[currency] || 0) + amount;
+            return acc;
+          }, {} as Record<string, number>);
+          balances = Object.entries(consolidatedBalancesMap).map(([curr, amt]) => ({ currency: curr, amount: amt }));
+          
+          primaryCurrency = rawData.primaryCurrency && balances.some(b => b.currency === rawData.primaryCurrency.toUpperCase())
             ? rawData.primaryCurrency.toUpperCase()
             : (balances[0]?.currency || 'USD').toUpperCase();
+
         } else if (rawData.balance !== undefined && rawData.currency !== undefined) {
           // Legacy single balance/currency support - migrate to balances array structure
           const singleCurrency = String(rawData.currency).toUpperCase();
@@ -93,7 +99,6 @@ export async function getAccounts(): Promise<Account[]> {
             balances = [{ currency: 'USD', amount: 0 }];
             primaryCurrency = 'USD';
         }
-
 
         return {
           id,
@@ -168,7 +173,7 @@ export async function updateAccount(updatedAccountData: Account): Promise<Accoun
     name: updatedAccountData.name,
     type: updatedAccountData.type,
     providerName: updatedAccountData.providerName,
-    providerDisplayIconUrl: updatedAccountData.providerDisplayIconUrl || null, // Changed undefined to null
+    providerDisplayIconUrl: updatedAccountData.providerDisplayIconUrl || null, 
     isActive: updatedAccountData.isActive,
     lastActivity: updatedAccountData.lastActivity || new Date().toISOString(),
     category: updatedAccountData.category,
