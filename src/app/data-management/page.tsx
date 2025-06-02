@@ -1576,15 +1576,35 @@ export default function DataManagementPage() {
       updateProgress();
       setTags(await getTags());
 
-      // 4. Accounts
-      const accountsFile = zip.file('goldquest_accounts.csv');
-      if (accountsFile) {
-        const accountsCsv = await accountsFile.async('text');
-        const parsedAccounts = Papa.parse<Account>(accountsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
-        for (const accFromCsv of parsedAccounts) {
-            const csvProviderIconUrl = (accFromCsv as any).providerDisplayIconUrl;
+      // 4. Accounts (Shells with initialBalance = 0, skipOpeningBalanceTx = true)
+      const accountsCsvFile = zip.file('goldquest_accounts.csv');
+      let parsedAccountsFromCsv: Account[] = [];
+      if (accountsCsvFile) {
+        const accountsCsvText = await accountsCsvFile.async('text');
+        parsedAccountsFromCsv = Papa.parse<Account>(accountsCsvText, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+        
+        for (const accFromCsv of parsedAccountsFromCsv) {
+            if (!accFromCsv.id || !accFromCsv.name || !accFromCsv.type) {
+                 console.warn("Skipping account restore due to missing critical fields (id, name, or type from CSV):", accFromCsv);
+                 overallSuccess = false;
+                 continue;
+            }
+            
+            // Determine initial currency for the shell account creation
+            let shellInitialCurrency = 'USD'; // Fallback
+            if (accFromCsv.primaryCurrency) {
+                shellInitialCurrency = accFromCsv.primaryCurrency;
+            } else if (accFromCsv.balances && accFromCsv.balances.length > 0 && accFromCsv.balances[0].currency) {
+                shellInitialCurrency = accFromCsv.balances[0].currency;
+            } else if ((accFromCsv as any).currency) { // Legacy
+                shellInitialCurrency = (accFromCsv as any).currency;
+            }
+            if (!supportedCurrencies.includes(shellInitialCurrency.toUpperCase())) {
+                console.warn(`Unsupported currency "${shellInitialCurrency}" for account shell ${accFromCsv.name}. Defaulting to USD.`);
+                shellInitialCurrency = 'USD';
+            }
 
-            const tempNewAccData: Partial<NewAccountData> & Pick<NewAccountData, 'name' | 'type' | 'category'> = {
+            const newAccountShellData: NewAccountData = {
                 name: accFromCsv.name,
                 type: accFromCsv.type,
                 providerName: accFromCsv.providerName || 'Restored - ' + accFromCsv.name,
@@ -1592,75 +1612,24 @@ export default function DataManagementPage() {
                 isActive: accFromCsv.isActive !== undefined ? (String(accFromCsv.isActive).toLowerCase() === 'true') : true,
                 lastActivity: accFromCsv.lastActivity || new Date().toISOString(),
                 includeInNetWorth: accFromCsv.includeInNetWorth !== undefined ? (String(accFromCsv.includeInNetWorth).toLowerCase() === 'true') : true,
-                providerDisplayIconUrl: csvProviderIconUrl || undefined,
-            };
-
-            let derivedInitialBalance: number = 0;
-            let derivedInitialCurrency: string = ''; // Must be a non-empty string for addAccount
-            let derivedPrimaryCurrency: string | undefined = undefined;
-
-            if (accFromCsv.balances && accFromCsv.balances.length > 0) {
-                let primaryBalanceEntry = null;
-                if (accFromCsv.primaryCurrency && typeof accFromCsv.primaryCurrency === 'string') {
-                    const primaryCurrencyUpper = accFromCsv.primaryCurrency.toUpperCase();
-                    primaryBalanceEntry = accFromCsv.balances.find(b => typeof b.currency === 'string' && b.currency.toUpperCase() === primaryCurrencyUpper);
-                }
-                if (!primaryBalanceEntry) {
-                    primaryBalanceEntry = accFromCsv.balances[0]; // Fallback to first balance
-                }
-
-                if (primaryBalanceEntry && typeof primaryBalanceEntry.currency === 'string' && primaryBalanceEntry.currency.trim() !== '') {
-                    derivedInitialBalance = parseFloat(String(primaryBalanceEntry.amount)) || 0;
-                    derivedInitialCurrency = primaryBalanceEntry.currency;
-                    derivedPrimaryCurrency = accFromCsv.primaryCurrency || primaryBalanceEntry.currency;
-                }
-            } else if ((accFromCsv as any).balance !== undefined && (accFromCsv as any).currency !== undefined && typeof (accFromCsv as any).currency === 'string' && (accFromCsv as any).currency.trim() !== '') {
-                derivedInitialBalance = parseFloat(String((accFromCsv as any).balance)) || 0;
-                derivedInitialCurrency = (accFromCsv as any).currency;
-                derivedPrimaryCurrency = (accFromCsv as any).currency;
-                console.warn(`Account ${accFromCsv.name} from CSV used legacy balance/currency fields for restore.`);
-            }
-            
-            // Final fallback if currency could not be derived
-            if (!derivedInitialCurrency) {
-                derivedInitialCurrency = 'USD'; // Or a user's preferred default, or skip
-                derivedPrimaryCurrency = derivedPrimaryCurrency || derivedInitialCurrency;
-                console.warn(`Could not derive initial currency for account ${accFromCsv.name}. Defaulting to ${derivedInitialCurrency}. CSV Data:`, accFromCsv);
-            }
-
-
-            if (!accFromCsv.id || !tempNewAccData.name || !tempNewAccData.type) {
-                console.warn("Skipping account restore due to missing critical fields (id, name, or type from CSV):", accFromCsv);
-                overallSuccess = false;
-                continue; 
-            }
-
-            const finalNewAccData: NewAccountData = {
-                name: tempNewAccData.name!, // Known to be defined due to check above
-                type: tempNewAccData.type!, // Known to be defined
-                category: tempNewAccData.category!, // Known to be defined
-                initialBalance: derivedInitialBalance,
-                initialCurrency: derivedInitialCurrency, // Guaranteed non-empty string now
-                primaryCurrency: derivedPrimaryCurrency, // Can be undefined if not derived
-                providerName: tempNewAccData.providerName,
-                isActive: tempNewAccData.isActive,
-                lastActivity: tempNewAccData.lastActivity,
-                includeInNetWorth: tempNewAccData.includeInNetWorth,
-                providerDisplayIconUrl: tempNewAccData.providerDisplayIconUrl,
+                providerDisplayIconUrl: (accFromCsv as any).providerDisplayIconUrl || undefined,
+                initialBalance: 0, // Set initial balance to 0 for shell creation
+                initialCurrency: shellInitialCurrency.toUpperCase(),
+                primaryCurrency: accFromCsv.primaryCurrency ? accFromCsv.primaryCurrency.toUpperCase() : undefined,
             };
             
             try {
-                const newAccount = await addAccount(finalNewAccData);
+                const newAccount = await addAccount(newAccountShellData, { skipOpeningBalanceTx: true });
                 oldAccountIdToNewIdMap[accFromCsv.id] = newAccount.id;
             } catch (e: any) {
-                console.error(`Error restoring account ${accFromCsv.name}: ${e.message}. Data sent to addAccount:`, JSON.stringify(finalNewAccData));
+                console.error(`Error restoring account shell ${accFromCsv.name}: ${e.message}. Data:`, JSON.stringify(newAccountShellData), e);
                 overallSuccess = false;
             }
         }
-        toast({ title: "Restore Progress", description: "Accounts restored."});
+        toast({ title: "Restore Progress", description: "Account shells created."});
       }
       updateProgress();
-      setAccounts(await getAccounts());
+      setAccounts(await getAccounts()); // Update local state of accounts with newly created shells
       
       // 5. Groups
       const groupsFile = zip.file('goldquest_groups.csv');
@@ -1693,7 +1662,7 @@ export default function DataManagementPage() {
       }
       updateProgress();
 
-      // 6. Transactions
+      // 6. Transactions (Import all, including "Opening Balance" from CSV, with skipBalanceModification)
       const transactionsFile = zip.file('goldquest_transactions.csv');
       if (transactionsFile) {
           const transactionsCsv = await transactionsFile.async('text');
@@ -1730,9 +1699,67 @@ export default function DataManagementPage() {
                   overallSuccess = false;
               }
           }
-          toast({ title: "Restore Progress", description: "Transactions restored (history only)."});
+          toast({ title: "Restore Progress", description: "Transactions (history) restored."});
       }
       updateProgress();
+
+      // 7. Set Final Account Balances
+      if (parsedAccountsFromCsv.length > 0) {
+          toast({ title: "Restore Progress", description: "Finalizing account balances..." });
+          for (const accFromCsv of parsedAccountsFromCsv) {
+              const newAccountId = oldAccountIdToNewIdMap[accFromCsv.id];
+              if (newAccountId) {
+                  try {
+                      // Ensure balances from CSV are valid
+                      let balancesForUpdate: Array<{ currency: string; amount: number }> = [];
+                      if (Array.isArray(accFromCsv.balances) && accFromCsv.balances.length > 0) {
+                          balancesForUpdate = accFromCsv.balances.map(b => ({
+                              currency: String(b.currency || 'USD').toUpperCase(),
+                              amount: parseFloat(String(b.amount)) || 0
+                          }));
+                      } else if ((accFromCsv as any).balance !== undefined && (accFromCsv as any).currency !== undefined) { // Legacy single balance
+                          balancesForUpdate = [{ 
+                              currency: String((accFromCsv as any).currency).toUpperCase(), 
+                              amount: parseFloat(String((accFromCsv as any).balance)) || 0 
+                          }];
+                      } else {
+                           console.warn(`Account ${accFromCsv.name} in CSV has no balance data. Setting to 0 USD.`);
+                           balancesForUpdate = [{ currency: 'USD', amount: 0}];
+                      }
+                      
+                      let primaryCurrencyForUpdate = accFromCsv.primaryCurrency 
+                        ? accFromCsv.primaryCurrency.toUpperCase() 
+                        : (balancesForUpdate[0]?.currency || 'USD');
+                      
+                      if (!balancesForUpdate.some(b => b.currency === primaryCurrencyForUpdate)) {
+                          primaryCurrencyForUpdate = balancesForUpdate[0]?.currency || 'USD';
+                      }
+
+
+                      await updateAccount({
+                          id: newAccountId,
+                          name: accFromCsv.name,
+                          type: accFromCsv.type,
+                          providerName: accFromCsv.providerName || 'Restored - ' + accFromCsv.name,
+                          category: accFromCsv.category || 'asset',
+                          isActive: accFromCsv.isActive !== undefined ? (String(accFromCsv.isActive).toLowerCase() === 'true') : true,
+                          lastActivity: accFromCsv.lastActivity || new Date().toISOString(),
+                          includeInNetWorth: accFromCsv.includeInNetWorth !== undefined ? (String(accFromCsv.includeInNetWorth).toLowerCase() === 'true') : true,
+                          providerDisplayIconUrl: (accFromCsv as any).providerDisplayIconUrl || null,
+                          balances: balancesForUpdate,
+                          primaryCurrency: primaryCurrencyForUpdate,
+                      });
+                  } catch(e:any) {
+                      console.error(`Error setting final balance for account ${accFromCsv.name} (New ID: ${newAccountId}): ${e.message}`);
+                      overallSuccess = false;
+                  }
+              }
+          }
+          setAccounts(await getAccounts()); // Refresh accounts after final balance update
+          toast({ title: "Restore Progress", description: "Account balances finalized." });
+      }
+      updateProgress();
+
 
       // Restore other data types...
       const dataTypesToRestore = [

@@ -31,6 +31,10 @@ export type NewAccountData = Omit<Account, 'id' | 'balances' | 'primaryCurrency'
   providerDisplayIconUrl?: string;
 };
 
+interface AddAccountOptions {
+  skipOpeningBalanceTx?: boolean;
+}
+
 function getAccountsRefPath(currentUser: User | null) {
   if (!currentUser?.uid) throw new Error("User not authenticated to access accounts.");
   return `users/${currentUser.uid}/accounts`;
@@ -123,7 +127,7 @@ export async function getAccounts(): Promise<Account[]> {
   }
 }
 
-export async function addAccount(accountData: NewAccountData): Promise<Account> {
+export async function addAccount(accountData: NewAccountData, options?: AddAccountOptions): Promise<Account> {
   const currentUser = auth.currentUser;
   if (!currentUser) {
     throw new Error("User not authenticated. Cannot add account.");
@@ -153,8 +157,8 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
     await set(newAccountRef, newAccountFull);
     const createdAccount = { id: newAccountRef.key, ...newAccountFull };
 
-    // Add an "Opening Balance" transaction for the new account
-    if (accountData.initialBalance !== 0) {
+    // Add an "Opening Balance" transaction for the new account, unless skipped
+    if (accountData.initialBalance !== 0 && !options?.skipOpeningBalanceTx) {
         await addTransactionService({
             accountId: createdAccount.id,
             amount: accountData.initialBalance,
@@ -241,23 +245,17 @@ export async function recalculateAllAccountBalances(): Promise<void> {
     for (const tx of accountTransactions) {
       if (tx.category?.toLowerCase() === 'opening balance') {
         const currency = tx.transactionCurrency.toUpperCase();
-        // If multiple opening balances for the same currency, sum them (though ideally there's one per currency)
         newBalancesMap.set(currency, (newBalancesMap.get(currency) || 0) + tx.amount);
       }
     }
     
-    // If no "Opening Balance" transaction was found for the account's primary currency,
-    // AND the account was just created (e.g., has no other transactions yet),
-    // its `account.balances` array might contain the initial balance set during creation.
-    // This is a fallback if the explicit "Opening Balance" transaction wasn't created/found.
-    // However, with the fix in `addAccount` to create an "Opening Balance" tx, this might be less needed.
-    // For robustness, check if `newBalancesMap` is empty. If so, the account's current `balances`
-    // are likely the "initial" ones set without a formal Opening Balance transaction, so use them.
-    if (newBalancesMap.size === 0 && account.balances.length > 0) {
+    // If no "Opening Balance" transaction was found, and the account has existing balances (e.g., from creation)
+    // use those as the starting point. This handles accounts created before OB transactions were auto-added.
+    if (newBalancesMap.size === 0 && account.balances && account.balances.length > 0) {
+        console.warn(`Account ${account.name} (${account.id}) had no 'Opening Balance' transactions. Using existing account.balances as starting point for recalculation.`);
         account.balances.forEach(balanceEntry => {
-            newBalancesMap.set(balanceEntry.currency.toUpperCase(), balanceEntry.amount);
+            newBalancesMap.set(balanceEntry.currency.toUpperCase(), (newBalancesMap.get(balanceEntry.currency.toUpperCase()) || 0) + balanceEntry.amount);
         });
-        console.warn(`Account ${account.name} (${account.id}) had no 'Opening Balance' transactions. Using existing account.balances as starting point.`);
     }
 
 
@@ -278,7 +276,9 @@ export async function recalculateAllAccountBalances(): Promise<void> {
     let newPrimaryCurrency = account.primaryCurrency;
     if (newBalancesArray.length > 0) {
       if (!newPrimaryCurrency || !newBalancesArray.some(b => b.currency === newPrimaryCurrency)) {
-        newPrimaryCurrency = newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0].currency;
+        // If primary currency is not among new balances, pick the one with largest absolute value or first one.
+        newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount));
+        newPrimaryCurrency = newBalancesArray[0].currency;
       }
     } else {
       // If still no balances (e.g. no opening balance and no other transactions), default it.
