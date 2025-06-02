@@ -8,7 +8,6 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { PlusCircle, ArrowUpCircle, ArrowDownCircle, Users, Eye, Landmark, PercentCircle, PiggyBank, Trash2, Edit, MoreHorizontal, Settings2, CreditCard as CreditCardIconLucide } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 
@@ -18,6 +17,7 @@ import { getSubscriptions, addSubscription as saveSubscription, deleteSubscripti
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getAccounts, type Account } from '@/services/account-sync';
 import { getGroups, type Group } from '@/services/groups';
+import { addTransaction } from '@/services/transactions'; // Added import
 
 import AddLoanForm, { type AddLoanFormData } from '@/components/loans/add-loan-form';
 import type { Loan, NewLoanData, LoanType } from '@/services/loans';
@@ -36,7 +36,7 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format, parseISO, isSameMonth, isSameYear } from 'date-fns';
+import { format, parseISO, isSameMonth, isSameYear } from 'date-fns'; // Added format from date-fns
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -206,12 +206,36 @@ export default function FinancialControlPage() {
     try {
       await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
-      window.dispatchEvent(new Event('storage'));
+      
+      if (newLastPaidMonth) { // If marked as paid
+        if (subscriptionToUpdate.accountId) {
+          const transactionData = {
+            accountId: subscriptionToUpdate.accountId,
+            amount: -Math.abs(subscriptionToUpdate.amount),
+            transactionCurrency: subscriptionToUpdate.currency,
+            date: format(new Date(), 'yyyy-MM-dd'),
+            description: `Pagamento Assinatura: ${subscriptionToUpdate.name}`,
+            category: subscriptionToUpdate.category,
+            tags: subscriptionToUpdate.tags || [],
+          };
+          await addTransaction(transactionData);
+          toast({ title: "Despesa Registrada", description: "Despesa da assinatura registrada automaticamente." });
+        } else {
+          toast({
+            title: "Ação Necessária",
+            description: "Assinatura marcada como paga. Associe uma conta para registrar a despesa automaticamente ou adicione manualmente.",
+            variant: "default",
+            duration: 7000,
+          });
+        }
+      }
+      window.dispatchEvent(new Event('storage')); // Refresh main data
     } catch (error: any) {
-      console.error("Failed to update paid status:", error);
-      toast({ title: "Error", description: "Could not update paid status.", variant: "destructive" });
+      console.error("Failed to update paid status or create transaction:", error);
+      toast({ title: "Error", description: "Could not update paid status or create expense.", variant: "destructive" });
     }
   };
+
 
   // --- Loan Handlers ---
   const handleLoanAdded = async (data: NewLoanData) => {
@@ -1004,3 +1028,5 @@ export default function FinancialControlPage() {
   );
 }
 
+
+    
