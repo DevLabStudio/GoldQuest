@@ -18,7 +18,7 @@ import { getSubscriptions, addSubscription as saveSubscription, deleteSubscripti
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getAccounts, type Account } from '@/services/account-sync';
 import { getGroups, type Group } from '@/services/groups';
-import { addTransaction } from '@/services/transactions'; // Added import
+import { addTransaction } from '@/services/transactions'; 
 
 import AddLoanForm, { type AddLoanFormData } from '@/components/loans/add-loan-form';
 import type { Loan, NewLoanData, LoanType } from '@/services/loans';
@@ -37,7 +37,7 @@ import { Progress } from '@/components/ui/progress';
 import { useToast } from '@/hooks/use-toast';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
-import { format, parseISO, isSameMonth, isSameYear } from 'date-fns'; // Added format from date-fns
+import { format, parseISO, isSameMonth, isSameYear } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
@@ -198,29 +198,38 @@ export default function FinancialControlPage() {
     setIsAddSubscriptionDialogOpen(true);
   };
 
-  const handleTogglePaidStatus = async (subscriptionId: string, currentlyPaid: boolean) => {
+  const handleTogglePaidStatus = async (subscriptionId: string, isNowMarkedAsPaid: boolean) => {
     const subscriptionToUpdate = subscriptions.find(sub => sub.id === subscriptionId);
     if (!subscriptionToUpdate) return;
 
-    const newLastPaidMonth = currentlyPaid ? null : format(new Date(), 'yyyy-MM');
+    const newLastPaidMonth = isNowMarkedAsPaid ? format(new Date(), 'yyyy-MM') : null;
 
     try {
-      await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
-      toast({ title: "Status Updated", description: `Subscription marked as ${newLastPaidMonth ? 'paid' : 'unpaid'} for this month.` });
+      const updatedSub = await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
       
-      if (newLastPaidMonth) { // If marked as paid
-        if (subscriptionToUpdate.accountId) {
+      toast({ 
+        title: "Status Updated", 
+        description: `Subscription marked as ${isNowMarkedAsPaid ? 'paid' : 'unpaid'} for this month.` 
+      });
+      
+      if (isNowMarkedAsPaid) { // If marked as paid (checkbox is now checked)
+        if (updatedSub.accountId) {
           const transactionData = {
-            accountId: subscriptionToUpdate.accountId,
-            amount: -Math.abs(subscriptionToUpdate.amount),
-            transactionCurrency: subscriptionToUpdate.currency,
+            accountId: updatedSub.accountId,
+            amount: -Math.abs(updatedSub.amount),
+            transactionCurrency: updatedSub.currency,
             date: format(new Date(), 'yyyy-MM-dd'),
-            description: `Pagamento Assinatura: ${subscriptionToUpdate.name}`,
-            category: subscriptionToUpdate.category,
-            tags: subscriptionToUpdate.tags || [],
+            description: `Pagamento Assinatura: ${updatedSub.name}`,
+            category: updatedSub.category,
+            tags: updatedSub.tags || [],
           };
-          await addTransaction(transactionData);
-          toast({ title: "Despesa Registrada", description: "Despesa da assinatura registrada automaticamente." });
+          try {
+            await addTransaction(transactionData);
+            toast({ title: "Despesa Registrada", description: "Despesa da assinatura registrada automaticamente." });
+          } catch (txError: any) {
+            console.error("Failed to create transaction for subscription:", txError);
+            toast({ title: "Erro ao Registrar Despesa", description: `Não foi possível criar a despesa: ${txError.message}`, variant: "destructive" });
+          }
         } else {
           toast({
             title: "Ação Necessária",
@@ -230,10 +239,10 @@ export default function FinancialControlPage() {
           });
         }
       }
-      window.dispatchEvent(new Event('storage')); // Refresh main data
+      window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to update paid status or create transaction:", error);
-      toast({ title: "Error", description: "Could not update paid status or create expense.", variant: "destructive" });
+      toast({ title: "Error", description: `Could not update paid status: ${error.message}`, variant: "destructive" });
     }
   };
 
@@ -1029,5 +1038,7 @@ export default function FinancialControlPage() {
   );
 }
 
+
+    
 
     
