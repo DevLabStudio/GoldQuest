@@ -12,6 +12,9 @@ import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthContext } from '@/contexts/AuthContext';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { recalculateAllAccountBalances } from '@/services/account-sync'; // Import the new service
+import { AlertCircle } from 'lucide-react';
 
 export default function PreferencesPage() {
   const { user, isLoadingAuth, userPreferences, refreshUserPreferences } = useAuthContext();
@@ -19,6 +22,7 @@ export default function PreferencesPage() {
   const [selectedInvestmentsCurrency, setSelectedInvestmentsCurrency] = useState(userPreferences?.investmentsPreferredCurrency || 'USD');
   const [selectedTheme, setSelectedTheme] = useState<UserPreferences['theme']>(userPreferences?.theme || 'system');
   const [isSaving, setIsSaving] = useState(false);
+  const [isRecalculating, setIsRecalculating] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -54,7 +58,7 @@ export default function PreferencesPage() {
         theme: selectedTheme,
       };
       await saveUserPreferences(newPreferencesToSave);
-      await refreshUserPreferences(); // This will update the context and re-apply theme if necessary
+      await refreshUserPreferences(); 
       toast({
         title: "Preferences Saved",
         description: "Your preferences have been updated successfully.",
@@ -71,6 +75,32 @@ export default function PreferencesPage() {
       setIsSaving(false);
     }
   };
+
+  const handleRecalculateBalances = async () => {
+    if (!user) {
+      toast({ title: "Error", description: "User not authenticated.", variant: "destructive" });
+      return;
+    }
+    setIsRecalculating(true);
+    try {
+      await recalculateAllAccountBalances();
+      toast({
+        title: "Balances Recalculated",
+        description: "All account balances have been successfully updated from transaction history.",
+      });
+      window.dispatchEvent(new Event('storage')); // Trigger UI updates across the app
+    } catch (error: any) {
+      console.error("Failed to recalculate balances:", error);
+      toast({
+        title: "Recalculation Error",
+        description: error.message || "Could not recalculate account balances.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRecalculating(false);
+    }
+  };
+
 
   if (isLoadingAuth || (!userPreferences && user)) {
     return (
@@ -122,7 +152,7 @@ export default function PreferencesPage() {
                 <Select
                   value={preferredCurrency}
                   onValueChange={handleCurrencyChange}
-                  disabled={!user || isSaving}
+                  disabled={!user || isSaving || isRecalculating}
                 >
                   <SelectTrigger id="preferred-currency" className="w-full md:w-1/2">
                     <SelectValue placeholder="Select your main preferred currency" />
@@ -145,7 +175,7 @@ export default function PreferencesPage() {
                 <Select
                   value={selectedInvestmentsCurrency}
                   onValueChange={handleInvestmentsCurrencyChange}
-                  disabled={!user || isSaving}
+                  disabled={!user || isSaving || isRecalculating}
                 >
                   <SelectTrigger id="investments-preferred-currency" className="w-full md:w-1/2">
                     <SelectValue placeholder="Select currency for investments" />
@@ -168,7 +198,7 @@ export default function PreferencesPage() {
                 <Select
                   value={selectedTheme}
                   onValueChange={(value) => handleThemeChange(value as UserPreferences['theme'])}
-                  disabled={!user || isSaving}
+                  disabled={!user || isSaving || isRecalculating}
                 >
                   <SelectTrigger id="theme-preference" className="w-full md:w-1/2">
                     <SelectValue placeholder="Select theme" />
@@ -184,7 +214,7 @@ export default function PreferencesPage() {
                   Choose your preferred application theme.
                 </p>
               </div>
-              <Button onClick={handleSaveChanges} disabled={!user || isSaving}>
+              <Button onClick={handleSaveChanges} disabled={!user || isSaving || isRecalculating}>
                 {isSaving ? "Saving..." : "Save Changes"}
               </Button>
             </>
@@ -192,6 +222,47 @@ export default function PreferencesPage() {
         </CardContent>
       </Card>
 
+      {user && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Data Integrity</CardTitle>
+            <CardDescription>
+              Tools to help ensure your financial data is accurate.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+             <div className="flex flex-col space-y-2 items-start">
+                <Label className="font-semibold">Recalculate Account Balances</Label>
+                <p className="text-sm text-muted-foreground">
+                    If you suspect any discrepancies in your account balances, this action will recalculate them based on your complete transaction history. This can take a few moments.
+                </p>
+             </div>
+            <AlertDialog>
+                <AlertDialogTrigger asChild>
+                    <Button variant="outline" disabled={isRecalculating || isSaving}>
+                        {isRecalculating ? "Recalculating..." : "Recalculate All Balances"}
+                    </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                    <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        This will re-evaluate every transaction for every account to correct balances.
+                        This process cannot be undone, but it aims to fix any inconsistencies.
+                        It might take some time depending on your data.
+                    </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                    <AlertDialogCancel disabled={isRecalculating}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleRecalculateBalances} disabled={isRecalculating}>
+                        {isRecalculating ? "Processing..." : "Yes, Recalculate Balances"}
+                    </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

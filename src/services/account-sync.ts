@@ -4,6 +4,7 @@
 import { database, auth } from '@/lib/firebase';
 import { ref, set, get, push, remove, update } from 'firebase/database';
 import type { User } from 'firebase/auth';
+import { getTransactions } from '@/services/transactions'; // Import getTransactions
 
 /**
  * Represents a financial account with multi-currency balances.
@@ -15,7 +16,7 @@ export interface Account {
   balances: Array<{ currency: string; amount: number }>;
   primaryCurrency: string | null;
   providerName?: string;
-  providerDisplayIconUrl?: string; // URL for fetched logo (e.g., from CoinGecko for exchanges)
+  providerDisplayIconUrl?: string | null; // URL for fetched logo (e.g., from CoinGecko for exchanges)
   isActive?: boolean;
   lastActivity?: string;
   category: 'asset' | 'crypto';
@@ -68,11 +69,10 @@ export async function getAccounts(): Promise<Account[]> {
         let primaryCurrency: string | null = null;
 
         if (Array.isArray(rawData.balances) && rawData.balances.length > 0) {
-          // Consolidate balances: sum amounts for the same currency
           const consolidatedBalancesMap = rawData.balances.reduce((acc: Record<string, number>, b: any) => {
             const currency = String(b.currency || 'USD').toUpperCase();
             const amount = parseFloat(String(b.amount)) || 0;
-            acc[currency] = (acc[currency] || 0) + amount;
+            acc[currency] = parseFloat(((acc[currency] || 0) + amount).toFixed(2)); // Consolidate and fix precision
             return acc;
           }, {} as Record<string, number>);
           balances = Object.entries(consolidatedBalancesMap).map(([curr, amt]) => ({ currency: curr, amount: amt }));
@@ -82,12 +82,10 @@ export async function getAccounts(): Promise<Account[]> {
             : (balances[0]?.currency || 'USD').toUpperCase();
 
         } else if (rawData.balance !== undefined && rawData.currency !== undefined) {
-          // Legacy single balance/currency support - migrate to balances array structure
           const singleCurrency = String(rawData.currency).toUpperCase();
           balances = [{ currency: singleCurrency, amount: parseFloat(String(rawData.balance)) || 0 }];
           primaryCurrency = singleCurrency;
         } else {
-          // Default if no balance info at all
           balances = [{ currency: 'USD', amount: 0 }]; 
           primaryCurrency = 'USD';
         }
@@ -95,7 +93,6 @@ export async function getAccounts(): Promise<Account[]> {
         if (!primaryCurrency && balances.length > 0) {
             primaryCurrency = balances[0].currency;
         } else if (!primaryCurrency && balances.length === 0) {
-            // This case should be handled by the default above, but as a safeguard:
             balances = [{ currency: 'USD', amount: 0 }];
             primaryCurrency = 'USD';
         }
@@ -105,7 +102,7 @@ export async function getAccounts(): Promise<Account[]> {
           name: rawData.name || 'Unnamed Account',
           type: rawData.type || (rawData.category === 'crypto' ? 'wallet' : 'checking'),
           providerName: rawData.providerName,
-          providerDisplayIconUrl: rawData.providerDisplayIconUrl || undefined,
+          providerDisplayIconUrl: rawData.providerDisplayIconUrl || null,
           category: rawData.category || 'asset',
           ...getDefaultAccountValues(rawData.category || 'asset'),
           balances,
@@ -143,7 +140,7 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
     name: accountData.name,
     type: accountData.type,
     providerName: accountData.providerName,
-    providerDisplayIconUrl: accountData.providerDisplayIconUrl || undefined, // Stays undefined if not provided
+    providerDisplayIconUrl: accountData.providerDisplayIconUrl || null,
     ...getDefaultAccountValues(accountData.category),
     category: accountData.category,
     balances: [{ currency: initialCurrencyUpper, amount: accountData.initialBalance }],
@@ -209,5 +206,52 @@ export async function deleteAccount(accountId: string): Promise<void> {
   } catch (error) {
     console.error("Error deleting account from Firebase:", error);
     throw error;
+  }
+}
+
+export async function recalculateAllAccountBalances(): Promise<void> {
+  const currentUser = auth.currentUser;
+  if (!currentUser) {
+    throw new Error("User not authenticated. Cannot recalculate balances.");
+  }
+
+  const allAppAccounts = await getAccounts(); 
+
+  for (const account of allAppAccounts) {
+    const accountTransactions = await getTransactions(account.id); 
+
+    const newBalancesMap = new Map<string, number>();
+
+    for (const tx of accountTransactions) {
+      const currency = tx.transactionCurrency.toUpperCase();
+      const currentBalanceForCurrency = newBalancesMap.get(currency) || 0;
+      newBalancesMap.set(currency, parseFloat((currentBalanceForCurrency + tx.amount).toFixed(2)));
+    }
+
+    const newBalancesArray: Array<{ currency: string; amount: number }> = [];
+    newBalancesMap.forEach((amount, currency) => {
+      newBalancesArray.push({ currency, amount });
+    });
+
+    let newPrimaryCurrency = account.primaryCurrency;
+    if (newBalancesArray.length > 0) {
+      if (!newPrimaryCurrency || !newBalancesArray.some(b => b.currency === newPrimaryCurrency)) {
+        newPrimaryCurrency = newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0].currency;
+      }
+    } else {
+      // No transactions, balance should be 0 for primary currency or a default
+      newPrimaryCurrency = account.primaryCurrency || 'USD'; 
+      newBalancesArray.push({ currency: newPrimaryCurrency, amount: 0 });
+    }
+
+    const updatedAccountData: Account = {
+      ...account,
+      balances: newBalancesArray.length > 0 ? newBalancesArray : [{currency: newPrimaryCurrency || 'USD', amount: 0}],
+      primaryCurrency: newPrimaryCurrency,
+      lastActivity: new Date().toISOString(), 
+    };
+    
+    await updateAccount(updatedAccountData); // This is the existing updateAccount function
+    console.log(`Recalculated balances for account ${account.name} (${account.id})`);
   }
 }
