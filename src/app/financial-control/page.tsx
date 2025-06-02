@@ -14,11 +14,11 @@ import { Label } from "@/components/ui/label";
 
 import AddSubscriptionForm, { type AddSubscriptionFormData } from '@/components/subscriptions/add-subscription-form';
 import type { Subscription, SubscriptionFrequency } from '@/services/subscriptions';
-import { getSubscriptions, addSubscription as saveSubscription, deleteSubscription, updateSubscription } from '@/services/subscriptions';
+import { getSubscriptions, addSubscription as saveSubscription, deleteSubscription, updateSubscription, getSubscriptionById } from '@/services/subscriptions';
 import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
 import { getAccounts, type Account } from '@/services/account-sync';
 import { getGroups, type Group } from '@/services/groups';
-import { addTransaction } from '@/services/transactions'; 
+import { addTransaction, getTransactions } from '@/services/transactions'; 
 
 import AddLoanForm, { type AddLoanFormData } from '@/components/loans/add-loan-form';
 import type { Loan, NewLoanData, LoanType } from '@/services/loans';
@@ -202,7 +202,9 @@ export default function FinancialControlPage() {
     const subscriptionToUpdate = subscriptions.find(sub => sub.id === subscriptionId);
     if (!subscriptionToUpdate) return;
 
-    const newLastPaidMonth = isNowMarkedAsPaid ? format(new Date(), 'yyyy-MM') : null;
+    const currentMonthStr = format(new Date(), 'yyyy-MM');
+    const newLastPaidMonth = isNowMarkedAsPaid ? currentMonthStr : null;
+    const autoPaymentTag = `auto-sub-pmt:${subscriptionId}:${currentMonthStr}`;
 
     try {
       const updatedSub = await updateSubscription({ ...subscriptionToUpdate, lastPaidMonth: newLastPaidMonth });
@@ -212,23 +214,33 @@ export default function FinancialControlPage() {
         description: `Subscription marked as ${isNowMarkedAsPaid ? 'paid' : 'unpaid'} for this month.` 
       });
       
-      if (isNowMarkedAsPaid) { // If marked as paid (checkbox is now checked)
+      if (isNowMarkedAsPaid) {
         if (updatedSub.accountId) {
-          const transactionData = {
-            accountId: updatedSub.accountId,
-            amount: -Math.abs(updatedSub.amount),
-            transactionCurrency: updatedSub.currency,
-            date: format(new Date(), 'yyyy-MM-dd'),
-            description: `Pagamento Assinatura: ${updatedSub.name}`,
-            category: updatedSub.category,
-            tags: updatedSub.tags || [],
-          };
-          try {
-            await addTransaction(transactionData);
-            toast({ title: "Despesa Registrada", description: "Despesa da assinatura registrada automaticamente." });
-          } catch (txError: any) {
-            console.error("Failed to create transaction for subscription:", txError);
-            toast({ title: "Erro ao Registrar Despesa", description: `Não foi possível criar a despesa: ${txError.message}`, variant: "destructive" });
+          // Check if a transaction for this payment already exists
+          const existingTransactions = await getTransactions(updatedSub.accountId);
+          const paymentAlreadyExists = existingTransactions.some(tx => tx.tags?.includes(autoPaymentTag));
+
+          if (!paymentAlreadyExists) {
+            const transactionData = {
+              accountId: updatedSub.accountId,
+              amount: -Math.abs(updatedSub.amount),
+              transactionCurrency: updatedSub.currency,
+              date: format(new Date(), 'yyyy-MM-dd'),
+              description: `Pagamento Assinatura: ${updatedSub.name}`,
+              category: updatedSub.category,
+              tags: [...(updatedSub.tags || []), autoPaymentTag], // Add the special tag
+            };
+            try {
+              await addTransaction(transactionData);
+              toast({ title: "Despesa Registrada", description: "Despesa da assinatura registrada automaticamente." });
+            } catch (txError: any) {
+              console.error("Failed to create transaction for subscription:", txError);
+              toast({ title: "Erro ao Registrar Despesa", description: `Não foi possível criar a despesa: ${txError.message}`, variant: "destructive" });
+              // Revert lastPaidMonth if transaction creation fails
+              await updateSubscription({ ...updatedSub, lastPaidMonth: subscriptionToUpdate.lastPaidMonth });
+            }
+          } else {
+            toast({ title: "Pagamento Já Registrado", description: "Uma despesa para esta assinatura neste mês já existe.", variant: "default" });
           }
         } else {
           toast({
@@ -239,6 +251,8 @@ export default function FinancialControlPage() {
           });
         }
       }
+      // Note: Unmarking does not automatically delete the transaction.
+      // The logic in deleteTransaction service handles unmarking if the auto-generated tx is deleted.
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to update paid status or create transaction:", error);
