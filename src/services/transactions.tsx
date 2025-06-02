@@ -63,20 +63,56 @@ async function modifyAccountBalance(accountId: string, amountInTransactionCurren
     const accountToUpdate = accounts.find(acc => acc.id === accountId);
 
     if (accountToUpdate) {
-        let amountInAccountCurrency = amountInTransactionCurrency;
-        if (transactionCurrency && accountToUpdate.currency && transactionCurrency.toUpperCase() !== accountToUpdate.currency.toUpperCase()) {
-            amountInAccountCurrency = convertCurrency(
+        if (!accountToUpdate.primaryCurrency || !Array.isArray(accountToUpdate.balances)) {
+            console.error(`Account ${accountId} is missing primaryCurrency or has invalid balances array for balance modification.`);
+            return; // Cannot proceed safely
+        }
+
+        const primaryBalanceIndex = accountToUpdate.balances.findIndex(b => b.currency === accountToUpdate.primaryCurrency);
+
+        if (primaryBalanceIndex === -1) {
+            console.warn(`Account ${accountId} does not have a balance entry for its primary currency ${accountToUpdate.primaryCurrency}. Creating one.`);
+            // If primary currency balance entry doesn't exist, create it. This assumes it starts at 0.
+            // A more robust solution might depend on application logic if this state is unexpected.
+            accountToUpdate.balances.push({ currency: accountToUpdate.primaryCurrency, amount: 0 });
+            // Re-find the index, it will be the last one.
+            // This recursive call is potentially problematic, better to handle explicitly:
+             const newPrimaryBalanceIndex = accountToUpdate.balances.findIndex(b => b.currency === accountToUpdate.primaryCurrency);
+             if(newPrimaryBalanceIndex === -1) {
+                console.error(`Failed to create or find primary balance entry for ${accountToUpdate.primaryCurrency} in account ${accountId}.`);
+                return;
+             }
+             // Continue with newPrimaryBalanceIndex below
+        }
+        
+        // Use the found (or newly created) index.
+        const targetBalanceIndex = accountToUpdate.balances.findIndex(b => b.currency === accountToUpdate.primaryCurrency);
+        if (targetBalanceIndex === -1) { // Should not happen if the above logic is correct
+            console.error(`Critical error: Primary balance for ${accountToUpdate.primaryCurrency} still not found in account ${accountId}.`);
+            return;
+        }
+
+
+        let amountInPrimaryCurrency = amountInTransactionCurrency;
+        if (transactionCurrency && accountToUpdate.primaryCurrency && transactionCurrency.toUpperCase() !== accountToUpdate.primaryCurrency.toUpperCase()) {
+            amountInPrimaryCurrency = convertCurrency(
                 amountInTransactionCurrency,
                 transactionCurrency,
-                accountToUpdate.currency
+                accountToUpdate.primaryCurrency
             );
         }
-        const balanceChange = operation === 'add' ? amountInAccountCurrency : -amountInAccountCurrency;
-        const newBalance = parseFloat((accountToUpdate.balance + balanceChange).toFixed(2));
+
+        const balanceChange = operation === 'add' ? amountInPrimaryCurrency : -amountInPrimaryCurrency;
+        
+        const updatedBalances = [...accountToUpdate.balances];
+        updatedBalances[targetBalanceIndex] = {
+            ...updatedBalances[targetBalanceIndex],
+            amount: parseFloat((updatedBalances[targetBalanceIndex].amount + balanceChange).toFixed(2))
+        };
 
         await updateAccountInDb({
             ...accountToUpdate,
-            balance: newBalance,
+            balances: updatedBalances, // Pass the updated balances array
             lastActivity: new Date().toISOString(),
         });
     } else {
@@ -113,7 +149,7 @@ export async function getTransactions(
                 ...txData,
                 tags: txData.tags || [],
                 category: txData.category || 'Uncategorized',
-                transactionCurrency: txData.transactionCurrency || allAppAccounts.find(a => a.id === txData.accountId)?.currency || 'USD',
+                transactionCurrency: txData.transactionCurrency || allAppAccounts.find(a => a.id === txData.accountId)?.primaryCurrency || 'USD',
                 // Convert Firebase server timestamps to ISO strings if they exist
                 createdAt: txData.createdAt && typeof txData.createdAt === 'object' ? new Date().toISOString() : txData.createdAt as string,
                 updatedAt: txData.updatedAt && typeof txData.updatedAt === 'object' ? new Date().toISOString() : txData.updatedAt as string,
@@ -195,8 +231,8 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
     throw new Error(`Transaction with ID ${id} not found for update.`);
   }
   const originalTransactionDataFromDB = originalSnapshot.val() as Omit<Transaction, 'id'>;
-  const allAppAccounts = await getAllAccounts();
-  const originalDbTxCurrency = originalTransactionDataFromDB.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
+  const allAppAccounts = await getAllAccounts(); // Fetch accounts to determine currency if not present
+  const originalDbTxCurrency = originalTransactionDataFromDB.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.primaryCurrency || 'USD';
 
   const dataToUpdateFirebase = {
     ...updatedTransaction,
@@ -213,7 +249,9 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
     await update(transactionRef, dataToUpdateFirebase);
 
     if (category?.toLowerCase() !== 'opening balance') {
+        // Revert old transaction amount from balance
         await modifyAccountBalance(accountId, originalTransactionDataFromDB.amount, originalDbTxCurrency, 'subtract');
+        // Apply new transaction amount to balance
         await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
 
@@ -241,8 +279,8 @@ export async function deleteTransaction(transactionId: string, accountId: string
     return;
   }
   const transactionToDelete = snapshot.val() as Omit<Transaction, 'id'>;
-  const allAppAccounts = await getAllAccounts();
-  const txCurrency = transactionToDelete.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
+  const allAppAccounts = await getAllAccounts(); // Fetch accounts to determine currency if not present
+  const txCurrency = transactionToDelete.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.primaryCurrency || 'USD';
 
   try {
     await remove(transactionRef);

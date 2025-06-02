@@ -76,11 +76,13 @@ export async function getAccounts(): Promise<Account[]> {
             ? rawData.primaryCurrency.toUpperCase()
             : (balances[0]?.currency || 'USD').toUpperCase();
         } else if (rawData.balance !== undefined && rawData.currency !== undefined) {
+          // Legacy single balance/currency support - migrate to balances array structure
           const singleCurrency = String(rawData.currency).toUpperCase();
           balances = [{ currency: singleCurrency, amount: parseFloat(String(rawData.balance)) || 0 }];
           primaryCurrency = singleCurrency;
         } else {
-          balances = [{ currency: 'USD', amount: 0 }]; // Ensure balances is never empty
+          // Default if no balance info at all
+          balances = [{ currency: 'USD', amount: 0 }]; 
           primaryCurrency = 'USD';
         }
         
@@ -136,7 +138,7 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
     name: accountData.name,
     type: accountData.type,
     providerName: accountData.providerName,
-    providerDisplayIconUrl: accountData.providerDisplayIconUrl || undefined,
+    providerDisplayIconUrl: accountData.providerDisplayIconUrl || undefined, // Stays undefined if not provided
     ...getDefaultAccountValues(accountData.category),
     category: accountData.category,
     balances: [{ currency: initialCurrencyUpper, amount: accountData.initialBalance }],
@@ -166,7 +168,7 @@ export async function updateAccount(updatedAccountData: Account): Promise<Accoun
     name: updatedAccountData.name,
     type: updatedAccountData.type,
     providerName: updatedAccountData.providerName,
-    providerDisplayIconUrl: updatedAccountData.providerDisplayIconUrl || undefined,
+    providerDisplayIconUrl: updatedAccountData.providerDisplayIconUrl || null, // Changed undefined to null
     isActive: updatedAccountData.isActive,
     lastActivity: updatedAccountData.lastActivity || new Date().toISOString(),
     category: updatedAccountData.category,
@@ -194,6 +196,7 @@ export async function deleteAccount(accountId: string): Promise<void> {
 
   try {
     await remove(accountRef);
+    // Also remove associated transactions
     const transactionsBasePath = `users/${currentUser.uid}/transactions/${accountId}`;
     const transactionsForAccountRef = ref(database, transactionsBasePath);
     await remove(transactionsForAccountRef);
