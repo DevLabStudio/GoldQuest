@@ -30,11 +30,11 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { format as formatDateFns, parseISO, isValid, parse as parseDateFns } from 'date-fns';
 import { getCurrencySymbol, supportedCurrencies, formatCurrency, convertCurrency } from '@/lib/currency';
 import CsvMappingForm, { type ColumnMapping } from '@/components/import/csv-mapping-form';
-import { AlertCircle, Trash2, Download } from 'lucide-react';
+import { AlertCircle, Trash2, Download, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { exportAllUserDataToZip } from '@/services/export';
+import { exportAllUserDataToZip, type ExportableGroup, type ExportableTransaction } from '@/services/export';
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -714,13 +714,14 @@ export default function DataManagementPage() {
         accountDetailsMap.forEach((details, normalizedName) => {
             const existingAccount = existingAccountsParam.find(acc => acc.name.toLowerCase() === normalizedName);
             let action: AccountPreview['action'] = 'no change';
-            let finalBalance = details.initialBalance !== undefined ? details.initialBalance : (existingAccount?.balance ?? 0);
+            let finalBalance = details.initialBalance !== undefined ? details.initialBalance : (existingAccount?.balances?.[0]?.amount ?? 0); // Use primary if available
 
             if (existingAccount) {
-                if (details.currency !== existingAccount.currency || (details.initialBalance !== undefined && details.initialBalance !== existingAccount.balance)) {
+                 const primaryBalance = existingAccount.balances.find(b => b.currency === existingAccount.primaryCurrency)?.amount;
+                 if (details.currency !== existingAccount.primaryCurrency || (details.initialBalance !== undefined && details.initialBalance !== primaryBalance)) {
                     action = 'update';
-                }
-                preview.push({
+                 }
+                 preview.push({
                     name: details.name,
                     currency: details.currency,
                     initialBalance: finalBalance,
@@ -742,10 +743,11 @@ export default function DataManagementPage() {
 
         existingAccountsParam.forEach(acc => {
             if (!processedAccountNames.has(acc.name.toLowerCase())) {
+                const primaryBalanceEntry = acc.balances.find(b => b.currency === acc.primaryCurrency);
                 preview.push({
                     name: acc.name,
-                    currency: acc.currency,
-                    initialBalance: acc.balance,
+                    currency: acc.primaryCurrency || acc.balances[0]?.currency || 'USD',
+                    initialBalance: primaryBalanceEntry?.amount ?? 0,
                     action: 'no change',
                     existingId: acc.id,
                     category: acc.category,
@@ -852,8 +854,8 @@ export default function DataManagementPage() {
                              const existingAppAccount = existingAccountsParam.find(a => a.name.toLowerCase() === normalizedName);
                              accountMap.set(normalizedName, {
                                 name: accInfo.name,
-                                currency: existingAppAccount?.currency || accInfo.currency,
-                                initialBalance: existingAppAccount?.balance, 
+                                currency: existingAppAccount?.primaryCurrency || accInfo.currency,
+                                initialBalance: existingAppAccount?.balances.find(b => b.currency === (existingAppAccount.primaryCurrency || accInfo.currency))?.amount, 
                                 category: existingAppAccount?.category || category,
                             });
                         } else {
@@ -903,13 +905,12 @@ export default function DataManagementPage() {
                     const newAccountData: NewAccountData = {
                         name: accPreview.name,
                         type: (accPreview.category === 'crypto' ? 'wallet' : 'checking'), 
-                        balance: accPreview.initialBalance, 
-                        currency: accPreview.currency,
+                        initialBalance: accPreview.initialBalance, 
+                        initialCurrency: accPreview.currency,
                         providerName: 'Imported - ' + accPreview.name,
                         category: accPreview.category,
                         isActive: true,
                         lastActivity: new Date().toISOString(),
-                        balanceDifference: 0,
                         includeInNetWorth: true,
                     };
                     const createdAccount = await addAccount(newAccountData);
@@ -919,10 +920,18 @@ export default function DataManagementPage() {
                 } else if (accPreview.action === 'update' && accPreview.existingId) {
                     const existingAccountForUpdate = currentAppAccounts.find(a => a.id === accPreview.existingId);
                     if (existingAccountForUpdate) {
+                        const primaryBalanceIdx = existingAccountForUpdate.balances.findIndex(b => b.currency === accPreview.currency);
+                        let newBalances = [...existingAccountForUpdate.balances];
+                        if(primaryBalanceIdx !== -1) {
+                            newBalances[primaryBalanceIdx] = { ...newBalances[primaryBalanceIdx], amount: accPreview.initialBalance };
+                        } else {
+                            newBalances.push({currency: accPreview.currency, amount: accPreview.initialBalance});
+                        }
+                        
                         const updatedAccountData: Account = {
                             ...existingAccountForUpdate,
-                            balance: accPreview.initialBalance, 
-                            currency: accPreview.currency,
+                            balances: newBalances, 
+                            primaryCurrency: accPreview.currency, // Update primary currency if it changed
                             lastActivity: new Date().toISOString(),
                             category: accPreview.category,
                             includeInNetWorth: existingAccountForUpdate.includeInNetWorth ?? true,
@@ -1573,34 +1582,85 @@ export default function DataManagementPage() {
         const accountsCsv = await accountsFile.async('text');
         const parsedAccounts = Papa.parse<Account>(accountsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
         for (const accFromCsv of parsedAccounts) {
-          if(accFromCsv.id && accFromCsv.name && accFromCsv.currency && accFromCsv.type ) {
-            const balanceFromCsvString = String(accFromCsv.balance); // Ensure it's a string for parseAmount
-            const parsedBalance = parseAmount(balanceFromCsvString); // Use robust parser
+            const csvProviderIconUrl = (accFromCsv as any).providerDisplayIconUrl;
 
-            const newAccData: NewAccountData = {
+            const tempNewAccData: Partial<NewAccountData> & Pick<NewAccountData, 'name' | 'type' | 'category'> = {
                 name: accFromCsv.name,
                 type: accFromCsv.type,
-                balance: isNaN(parsedBalance) ? 0 : parsedBalance, // Use parsed balance, default to 0 if NaN
-                currency: accFromCsv.currency,
                 providerName: accFromCsv.providerName || 'Restored - ' + accFromCsv.name,
                 category: accFromCsv.category || 'asset',
                 isActive: accFromCsv.isActive !== undefined ? (String(accFromCsv.isActive).toLowerCase() === 'true') : true,
                 lastActivity: accFromCsv.lastActivity || new Date().toISOString(),
-                balanceDifference: parseFloat(String(accFromCsv.balanceDifference)) || 0,
                 includeInNetWorth: accFromCsv.includeInNetWorth !== undefined ? (String(accFromCsv.includeInNetWorth).toLowerCase() === 'true') : true,
+                providerDisplayIconUrl: csvProviderIconUrl || undefined,
             };
-            try {
-              const newAccount = await addAccount(newAccData);
-              oldAccountIdToNewIdMap[accFromCsv.id] = newAccount.id;
-            } catch (e: any) {
-              console.error(`Error restoring account ${accFromCsv.name}: ${e.message}`);
-              overallSuccess = false;
+
+            let derivedInitialBalance: number = 0;
+            let derivedInitialCurrency: string = ''; // Must be a non-empty string for addAccount
+            let derivedPrimaryCurrency: string | undefined = undefined;
+
+            if (accFromCsv.balances && accFromCsv.balances.length > 0) {
+                let primaryBalanceEntry = null;
+                if (accFromCsv.primaryCurrency && typeof accFromCsv.primaryCurrency === 'string') {
+                    const primaryCurrencyUpper = accFromCsv.primaryCurrency.toUpperCase();
+                    primaryBalanceEntry = accFromCsv.balances.find(b => typeof b.currency === 'string' && b.currency.toUpperCase() === primaryCurrencyUpper);
+                }
+                if (!primaryBalanceEntry) {
+                    primaryBalanceEntry = accFromCsv.balances[0]; // Fallback to first balance
+                }
+
+                if (primaryBalanceEntry && typeof primaryBalanceEntry.currency === 'string' && primaryBalanceEntry.currency.trim() !== '') {
+                    derivedInitialBalance = parseFloat(String(primaryBalanceEntry.amount)) || 0;
+                    derivedInitialCurrency = primaryBalanceEntry.currency;
+                    derivedPrimaryCurrency = accFromCsv.primaryCurrency || primaryBalanceEntry.currency;
+                }
+            } else if ((accFromCsv as any).balance !== undefined && (accFromCsv as any).currency !== undefined && typeof (accFromCsv as any).currency === 'string' && (accFromCsv as any).currency.trim() !== '') {
+                derivedInitialBalance = parseFloat(String((accFromCsv as any).balance)) || 0;
+                derivedInitialCurrency = (accFromCsv as any).currency;
+                derivedPrimaryCurrency = (accFromCsv as any).currency;
+                console.warn(`Account ${accFromCsv.name} from CSV used legacy balance/currency fields for restore.`);
             }
-          }
+            
+            // Final fallback if currency could not be derived
+            if (!derivedInitialCurrency) {
+                derivedInitialCurrency = 'USD'; // Or a user's preferred default, or skip
+                derivedPrimaryCurrency = derivedPrimaryCurrency || derivedInitialCurrency;
+                console.warn(`Could not derive initial currency for account ${accFromCsv.name}. Defaulting to ${derivedInitialCurrency}. CSV Data:`, accFromCsv);
+            }
+
+
+            if (!accFromCsv.id || !tempNewAccData.name || !tempNewAccData.type) {
+                console.warn("Skipping account restore due to missing critical fields (id, name, or type from CSV):", accFromCsv);
+                overallSuccess = false;
+                continue; 
+            }
+
+            const finalNewAccData: NewAccountData = {
+                name: tempNewAccData.name!, // Known to be defined due to check above
+                type: tempNewAccData.type!, // Known to be defined
+                category: tempNewAccData.category!, // Known to be defined
+                initialBalance: derivedInitialBalance,
+                initialCurrency: derivedInitialCurrency, // Guaranteed non-empty string now
+                primaryCurrency: derivedPrimaryCurrency, // Can be undefined if not derived
+                providerName: tempNewAccData.providerName,
+                isActive: tempNewAccData.isActive,
+                lastActivity: tempNewAccData.lastActivity,
+                includeInNetWorth: tempNewAccData.includeInNetWorth,
+                providerDisplayIconUrl: tempNewAccData.providerDisplayIconUrl,
+            };
+            
+            try {
+                const newAccount = await addAccount(finalNewAccData);
+                oldAccountIdToNewIdMap[accFromCsv.id] = newAccount.id;
+            } catch (e: any) {
+                console.error(`Error restoring account ${accFromCsv.name}: ${e.message}. Data sent to addAccount:`, JSON.stringify(finalNewAccData));
+                overallSuccess = false;
+            }
         }
-        toast({ title: "Restore Progress", description: "Accounts (metadata & balances from CSV) restored."});
+        toast({ title: "Restore Progress", description: "Accounts restored."});
       }
       updateProgress();
+      setAccounts(await getAccounts());
       
       // 5. Groups
       const groupsFile = zip.file('goldquest_groups.csv');
@@ -1633,13 +1693,13 @@ export default function DataManagementPage() {
       }
       updateProgress();
 
-      // 6. Transactions (NOW these will be added WITHOUT modifying balances again)
+      // 6. Transactions
       const transactionsFile = zip.file('goldquest_transactions.csv');
       if (transactionsFile) {
           const transactionsCsv = await transactionsFile.async('text');
           const parsedTransactions = Papa.parse<ExportableTransaction>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
           
-          parsedTransactions.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+          parsedTransactions.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
 
           for (const txCSV of parsedTransactions) {
               if (txCSV.id && txCSV.accountId && txCSV.date && txCSV.amount !== undefined && txCSV.transactionCurrency) {
@@ -1656,7 +1716,6 @@ export default function DataManagementPage() {
                           originalImportData: txCSV.originalImportData ? JSON.parse(txCSV.originalImportData) : undefined,
                       };
                       try {
-                          // IMPORTANT: Use skipBalanceModification: true so restored balances from accounts.csv are not altered
                           await addTransaction(newTxData, { skipBalanceModification: true });
                       } catch (e: any) {
                           console.error(`Error restoring transaction ${txCSV.description}: ${e.message}`);
