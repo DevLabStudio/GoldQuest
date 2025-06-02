@@ -72,7 +72,7 @@ export async function getAccounts(): Promise<Account[]> {
           const consolidatedBalancesMap = rawData.balances.reduce((acc: Record<string, number>, b: any) => {
             const currency = String(b.currency || 'USD').toUpperCase();
             const amount = parseFloat(String(b.amount)) || 0;
-            acc[currency] = parseFloat(((acc[currency] || 0) + amount).toFixed(2)); // Consolidate and fix precision
+            acc[currency] = parseFloat(((acc[currency] || 0) + amount).toFixed(2));
             return acc;
           }, {} as Record<string, number>);
           balances = Object.entries(consolidatedBalancesMap).map(([curr, amt]) => ({ currency: curr, amount: amt }));
@@ -81,21 +81,22 @@ export async function getAccounts(): Promise<Account[]> {
             ? rawData.primaryCurrency.toUpperCase()
             : (balances[0]?.currency || 'USD').toUpperCase();
 
-        } else if (rawData.balance !== undefined && rawData.currency !== undefined) {
+        } else if (rawData.balance !== undefined && rawData.currency !== undefined) { // Legacy single balance support
           const singleCurrency = String(rawData.currency).toUpperCase();
           balances = [{ currency: singleCurrency, amount: parseFloat(String(rawData.balance)) || 0 }];
           primaryCurrency = singleCurrency;
-        } else {
+        } else { // Default if no balance info
           balances = [{ currency: 'USD', amount: 0 }]; 
           primaryCurrency = 'USD';
         }
         
         if (!primaryCurrency && balances.length > 0) {
             primaryCurrency = balances[0].currency;
-        } else if (!primaryCurrency && balances.length === 0) {
+        } else if (!primaryCurrency && balances.length === 0) { // Ensure there's always a balance entry and primary currency
             balances = [{ currency: 'USD', amount: 0 }];
             primaryCurrency = 'USD';
         }
+
 
         return {
           id,
@@ -198,7 +199,6 @@ export async function deleteAccount(accountId: string): Promise<void> {
 
   try {
     await remove(accountRef);
-    // Also remove associated transactions
     const transactionsBasePath = `users/${currentUser.uid}/transactions/${accountId}`;
     const transactionsForAccountRef = ref(database, transactionsBasePath);
     await remove(transactionsForAccountRef);
@@ -220,9 +220,20 @@ export async function recalculateAllAccountBalances(): Promise<void> {
   for (const account of allAppAccounts) {
     const accountTransactions = await getTransactions(account.id); 
 
+    // Initialize newBalancesMap by deep copying current account.balances
+    // This ensures we start with the established opening/initial balances.
     const newBalancesMap = new Map<string, number>();
+    account.balances.forEach(balanceEntry => {
+      newBalancesMap.set(balanceEntry.currency.toUpperCase(), balanceEntry.amount);
+    });
 
     for (const tx of accountTransactions) {
+      // CRITICAL FIX: Skip "Opening Balance" transactions during sum-up,
+      // as their effect should already be in the account.balances we started with.
+      if (tx.category?.toLowerCase() === 'opening balance') {
+        continue; 
+      }
+
       const currency = tx.transactionCurrency.toUpperCase();
       const currentBalanceForCurrency = newBalancesMap.get(currency) || 0;
       newBalancesMap.set(currency, parseFloat((currentBalanceForCurrency + tx.amount).toFixed(2)));
@@ -232,14 +243,22 @@ export async function recalculateAllAccountBalances(): Promise<void> {
     newBalancesMap.forEach((amount, currency) => {
       newBalancesArray.push({ currency, amount });
     });
-
+    
     let newPrimaryCurrency = account.primaryCurrency;
     if (newBalancesArray.length > 0) {
+      // If primary currency is not in new balances or no primary currency, set one.
       if (!newPrimaryCurrency || !newBalancesArray.some(b => b.currency === newPrimaryCurrency)) {
-        newPrimaryCurrency = newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0].currency;
+        // Prefer existing primary if it has a balance, else pick highest abs value, else first.
+        const currentPrimaryStillHasBalance = newBalancesArray.find(b => b.currency === account.primaryCurrency);
+        if(currentPrimaryStillHasBalance) {
+            newPrimaryCurrency = account.primaryCurrency;
+        } else {
+            newPrimaryCurrency = newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0].currency;
+        }
       }
     } else {
-      // No transactions, balance should be 0 for primary currency or a default
+      // No transactions AND no initial balances (edge case, or account was truly zeroed out)
+      // Ensure there's at least one balance entry, usually the primary currency with 0.
       newPrimaryCurrency = account.primaryCurrency || 'USD'; 
       newBalancesArray.push({ currency: newPrimaryCurrency, amount: 0 });
     }
@@ -251,7 +270,7 @@ export async function recalculateAllAccountBalances(): Promise<void> {
       lastActivity: new Date().toISOString(), 
     };
     
-    await updateAccount(updatedAccountData); // This is the existing updateAccount function
+    await updateAccount(updatedAccountData);
     console.log(`Recalculated balances for account ${account.name} (${account.id})`);
   }
 }
