@@ -4,7 +4,7 @@
 import { database, auth } from '@/lib/firebase';
 import { ref, set, get, push, remove, update } from 'firebase/database';
 import type { User } from 'firebase/auth';
-import { getTransactions } from '@/services/transactions'; // Import getTransactions
+import { getTransactions, addTransaction as addTransactionService } from '@/services/transactions'; // Import getTransactions and addTransactionService
 
 /**
  * Represents a financial account with multi-currency balances.
@@ -151,7 +151,22 @@ export async function addAccount(accountData: NewAccountData): Promise<Account> 
 
   try {
     await set(newAccountRef, newAccountFull);
-    return { id: newAccountRef.key, ...newAccountFull };
+    const createdAccount = { id: newAccountRef.key, ...newAccountFull };
+
+    // Add an "Opening Balance" transaction for the new account
+    if (accountData.initialBalance !== 0) {
+        await addTransactionService({
+            accountId: createdAccount.id,
+            amount: accountData.initialBalance,
+            transactionCurrency: initialCurrencyUpper,
+            date: new Date().toISOString().split('T')[0], // Today's date
+            description: "Opening Balance",
+            category: "Opening Balance",
+            tags: [],
+        }, { skipBalanceModification: true }); // Skip balance modification here as it's already set
+    }
+
+    return createdAccount;
   } catch (error) {
     console.error("Error adding account to Firebase:", error);
     throw error;
@@ -220,23 +235,39 @@ export async function recalculateAllAccountBalances(): Promise<void> {
   for (const account of allAppAccounts) {
     const accountTransactions = await getTransactions(account.id); 
 
-    // Initialize newBalancesMap by deep copying current account.balances
-    // This ensures we start with the established opening/initial balances.
     const newBalancesMap = new Map<string, number>();
-    account.balances.forEach(balanceEntry => {
-      newBalancesMap.set(balanceEntry.currency.toUpperCase(), balanceEntry.amount);
-    });
 
+    // First pass: Establish initial balances from "Opening Balance" transactions
     for (const tx of accountTransactions) {
-      // CRITICAL FIX: Skip "Opening Balance" transactions during sum-up,
-      // as their effect should already be in the account.balances we started with.
       if (tx.category?.toLowerCase() === 'opening balance') {
-        continue; 
+        const currency = tx.transactionCurrency.toUpperCase();
+        // If multiple opening balances for the same currency, sum them (though ideally there's one per currency)
+        newBalancesMap.set(currency, (newBalancesMap.get(currency) || 0) + tx.amount);
       }
+    }
+    
+    // If no "Opening Balance" transaction was found for the account's primary currency,
+    // AND the account was just created (e.g., has no other transactions yet),
+    // its `account.balances` array might contain the initial balance set during creation.
+    // This is a fallback if the explicit "Opening Balance" transaction wasn't created/found.
+    // However, with the fix in `addAccount` to create an "Opening Balance" tx, this might be less needed.
+    // For robustness, check if `newBalancesMap` is empty. If so, the account's current `balances`
+    // are likely the "initial" ones set without a formal Opening Balance transaction, so use them.
+    if (newBalancesMap.size === 0 && account.balances.length > 0) {
+        account.balances.forEach(balanceEntry => {
+            newBalancesMap.set(balanceEntry.currency.toUpperCase(), balanceEntry.amount);
+        });
+        console.warn(`Account ${account.name} (${account.id}) had no 'Opening Balance' transactions. Using existing account.balances as starting point.`);
+    }
 
-      const currency = tx.transactionCurrency.toUpperCase();
-      const currentBalanceForCurrency = newBalancesMap.get(currency) || 0;
-      newBalancesMap.set(currency, parseFloat((currentBalanceForCurrency + tx.amount).toFixed(2)));
+
+    // Second pass: Apply all other transactions
+    for (const tx of accountTransactions) {
+      if (tx.category?.toLowerCase() !== 'opening balance') {
+        const currency = tx.transactionCurrency.toUpperCase();
+        const currentBalanceForCurrency = newBalancesMap.get(currency) || 0;
+        newBalancesMap.set(currency, parseFloat((currentBalanceForCurrency + tx.amount).toFixed(2)));
+      }
     }
 
     const newBalancesArray: Array<{ currency: string; amount: number }> = [];
@@ -246,19 +277,11 @@ export async function recalculateAllAccountBalances(): Promise<void> {
     
     let newPrimaryCurrency = account.primaryCurrency;
     if (newBalancesArray.length > 0) {
-      // If primary currency is not in new balances or no primary currency, set one.
       if (!newPrimaryCurrency || !newBalancesArray.some(b => b.currency === newPrimaryCurrency)) {
-        // Prefer existing primary if it has a balance, else pick highest abs value, else first.
-        const currentPrimaryStillHasBalance = newBalancesArray.find(b => b.currency === account.primaryCurrency);
-        if(currentPrimaryStillHasBalance) {
-            newPrimaryCurrency = account.primaryCurrency;
-        } else {
-            newPrimaryCurrency = newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0].currency;
-        }
+        newPrimaryCurrency = newBalancesArray.sort((a,b) => Math.abs(b.amount) - Math.abs(a.amount))[0].currency;
       }
     } else {
-      // No transactions AND no initial balances (edge case, or account was truly zeroed out)
-      // Ensure there's at least one balance entry, usually the primary currency with 0.
+      // If still no balances (e.g. no opening balance and no other transactions), default it.
       newPrimaryCurrency = account.primaryCurrency || 'USD'; 
       newBalancesArray.push({ currency: newPrimaryCurrency, amount: 0 });
     }
