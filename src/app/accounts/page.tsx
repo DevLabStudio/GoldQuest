@@ -3,14 +3,14 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
-import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon, Trash2 } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon, Trash2, CheckCircle, XCircle, MinusCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as FormDialogDescription, DialogTrigger } from "@/components/ui/dialog"; // Renamed DialogDescription to avoid conflict
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+// Accordion components removed
 import AddAccountForm from '@/components/accounts/add-account-form';
 import AddCryptoForm from '@/components/accounts/add-crypto-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
@@ -25,7 +25,7 @@ import { useDateRange } from '@/contexts/DateRangeContext';
 import { useAuthContext } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
-import Image from 'next/image'; // For displaying fetched logos
+import Image from 'next/image';
 
 
 export default function AccountsPage() {
@@ -202,12 +202,12 @@ export default function AccountsPage() {
 
     relevantAccounts.forEach(acc => {
         const primaryBalanceEntry = acc.balances.find(b => b.currency === acc.primaryCurrency);
-        let balanceAtChartStart = primaryBalanceEntry ? primaryBalanceEntry.amount : 0; // This is already in account's primary currency
+        let balanceAtChartStart = primaryBalanceEntry ? primaryBalanceEntry.amount : 0; 
 
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return tx.accountId === acc.id && txDate >= chartStartDate && txDate <= maxTxDateOverall;
+                return tx.accountId === acc.id && txDate >= chartStartDate && txDate <= maxTxDateOverall && tx.category?.toLowerCase() !== 'opening balance';
             })
             .forEach(tx => {
                 let amountInAccountPrimaryCurrency = tx.amount;
@@ -220,7 +220,7 @@ export default function AccountsPage() {
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return tx.accountId === acc.id && txDate < chartStartDate;
+                return tx.accountId === acc.id && txDate < chartStartDate && tx.category?.toLowerCase() !== 'opening balance';
             })
             .forEach(tx => {
                 let amountInAccountPrimaryCurrency = tx.amount;
@@ -238,7 +238,7 @@ export default function AccountsPage() {
     chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); 
     allTransactions.forEach(tx => {
         const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-        if (txDate >= chartStartDate && txDate <= chartEndDate && relevantAccounts.some(ra => ra.id === tx.accountId)) {
+        if (txDate >= chartStartDate && txDate <= chartEndDate && relevantAccounts.some(ra => ra.id === tx.accountId) && tx.category?.toLowerCase() !== 'opening balance') {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
@@ -282,7 +282,7 @@ export default function AccountsPage() {
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return isSameDay(txDate, currentDisplayDate) && relevantAccounts.some(acc => acc.id === tx.accountId);
+                return isSameDay(txDate, currentDisplayDate) && relevantAccounts.some(acc => acc.id === tx.accountId) && tx.category?.toLowerCase() !== 'opening balance';
             })
             .forEach(tx => {
                 const account = relevantAccounts.find(a => a.id === tx.accountId);
@@ -358,203 +358,192 @@ export default function AccountsPage() {
             </CardContent>
         </Card>
 
-        <Card className="mb-8">
-            <CardHeader>
-                <div className="flex justify-between items-center">
-                    <CardTitle>All Accounts</CardTitle>
-                    <div className="flex gap-2">
+        <div className="mb-8">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-semibold">All Accounts</h2>
+                <div className="flex gap-2">
+                    <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="default" size="sm">
+                            <Landmark className="mr-2 h-4 w-4" /> Create Asset Account
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-3xl">
+                            <DialogHeader>
+                            <DialogTitle>Add New Asset Account</DialogTitle>
+                            <FormDialogDescription>Enter the details of your new asset account.</FormDialogDescription>
+                            </DialogHeader>
+                            <AddAccountForm onAccountAdded={handleAccountAdded} />
+                        </DialogContent>
+                    </Dialog>
+                    <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="default" size="sm">
+                            <BitcoinIcon className="mr-2 h-4 w-4" /> Create Crypto Account
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-3xl">
+                            <DialogHeader>
+                            <DialogTitle>Add New Crypto Account</DialogTitle>
+                            <FormDialogDescription>Enter the details of your new crypto account.</FormDialogDescription>
+                            </DialogHeader>
+                            <AddCryptoForm onAccountAdded={handleAccountAdded} />
+                        </DialogContent>
+                    </Dialog>
+                </div>
+            </div>
+            <p className="text-muted-foreground mb-6">View and manage all your financial accounts and platform holdings.</p>
+
+            {isLoading && allAccounts.length === 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[...Array(3)].map((_, i) => (
+                        <Card key={`skeleton-all-${i}`} className="p-4 border rounded-lg shadow-sm bg-card">
+                            <div className="flex justify-between items-center mb-2">
+                                <Skeleton className="h-6 w-8 rounded-md" />
+                                <Skeleton className="h-5 w-20" />
+                                <Skeleton className="h-6 w-6 rounded-full" />
+                            </div>
+                            <Skeleton className="h-7 w-3/4 mb-1" />
+                            <Skeleton className="h-4 w-1/2 mb-3" />
+                            <div className="flex justify-between items-center">
+                                <Skeleton className="h-4 w-16" />
+                                <Skeleton className="h-4 w-20" />
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            ) : allAccounts.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {allAccounts.map((account) => {
+                        const primaryBalanceEntry = account.balances && account.balances.length > 0
+                            ? account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0]
+                            : null;
+                        const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+                        const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+                        const IconComponent = account.category === 'crypto' ? BitcoinIcon : Landmark;
+                        
+                        let netWorthStatusIcon;
+                        if (account.includeInNetWorth === true) {
+                           netWorthStatusIcon = <CheckCircle className="h-4 w-4 text-green-500" title="Included in Net Worth" />;
+                        } else if (account.includeInNetWorth === false) {
+                           netWorthStatusIcon = <XCircle className="h-4 w-4 text-red-500" title="Excluded from Net Worth" />;
+                        } else {
+                            netWorthStatusIcon = <MinusCircle className="h-4 w-4 text-muted-foreground" title="Net Worth status not set" />;
+                        }
+
+
+                        return (
+                            <Card key={account.id} className="shadow-md hover:shadow-lg transition-shadow duration-200 flex flex-col">
+                                <CardHeader className="flex flex-row items-start justify-between pb-3 pt-4 px-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-muted rounded-md">
+                                        {account.category === 'crypto' && account.providerDisplayIconUrl ? (
+                                            <Image src={account.providerDisplayIconUrl} alt={`${account.providerName} logo`} width={24} height={24} className="rounded-full object-contain" data-ai-hint={`${account.providerName} logo`}/>
+                                        ) : (
+                                            <IconComponent className="w-6 h-6 text-primary" />
+                                        )}
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-md">
+                                                <Link href={`/accounts/${account.id}`} className="hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded">
+                                                    {account.name}
+                                                </Link>
+                                            </CardTitle>
+                                            <CardDescription className="text-xs">{account.providerName || 'N/A'}</CardDescription>
+                                        </div>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1">
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                <span className="sr-only">Account actions</span>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem asChild>
+                                                <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
+                                                    <Eye className="mr-2 h-4 w-4" /> View Transactions
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => openEditDialog(account)}>
+                                                <EditIcon className="mr-2 h-4 w-4" /> Edit Account
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleDeleteAccount(account.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                <Trash2 className="mr-2 h-4 w-4" /> Delete Account
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </CardHeader>
+                                <CardContent className="flex-grow space-y-3 pt-0 pb-3 px-4">
+                                    <div className="text-2xl font-bold text-primary">
+                                        {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
+                                    </div>
+                                    {preferredCurrency && typeof displayCurrency === 'string' && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                        <div className="text-xs text-muted-foreground -mt-2">
+                                            (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                        <Badge variant="outline" className={cn(
+                                            "text-xs px-1.5 py-0.5",
+                                            account.category === 'asset' ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "border-purple-300 bg-purple-50 text-purple-700 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                                        )}>
+                                            {account.category === 'asset' ? 'Asset' : 'Crypto'}
+                                        </Badge>
+                                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">{account.type}</Badge>
+                                        {netWorthStatusIcon}
+                                    </div>
+                                    
+                                    {account.balances && account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 && (
+                                        <div>
+                                            <p className="text-xs text-muted-foreground mb-1">Other balances:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                            {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
+                                                <Badge key={bal.currency} variant="outline" className="text-xs font-normal">
+                                                    {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
+                                                </Badge>
+                                            ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                                <CardFooter className="text-xs text-muted-foreground pt-0 pb-3 px-4">
+                                    Last activity: {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
+                                </CardFooter>
+                            </Card>
+                        )
+                    })}
+                </div>
+            ) : (
+                <div className="text-center py-10">
+                    <p className="text-muted-foreground">No accounts added yet.</p>
+                    <div className="flex gap-2 justify-center mt-4">
                         <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
                             <DialogTrigger asChild>
                                 <Button variant="default" size="sm">
-                                <Landmark className="mr-2 h-4 w-4" /> Create Asset Account
+                                <Landmark className="mr-2 h-4 w-4" /> Add Asset Account
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-3xl">
-                                <DialogHeader>
-                                <DialogTitle>Add New Asset Account</DialogTitle>
-                                <DialogDescription>Enter the details of your new asset account.</DialogDescription>
-                                </DialogHeader>
+                                <DialogHeader><DialogTitle>Add New Asset Account</DialogTitle><FormDialogDescription>Enter the details of your new asset account.</FormDialogDescription></DialogHeader>
                                 <AddAccountForm onAccountAdded={handleAccountAdded} />
                             </DialogContent>
                         </Dialog>
                         <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
                             <DialogTrigger asChild>
                                 <Button variant="default" size="sm">
-                                <BitcoinIcon className="mr-2 h-4 w-4" /> Create Crypto Account
+                                <BitcoinIcon className="mr-2 h-4 w-4" /> Add Crypto Account
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-3xl">
-                                <DialogHeader>
-                                <DialogTitle>Add New Crypto Account</DialogTitle>
-                                <DialogDescription>Enter the details of your new crypto account.</DialogDescription>
-                                </DialogHeader>
+                                <DialogHeader><DialogTitle>Add New Crypto Account</DialogTitle><FormDialogDescription>Enter the details of your new crypto account.</FormDialogDescription></DialogHeader>
                                 <AddCryptoForm onAccountAdded={handleAccountAdded} />
                             </DialogContent>
                         </Dialog>
                     </div>
                 </div>
-                <CardDescription>View and manage all your financial accounts and platform holdings.</CardDescription>
-            </CardHeader>
-            <CardContent>
-                 {isLoading && allAccounts.length === 0 ? (
-                    <div className="space-y-3">
-                        {[...Array(3)].map((_, i) => (
-                            <Card key={`skeleton-all-${i}`} className="p-4 border rounded-lg shadow-sm bg-card">
-                                <div className="flex justify-between items-center">
-                                    <div className="space-y-1">
-                                        <Skeleton className="h-5 w-24" />
-                                        <Skeleton className="h-4 w-32" />
-                                    </div>
-                                    <Skeleton className="h-8 w-16" />
-                                </div>
-                            </Card>
-                        ))}
-                    </div>
-                 ) : allAccounts.length > 0 ? (
-                    <Accordion type="multiple" className="w-full">
-                        {allAccounts.map((account) => {
-                            const primaryBalanceEntry = account.balances && account.balances.length > 0
-                                ? account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0]
-                                : null;
-                            const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
-                            const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
-
-                            return (
-                            <AccordionItem value={account.id} key={account.id} className="border rounded-lg shadow-sm mb-3 bg-card overflow-hidden">
-                                <AccordionTrigger className="p-4 hover:bg-muted/50 data-[state=open]:bg-muted/30 data-[state=open]:border-b w-full text-left">
-                                    <div className="flex-1 grid grid-cols-[auto_2fr_1.5fr_1fr_1.5fr_1fr_auto] items-center gap-4">
-                                        <div className="flex-shrink-0 w-8 h-8 mr-2">
-                                        {account.category === 'crypto' && account.providerDisplayIconUrl ? (
-                                            <Image src={account.providerDisplayIconUrl} alt={`${account.providerName} logo`} width={32} height={32} className="rounded-full object-contain" data-ai-hint={`${account.providerName} logo`}/>
-                                        ) : account.category === 'crypto' ? (
-                                            <BitcoinIcon className="w-6 h-6 text-muted-foreground" />
-                                        ) : (
-                                            <Landmark className="w-6 h-6 text-muted-foreground" />
-                                        )}
-                                        </div>
-                                        <div className="truncate">
-                                            <Link
-                                                href={`/accounts/${account.id}`}
-                                                className="font-medium text-primary hover:text-primary/80 hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded text-base p-0.5"
-                                                onClick={(e) => e.stopPropagation()}
-                                                aria-label={`View account ${account.name}`}
-                                            >
-                                                {account.name}
-                                            </Link>
-                                            <p className="text-xs text-muted-foreground truncate">{account.providerName || 'N/A'}</p>
-                                        </div>
-                                        <div className="truncate">
-                                            <Badge variant="outline" className={cn(
-                                                "text-xs font-semibold px-1.5 py-0.5",
-                                                account.category === 'asset' ? "bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300" : "bg-purple-100 text-purple-700 dark:bg-purple-900/50 dark:text-purple-300"
-                                            )}>
-                                                {account.category === 'asset' ? 'Asset' : 'Crypto'}
-                                            </Badge>
-                                            <p className="text-xs text-muted-foreground truncate">{account.type}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <div className="font-semibold text-primary">
-                                                {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
-                                            </div>
-                                            {preferredCurrency && typeof displayCurrency === 'string' && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                                                <div className="text-xs text-muted-foreground mt-0.5">
-                                                    (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
-                                                </div>
-                                            )}
-                                        </div>
-                                        <div className="text-muted-foreground truncate">
-                                            {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
-                                        </div>
-                                        <div className="flex-shrink-0"> {/* Ensure actions don't cause overflow */}
-                                            <DropdownMenu>
-                                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                                                <div
-                                                    role="button"
-                                                    tabIndex={0}
-                                                    aria-haspopup="menu"
-                                                    aria-expanded={false} 
-                                                    className={cn(buttonVariants({ variant: 'ghost', size: 'icon' }), 'h-8 w-8 p-0 cursor-pointer flex items-center justify-center')}
-                                                >
-                                                    <span className="sr-only">Open menu</span>
-                                                    <MoreHorizontal className="h-4 w-4" />
-                                                </div>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem asChild>
-                                                    <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
-                                                        <Eye className="mr-2 h-4 w-4" />
-                                                        <span>View Transactions</span>
-                                                    </Link>
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => openEditDialog(account)}>
-                                                <EditIcon className="mr-2 h-4 w-4" />
-                                                <span>Edit</span>
-                                                </DropdownMenuItem>
-                                                <DropdownMenuItem
-                                                onClick={() => handleDeleteAccount(account.id)}
-                                                className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                                                >
-                                                <Trash2 className="mr-2 h-4 w-4" />
-                                                <span>Delete</span>
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                            </DropdownMenu>
-                                        </div>
-                                    </div>
-                                </AccordionTrigger>
-                                <AccordionContent className="px-4 pt-3 pb-4 bg-muted/10">
-                                    <p className="text-sm text-muted-foreground mb-2">Other currency balances for {account.name}:</p>
-                                    {account.balances && account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 ? (
-                                        <ul className="list-disc pl-5 text-xs space-y-1">
-                                            {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
-                                                <li key={bal.currency}>
-                                                    {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
-                                                    {bal.currency && typeof bal.currency === 'string' && bal.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                                                        <span className="text-muted-foreground/80 ml-1 break-words">
-                                                            (≈ {formatCurrency(bal.amount, bal.currency, preferredCurrency, true)})
-                                                        </span>
-                                                    )}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    ) : (
-                                        <p className="text-xs text-muted-foreground italic">No other currency balances recorded for this account.</p>
-                                    )}
-                                </AccordionContent>
-                            </AccordionItem>
-                        )})}
-                    </Accordion>
-                 ) : (
-                     <div className="text-center py-10">
-                        <p className="text-muted-foreground">No accounts added yet.</p>
-                         <div className="flex gap-2 justify-center mt-4">
-                            <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button variant="default" size="sm">
-                                    <Landmark className="mr-2 h-4 w-4" /> Add Asset Account
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="sm:max-w-3xl">
-                                    <DialogHeader><DialogTitle>Add New Asset Account</DialogTitle><DialogDescription>Enter the details of your new asset account.</DialogDescription></DialogHeader>
-                                    <AddAccountForm onAccountAdded={handleAccountAdded} />
-                                </DialogContent>
-                            </Dialog>
-                            <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
-                                <DialogTrigger asChild>
-                                    <Button variant="default" size="sm">
-                                    <BitcoinIcon className="mr-2 h-4 w-4" /> Add Crypto Account
-                                    </Button>
-                                </DialogTrigger>
-                                <DialogContent className="sm:max-w-3xl">
-                                    <DialogHeader><DialogTitle>Add New Crypto Account</DialogTitle><DialogDescription>Enter the details of your new crypto account.</DialogDescription></DialogHeader>
-                                    <AddCryptoForm onAccountAdded={handleAccountAdded} />
-                                </DialogContent>
-                            </Dialog>
-                        </div>
-                     </div>
-                 )}
-            </CardContent>
-        </Card>
+            )}
+        </div>
 
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
@@ -563,9 +552,9 @@ export default function AccountsPage() {
           <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
                   <DialogTitle>Edit Account</DialogTitle>
-                  <DialogDescription>
+                  <FormDialogDescription>
                       Modify the details of your account.
-                  </DialogDescription>
+                  </FormDialogDescription>
               </DialogHeader>
               {selectedAccount && (
                   <EditAccountForm
@@ -578,3 +567,5 @@ export default function AccountsPage() {
     </div>
   );
 }
+
+
