@@ -140,7 +140,7 @@ export default function DashboardPage() {
       .filter(acc => acc.category === 'asset' && acc.includeInNetWorth !== false && acc.balances && acc.primaryCurrency)
       .reduce((sum, acc) => {
         const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
-        if (primaryBalance && primaryBalance.amount > 0) { // Only positive balances contribute to asset types
+        if (primaryBalance && primaryBalance.amount > 0) { 
           sum += convertCurrency(primaryBalance.amount, acc.primaryCurrency!, preferredCurrency);
         }
         return sum;
@@ -150,7 +150,7 @@ export default function DashboardPage() {
       .filter(acc => acc.category === 'crypto' && acc.includeInNetWorth !== false && acc.balances && acc.primaryCurrency)
       .reduce((sum, acc) => {
          const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
-        if (primaryBalance && primaryBalance.amount > 0) { // Only positive balances contribute to asset types
+        if (primaryBalance && primaryBalance.amount > 0) { 
           sum += convertCurrency(primaryBalance.amount, acc.primaryCurrency!, preferredCurrency);
         }
         return sum;
@@ -163,11 +163,7 @@ export default function DashboardPage() {
     if (cryptoCategoryTotal > 0) {
       data.push({ name: 'Crypto Assets', value: cryptoCategoryTotal, fill: 'hsl(var(--chart-2))' });
     }
-    
-    // If there are liabilities (negative total net worth, or just no positive assets)
-    // the chart might look empty or skewed. This chart focuses on ASSET composition.
-    // Liabilities could be a separate chart or KPI.
-    
+        
     return data;
   }, [accounts, preferredCurrency, isLoading]);
 
@@ -175,7 +171,7 @@ export default function DashboardPage() {
   if (isLoadingAuth || (!userPreferences && user)) { 
     return (
       <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-4">
                 <Skeleton className="h-40 w-full" />
             </div>
@@ -184,7 +180,7 @@ export default function DashboardPage() {
                 <Skeleton className="h-64 w-full" />
             </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
              <div className="lg:col-span-2">
                  <Skeleton className="h-80 w-full" />
              </div>
@@ -192,7 +188,7 @@ export default function DashboardPage() {
                  <Skeleton className="h-72 w-full" />
              </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"> {/* Changed to lg:grid-cols-3 for consistency */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
             <div className="lg:col-span-2">
                 <Skeleton className="h-72 w-full" />
             </div>
@@ -206,7 +202,7 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"> {/* Removed mb-4 here */}
             <div className="lg:col-span-2">
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
             </div>
@@ -216,7 +212,7 @@ export default function DashboardPage() {
             </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4"> {/* Added mt-4 here */}
             <div className="lg:col-span-2">
                 <RecentTransactionsCard 
                     transactions={recentTransactionsForDisplay} 
@@ -231,7 +227,7 @@ export default function DashboardPage() {
             </div>
         </div>
         
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4"> {/* Added mt-4 here */}
             <div className="lg:col-span-2">
                 <ExpensesBreakdownCard 
                     data={expensesBreakdownData} 
