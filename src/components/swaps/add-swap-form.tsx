@@ -112,15 +112,25 @@ const AddSwapForm: FC<AddSwapFormProps> = ({ onSubmit: passedOnSubmit, isLoading
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-4">
-         <Alert variant="default" className="bg-muted/50">
-          <Info className="h-4 w-4" />
-          <AlertTitle>Important Note on Balances</AlertTitle>
-          <AlertDescription className="text-xs">
-            Recording a swap here logs the event. To reflect changes in your GoldQuest account balances,
-            please also record corresponding transfers between your currency-specific sub-accounts (e.g., "Wise EUR" to "Wise BRL")
-            or adjust balances via expense/income entries if you manage platforms as single-currency accounts.
-          </AlertDescription>
-        </Alert>
+        {!initialData?.id && ( // Only show for new swaps
+            <Alert variant="default" className="bg-muted/50">
+            <Info className="h-4 w-4" />
+            <AlertTitle>Automatic Balance Update</AlertTitle>
+            <AlertDescription className="text-xs">
+                Recording this swap will automatically create corresponding transactions in the selected platform account to reflect the asset changes.
+            </AlertDescription>
+            </Alert>
+        )}
+        {initialData?.id && ( // Show for editing swaps
+             <Alert variant="default" className="bg-muted/50">
+             <Info className="h-4 w-4" />
+             <AlertTitle>Editing Swap Record</AlertTitle>
+             <AlertDescription className="text-xs">
+                Modifying this swap record will <span className="font-semibold">not</span> automatically adjust previously created transactions. If amounts or assets change significantly, consider deleting this swap (which will remove related transactions) and creating a new one.
+             </AlertDescription>
+             </Alert>
+        )}
+
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
            <FormField
@@ -299,4 +309,3 @@ const AddSwapForm: FC<AddSwapFormProps> = ({ onSubmit: passedOnSubmit, isLoading
 };
 
 export default AddSwapForm;
-
