@@ -368,8 +368,8 @@ export default function AccountDetailPage() {
   }
 
   const primaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0];
-  const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
-  const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+  // const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+  // const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
@@ -379,9 +379,15 @@ export default function AccountDetailPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
             </Button>
             <h1 className="text-3xl font-bold">{account.name} - Transactions</h1>
-            <p className="text-muted-foreground">Balance: {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
-                {displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && ` (≈ ${formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})`}
-            </p>
+            <div className="text-muted-foreground mt-1">
+                {account.balances.map((balance, index) => (
+                    <div key={index} className={balance.currency === account.primaryCurrency ? 'font-semibold text-foreground' : ''}>
+                        {formatCurrency(balance.amount, balance.currency, balance.currency, false)}
+                        {balance.currency.toUpperCase() !== preferredCurrency.toUpperCase() &&
+                         ` (≈ ${formatCurrency(balance.amount, balance.currency, preferredCurrency, true)})`}
+                    </div>
+                ))}
+            </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

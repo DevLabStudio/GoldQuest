@@ -445,7 +445,7 @@ export default function AccountsPage() {
                                         </div>
                                         <div>
                                             <CardTitle className="text-md">
-                                                <Link href={`/accounts/${account.id}`} className="hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded">
+                                                <Link href={`/accounts/${account.id}`} className="font-medium text-primary hover:text-primary/80 hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded text-base p-0.5">
                                                     {account.name}
                                                 </Link>
                                             </CardTitle>
@@ -496,10 +496,10 @@ export default function AccountsPage() {
                                     
                                     {account.balances && account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 && (
                                         <div>
-                                            <p className="text-xs text-muted-foreground mb-1">Other balances:</p>
+                                            <p className="text-xs text-muted-foreground mb-1 mt-2">Other balances:</p>
                                             <div className="flex flex-wrap gap-1">
                                             {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
-                                                <Badge key={bal.currency} variant="outline" className="text-xs font-normal">
+                                                <Badge key={bal.currency} variant="outline" className="text-xs font-normal px-1.5 py-0.5">
                                                     {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
                                                 </Badge>
                                             ))}
@@ -567,5 +567,6 @@ export default function AccountsPage() {
     </div>
   );
 }
+
 
 
