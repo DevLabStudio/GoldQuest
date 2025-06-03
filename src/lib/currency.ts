@@ -100,7 +100,7 @@ function getLocaleForCurrency(currencyCode: string | undefined | null): string {
     switch (currencyCode.toUpperCase()) {
         case 'BRL': return 'pt-BR';
         case 'USD': return 'en-US';
-        case 'EUR': return 'de-DE'; 
+        case 'EUR': return 'en-IE'; // Changed from de-DE to en-IE for Euro symbol before number
         case 'GBP': return 'en-GB';
         case 'BTC': return 'en-US';
         default: return 'en-US'; 
@@ -118,18 +118,32 @@ export function formatCurrency(
     let currencyForFormatting: string;
 
     const effectiveSourceCurrency = sourceCurrencyOfAmount?.toUpperCase();
-    const effectiveTargetCurrency = targetFormatOrConversionCurrency?.toUpperCase();
+    let effectiveTargetCurrency = targetFormatOrConversionCurrency?.toUpperCase();
+
+    if (!effectiveTargetCurrency && convertToTargetCurrency) {
+        // If target is not specified but conversion is requested, assume target is same as source (no conversion)
+        // OR, if we had a global preferred currency, we could use that. For now, format in source.
+        effectiveTargetCurrency = effectiveSourceCurrency;
+    }
+
 
     if (!effectiveSourceCurrency) {
-        currencyForFormatting = effectiveTargetCurrency || 'BRL';
+        currencyForFormatting = effectiveTargetCurrency || 'BRL'; // Fallback
         console.warn(`formatCurrency: sourceCurrencyOfAmount was undefined. Formatting as ${currencyForFormatting}.`);
     } else if (convertToTargetCurrency && effectiveTargetCurrency && effectiveSourceCurrency !== effectiveTargetCurrency) {
         amountToFormat = convertCurrency(amount, effectiveSourceCurrency, effectiveTargetCurrency);
         currencyForFormatting = effectiveTargetCurrency;
-    } else {
+    } else { // convertToTargetCurrency is false OR source and target are same OR target is undefined (and convert=false)
         amountToFormat = amount;
-        currencyForFormatting = effectiveSourceCurrency;
+        currencyForFormatting = effectiveSourceCurrency; // Use source currency for formatting
     }
+    
+    // Ensure currencyForFormatting is always defined before calling getLocaleForCurrency
+    if (!currencyForFormatting) {
+        console.warn("formatCurrency: currencyForFormatting ended up undefined. Defaulting to BRL for locale.");
+        currencyForFormatting = 'BRL';
+    }
+
 
     const displayLocale = explicitLocale || getLocaleForCurrency(currencyForFormatting);
     
@@ -138,18 +152,21 @@ export function formatCurrency(
         currency: currencyForFormatting,
     };
 
+    // Specific fraction digits for certain currencies
     if (currencyForFormatting === 'BTC') {
         options.minimumFractionDigits = 2; 
         options.maximumFractionDigits = 8; 
-    } else if (currencyForFormatting === 'BRL' || currencyForFormatting === 'USD' || currencyForFormatting === 'EUR' || currencyForFormatting === 'GBP') {
+    } else if (['BRL', 'USD', 'EUR', 'GBP'].includes(currencyForFormatting)) {
         options.minimumFractionDigits = 2;
         options.maximumFractionDigits = 2;
     }
+    // For other currencies, Intl.NumberFormat will use its default fraction digits for that currency.
 
     try {
         return new Intl.NumberFormat(displayLocale, options).format(amountToFormat);
     } catch (error: any) {
         console.error(`Error formatting currency: Amount=${amountToFormat}, Currency=${currencyForFormatting}, Locale=${displayLocale}`, error);
+        // Fallback formatting if Intl.NumberFormat fails (e.g., invalid locale/currency combo though unlikely with checks)
         const symbol = getCurrencySymbol(currencyForFormatting);
         return `${symbol} ${amountToFormat.toFixed(options.minimumFractionDigits || 2)}`;
     }
@@ -157,7 +174,7 @@ export function formatCurrency(
 
 export function getCurrencySymbol(currencyCode: string | undefined | null): string {
     if (!currencyCode || typeof currencyCode !== 'string' || currencyCode.trim() === "") {
-        return '¤'; 
+        return '¤'; // Generic currency sign
     }
     const upperCaseCode = currencyCode.toUpperCase();
     switch (upperCaseCode) {
@@ -165,8 +182,9 @@ export function getCurrencySymbol(currencyCode: string | undefined | null): stri
         case 'USD': return '$';
         case 'EUR': return '€';
         case 'GBP': return '£';
-        case 'BTC': return '₿';
-        default: return upperCaseCode; 
+        case 'BTC': return '₿'; // Bitcoin symbol
+        // Add more common symbols if needed
+        default: return upperCaseCode; // Fallback to the code itself if symbol is unknown
     }
 }
 
