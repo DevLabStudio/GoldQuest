@@ -24,16 +24,16 @@ const GoalsCard: FC<GoalsCardProps> = ({ preferredCurrency, isLoading }) => {
   if (isLoading) {
     return (
       <Card className="h-full">
-        <CardHeader>
-          <Skeleton className="h-6 w-1/2 mb-1" />
-          <Skeleton className="h-4 w-1/3" />
+        <CardHeader className="py-3 px-4">
+          <Skeleton className="h-5 w-1/2 mb-0.5" />
+          <Skeleton className="h-3 w-1/3" />
         </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center space-y-4">
-            <Skeleton className="h-8 w-3/4 mb-2" />
-            <Skeleton className="h-24 w-24 rounded-full" />
-            <div className="w-full space-y-1">
-                <Skeleton className="h-4 w-full" />
-                <Skeleton className="h-4 w-2/3" />
+        <CardContent className="flex flex-col items-center justify-center space-y-3 pt-2 pb-3 px-4">
+            <Skeleton className="h-6 w-3/4 mb-1" />
+            <Skeleton className="h-20 w-20 rounded-full" />
+            <div className="w-full space-y-0.5">
+                <Skeleton className="h-3 w-full" />
+                <Skeleton className="h-3 w-2/3" />
             </div>
         </CardContent>
       </Card>
@@ -42,23 +42,22 @@ const GoalsCard: FC<GoalsCardProps> = ({ preferredCurrency, isLoading }) => {
 
   return (
     <Card className="h-full">
-      <CardHeader>
+      <CardHeader className="py-3 px-4">
         <div className="flex justify-between items-center">
-            <CardTitle>Goals</CardTitle>
-            <Button variant="ghost" size="sm" className="text-xs text-primary">
+            <CardTitle className="text-base">Goals</CardTitle>
+            <Button variant="ghost" size="sm" className="text-xs text-primary h-auto px-1.5 py-0.5">
                  <Edit3 className="mr-1 h-3 w-3" /> Edit Goal
             </Button>
         </div>
-        <CardDescription>Your progress towards financial targets.</CardDescription>
+        <CardDescription className="text-xs">Your progress towards financial targets.</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col items-center justify-center">
-        <div className="flex items-center justify-between w-full mb-2">
-            <p className="text-2xl font-bold text-primary">{formatCurrency(targetAmount, preferredCurrency, preferredCurrency, false)}</p>
+      <CardContent className="flex flex-col items-center justify-center pt-2 pb-3 px-4">
+        <div className="flex items-center justify-between w-full mb-1">
+            <p className="text-xl font-bold text-primary">{formatCurrency(targetAmount, preferredCurrency, preferredCurrency, false)}</p>
             <p className="text-xs text-muted-foreground">May, 2024</p> {/* Placeholder date */}
         </div>
 
-        {/* Radial progress bar would be custom. Using linear progress for now. */}
-        <div className="relative w-36 h-36 my-4">
+        <div className="relative w-28 h-28 my-2"> {/* Reduced size from w-36 h-36 */}
             <svg className="w-full h-full" viewBox="0 0 36 36">
                 <path
                 className="text-muted/20"
@@ -83,16 +82,16 @@ const GoalsCard: FC<GoalsCardProps> = ({ preferredCurrency, isLoading }) => {
                 />
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <Target className="h-6 w-6 text-primary mb-1"/>
-                <span className="text-lg font-semibold text-primary">{`${progressPercentage.toFixed(0)}%`}</span>
+                <Target className="h-5 w-5 text-primary mb-0.5"/> {/* Reduced icon size */}
+                <span className="text-base font-semibold text-primary">{`${progressPercentage.toFixed(0)}%`}</span> {/* Reduced font size */}
             </div>
         </div>
 
-        <div className="w-full text-center text-xs text-muted-foreground mb-3">
+        <div className="w-full text-center text-xs text-muted-foreground mb-2">
           Target vs Achievement
         </div>
 
-        <div className="w-full space-y-1 text-sm">
+        <div className="w-full space-y-0.5 text-xs"> {/* Reduced font size */}
           <div className="flex justify-between">
             <span className="text-muted-foreground">Target Achieved:</span>
             <span className="font-medium text-green-500">{formatCurrency(achievedAmount, preferredCurrency, preferredCurrency, false)}</span>
@@ -102,10 +101,6 @@ const GoalsCard: FC<GoalsCardProps> = ({ preferredCurrency, isLoading }) => {
             <span className="font-medium">{formatCurrency(currentMonthTarget, preferredCurrency, preferredCurrency, false)}</span>
           </div>
         </div>
-         {/* Placeholder for adding new goals if this card were to manage multiple */}
-         {/* <Button variant="outline" size="sm" className="mt-4 w-full">
-          <PlusCircle className="mr-2 h-4 w-4" /> Add New Goal
-        </Button> */}
       </CardContent>
     </Card>
   );

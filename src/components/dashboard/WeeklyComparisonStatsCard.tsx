@@ -67,12 +67,12 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
   if (isLoading) {
      return (
       <Card className="h-full">
-        <CardHeader>
-          <Skeleton className="h-6 w-3/4 mb-1" />
-          <Skeleton className="h-4 w-1/2" />
+        <CardHeader className="py-3 px-4">
+          <Skeleton className="h-5 w-3/4 mb-0.5" />
+          <Skeleton className="h-3 w-1/2" />
         </CardHeader>
-        <CardContent>
-            <Skeleton className="h-60 w-full" />
+        <CardContent className="pt-2 pb-3 px-4">
+            <Skeleton className="h-[260px] w-full" /> {/* Adjusted height to match visual */}
         </CardContent>
       </Card>
     );
@@ -80,20 +80,20 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 
   return (
     <Card className="h-full">
-      <CardHeader>
-        <CardTitle>Statistics</CardTitle>
-        <CardDescription>Weekly spending comparison (Placeholder data for 'Last Week').</CardDescription>
+      <CardHeader className="py-3 px-4">
+        <CardTitle className="text-base">Statistics</CardTitle>
+        <CardDescription className="text-xs">Weekly spending comparison (Placeholder data for 'Last Week').</CardDescription>
       </CardHeader>
-      <CardContent className="h-[300px] pb-0">
+      <CardContent className="h-[280px] pb-0 pt-2 px-4"> {/* Adjusted height and padding */}
         {chartData.length > 0 ? (
             <ChartContainer config={chartConfig} className="h-full w-full">
             <ResponsiveContainer>
-                <BarChart data={chartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                <BarChart data={chartData} margin={{ top: 5, right: 0, left: -30, bottom: 0 }}> {/* Adjusted margins */}
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={8} className="text-xs fill-muted-foreground" />
+                <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={6} className="text-xs fill-muted-foreground" />
                 <YAxis 
                     tickFormatter={(value) => `${getCurrencySymbol(preferredCurrency)}${value / 1000}k`}
-                    tickLine={false} axisLine={false} tickMargin={8} className="text-xs fill-muted-foreground"
+                    tickLine={false} axisLine={false} tickMargin={6} className="text-xs fill-muted-foreground"
                 />
                 <ChartTooltip
                     cursor={false}
@@ -102,7 +102,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                         formatter={(value, name) => (
                         <>
                             <span
-                            className="w-2.5 h-2.5 rounded-full mr-2"
+                            className="w-2 h-2 rounded-full mr-1.5" // Slightly smaller dot
                             style={{ backgroundColor: name === "thisWeek" ? chartConfig.thisWeek.color : chartConfig.lastWeek.color }}
                             />
                             {name === "thisWeek" ? "This Week" : "Last Week"}: {formatCurrency(Number(value), preferredCurrency, preferredCurrency, false)}
@@ -112,14 +112,14 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     />
                     }
                 />
-                <Legend content={<ChartLegendContent wrapperStyle={{paddingTop: 10}}/>} />
-                <Bar dataKey="thisWeek" fill="var(--color-thisWeek)" radius={4} barSize={15}/>
-                <Bar dataKey="lastWeek" fill="var(--color-lastWeek)" radius={4} barSize={15}/>
+                <Legend content={<ChartLegendContent wrapperStyle={{paddingTop: 8}} className="text-xs"/>} /> {/* Smaller legend */}
+                <Bar dataKey="thisWeek" fill="var(--color-thisWeek)" radius={3} barSize={12}/> {/* Smaller bar */}
+                <Bar dataKey="lastWeek" fill="var(--color-lastWeek)" radius={3} barSize={12}/> {/* Smaller bar */}
                 </BarChart>
             </ResponsiveContainer>
             </ChartContainer>
         ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
+            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
                 No spending data for this week.
             </div>
         )}
@@ -129,4 +129,3 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 };
 
 export default WeeklyComparisonStatsCard;
-

@@ -43,20 +43,20 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
     const { icon: CategoryIcon } = getCategoryStyle(categoryDetails);
 
     return (
-      <div className="flex items-center justify-between py-3 border-b border-border last:border-b-0">
-        <div className="flex items-center gap-3">
-          <div className="p-2 bg-muted rounded-md">
+      <div className="flex items-center justify-between py-2 border-b border-border last:border-b-0">
+        <div className="flex items-center gap-2">
+          <div className="p-1.5 bg-muted rounded-md">
             <CategoryIcon />
           </div>
           <div>
-            <p className="text-sm font-medium text-foreground truncate max-w-[150px] sm:max-w-[200px]" title={transaction.description}>
+            <p className="text-xs font-medium text-foreground truncate max-w-[120px] sm:max-w-[180px]" title={transaction.description}>
               {transaction.description}
             </p>
             <p className="text-xs text-muted-foreground">{account?.name || 'N/A'} - {transaction.category}</p>
           </div>
         </div>
         <div className="text-right">
-          <p className={`text-sm font-semibold ${transaction.amount >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
+          <p className={`text-xs font-semibold ${transaction.amount >= 0 ? 'text-green-500 dark:text-green-400' : 'text-red-500 dark:text-red-400'}`}>
             {formatCurrency(transaction.amount, transaction.transactionCurrency, transaction.transactionCurrency, false)}
           </p>
           <p className="text-xs text-muted-foreground">{formatDateFns(parseISO(transaction.date), 'dd MMM, yyyy')}</p>
@@ -68,23 +68,23 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
   if (isLoading) {
     return (
       <Card className="h-full">
-        <CardHeader>
-          <Skeleton className="h-6 w-3/4" />
-          <Skeleton className="h-4 w-1/2 mt-1" />
+        <CardHeader className="py-3 px-4">
+          <Skeleton className="h-5 w-3/4" />
+          <Skeleton className="h-3 w-1/2 mt-0.5" />
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-3 pt-2 pb-3 px-4">
           {[...Array(3)].map((_, i) => (
-            <div key={i} className="flex items-center justify-between py-3 border-b">
-              <div className="flex items-center gap-3">
-                <Skeleton className="h-10 w-10 rounded-md" />
+            <div key={i} className="flex items-center justify-between py-2 border-b">
+              <div className="flex items-center gap-2">
+                <Skeleton className="h-8 w-8 rounded-md" />
                 <div>
-                  <Skeleton className="h-4 w-32 mb-1" />
-                  <Skeleton className="h-3 w-24" />
+                  <Skeleton className="h-3 w-28 mb-0.5" />
+                  <Skeleton className="h-2 w-20" />
                 </div>
               </div>
               <div className="text-right">
-                <Skeleton className="h-4 w-20 mb-1" />
-                <Skeleton className="h-3 w-16" />
+                <Skeleton className="h-3 w-16 mb-0.5" />
+                <Skeleton className="h-2 w-12" />
               </div>
             </div>
           ))}
@@ -96,31 +96,31 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
 
   return (
     <Card className="h-full">
-      <CardHeader className="flex flex-row items-center justify-between">
+      <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
         <div>
-            <CardTitle>Recent Transactions</CardTitle>
-            <CardDescription>Your latest financial activities.</CardDescription>
+            <CardTitle className="text-base">Recent Transactions</CardTitle>
+            <CardDescription className="text-xs">Your latest financial activities.</CardDescription>
         </div>
         <Link href="/transactions" passHref>
-            <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary/80">
+            <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary/80 h-auto px-1.5 py-0.5">
                 View All <ArrowRight className="ml-1 h-3 w-3" />
             </Button>
         </Link>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-2 pb-3 px-4">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-4">
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="revenue">Revenue</TabsTrigger>
-            <TabsTrigger value="expenses">Expenses</TabsTrigger>
+          <TabsList className="grid w-full grid-cols-3 mb-3 h-9">
+            <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
+            <TabsTrigger value="revenue" className="text-xs">Revenue</TabsTrigger>
+            <TabsTrigger value="expenses" className="text-xs">Expenses</TabsTrigger>
           </TabsList>
           <TabsContent value={activeTab}>
             {filteredTransactions.length > 0 ? (
-              <ScrollArea className="h-[280px] pr-3"> {/* Adjust height as needed */}
+              <ScrollArea className="h-[240px] pr-2"> {/* Adjust height as needed */}
                 {filteredTransactions.map(tx => <TransactionItem key={tx.id} transaction={tx} />)}
               </ScrollArea>
             ) : (
-              <div className="text-center py-10 text-muted-foreground">
+              <div className="text-center py-8 text-muted-foreground text-sm">
                 No {activeTab !== 'all' ? activeTab : ''} transactions to display.
               </div>
             )}

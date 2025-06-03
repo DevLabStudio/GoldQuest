@@ -136,43 +136,43 @@ export default function DashboardPage() {
 
   if (isLoadingAuth || (!userPreferences && user)) { // Check for userPreferences too
     return (
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-2 space-y-6">
-                <Skeleton className="h-48 w-full" /> {/* Total Balance Placeholder */}
-                <Skeleton className="h-96 w-full" /> {/* Recent Transactions Placeholder */}
+      <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 space-y-4 min-h-screen">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 space-y-4">
+                <Skeleton className="h-40 w-full" /> {/* Total Balance Placeholder */}
+                <Skeleton className="h-80 w-full" /> {/* Recent Transactions Placeholder */}
             </div>
-            <div className="space-y-6">
-                <Skeleton className="h-64 w-full" /> {/* Goals Placeholder */}
-                <Skeleton className="h-72 w-full" /> {/* Upcoming Bills Placeholder */}
+            <div className="space-y-4">
+                <Skeleton className="h-60 w-full" /> {/* Goals Placeholder */}
+                <Skeleton className="h-64 w-full" /> {/* Upcoming Bills Placeholder */}
             </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Skeleton className="h-80 w-full" /> {/* Statistics Placeholder */}
-            <Skeleton className="h-80 w-full" /> {/* Expenses Breakdown Placeholder */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <Skeleton className="h-72 w-full" /> {/* Statistics Placeholder */}
+            <Skeleton className="h-72 w-full" /> {/* Expenses Breakdown Placeholder */}
         </div>
       </div>
     );
   }
 
   return (
-    <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
+    <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 space-y-4 min-h-screen">
         {/* Top Row: Total Balance (2/3 width), Goals (1/3 width), Upcoming Bills (1/3 width on smaller screens, moves below Goals) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             {/* Total Balance Card - Takes 2/3 width on large screens */}
             <div className="lg:col-span-2">
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
             </div>
 
             {/* Right Column for Goals and Upcoming Bills */}
-            <div className="space-y-6">
+            <div className="space-y-4">
                 <GoalsCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <UpcomingBillsCard subscriptions={subscriptions} preferredCurrency={preferredCurrency} isLoading={isLoading || isLoadingAuth} accounts={accounts}/>
             </div>
         </div>
 
         {/* Second Row: Recent Transactions (2/3 width), Statistics (1/3 width) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2">
                 <RecentTransactionsCard 
                     transactions={recentTransactionsForDisplay} 
