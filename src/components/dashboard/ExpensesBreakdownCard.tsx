@@ -13,9 +13,9 @@ import Link from 'next/link';
 interface ExpenseItemData {
   name: string;
   amount: number;
-  categoryDetails?: Category; 
+  categoryDetails?: Category;
   // Placeholder for future trend data
-  // trendPercentage?: number; 
+  // trendPercentage?: number;
   // trendDirection?: 'up' | 'down' | 'neutral';
 }
 
@@ -27,33 +27,34 @@ interface ExpensesBreakdownCardProps {
 
 const CategoryExpenseItem: FC<{ item: ExpenseItemData, currency: string }> = ({ item, currency }) => {
   const { icon: CategoryIcon, color: categoryColor } = getCategoryStyle(item.categoryDetails || item.name);
-  
+
   // Placeholder trend
   const trendPercentage = Math.floor(Math.random() * 25) + 1;
   const trendDirection = Math.random() > 0.5 ? 'up' : 'down';
 
   return (
-    <Link href={item.categoryDetails ? `/categories/${item.categoryDetails.id}` : "/expenses"} passHref>
-        <a className="block p-3 bg-muted/30 hover:bg-muted/50 rounded-lg transition-colors">
-            <div className="flex items-center justify-between mb-1">
-                <div className="flex items-center gap-2">
-                <div className={`p-2 rounded-full ${categoryColor} bg-opacity-20`}>
-                    <CategoryIcon />
-                </div>
-                <span className="text-sm font-medium text-foreground">{item.name}</span>
-                </div>
-                <ArrowRight className="h-4 w-4 text-muted-foreground" />
+    <Link
+        href={item.categoryDetails ? `/categories/${item.categoryDetails.id}` : "/expenses"}
+        className="block p-3 bg-muted/30 hover:bg-muted/50 rounded-lg transition-colors"
+    >
+        <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+            <div className={`p-2 rounded-full ${categoryColor} bg-opacity-20`}>
+                <CategoryIcon />
             </div>
-            <div className="text-lg font-semibold text-foreground">
-                {formatCurrency(item.amount, currency, currency, false)}
+            <span className="text-sm font-medium text-foreground">{item.name}</span>
             </div>
-            {/* Placeholder for trend */}
-            <div className={`text-xs flex items-center ${trendDirection === 'up' ? 'text-red-500' : 'text-green-500'}`}>
-                {trendDirection === 'up' ? <TrendingUp className="h-3 w-3 mr-0.5" /> : <TrendingDown className="h-3 w-3 mr-0.5" />}
-                {trendPercentage}% 
-                <span className="text-muted-foreground ml-1">*vs last month</span>
-            </div>
-        </a>
+            <ArrowRight className="h-4 w-4 text-muted-foreground" />
+        </div>
+        <div className="text-lg font-semibold text-foreground">
+            {formatCurrency(item.amount, currency, currency, false)}
+        </div>
+        {/* Placeholder for trend */}
+        <div className={`text-xs flex items-center ${trendDirection === 'up' ? 'text-red-500' : 'text-green-500'}`}>
+            {trendDirection === 'up' ? <TrendingUp className="h-3 w-3 mr-0.5" /> : <TrendingDown className="h-3 w-3 mr-0.5" />}
+            {trendPercentage}%
+            <span className="text-muted-foreground ml-1">*vs last month</span>
+        </div>
     </Link>
   );
 };
