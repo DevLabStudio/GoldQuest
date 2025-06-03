@@ -4,12 +4,14 @@
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import TotalBalanceCard from "@/components/dashboard/TotalBalanceCard"; // Renamed for clarity
+import TotalBalanceCard from "@/components/dashboard/TotalBalanceCard";
 import RecentTransactionsCard from "@/components/dashboard/RecentTransactionsCard";
 import UpcomingBillsCard from "@/components/dashboard/UpcomingBillsCard";
-import GoalsCard from "@/components/dashboard/GoalsCard"; // Placeholder for now
-import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard"; // Placeholder for now
+import GoalsCard from "@/components/dashboard/GoalsCard";
+import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard";
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
+import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
+
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
@@ -42,7 +44,6 @@ export default function DashboardPage() {
     }
     setIsLoading(true);
     try {
-      // Preferences already available via useAuthContext -> userPreferences
       const fetchedAccounts = await getAccounts();
       setAccounts(fetchedAccounts);
 
@@ -70,7 +71,7 @@ export default function DashboardPage() {
 
 
   useEffect(() => {
-    if (user && !isLoadingAuth && userPreferences) { // Ensure preferences are loaded too
+    if (user && !isLoadingAuth && userPreferences) { 
         fetchData();
     } else if (!isLoadingAuth && !user) {
         setIsLoading(false);
@@ -106,13 +107,12 @@ export default function DashboardPage() {
     if (isLoading || !user) return [];
     return allTransactions.filter(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      if (!selectedDateRange.from || !selectedDateRange.to) return true; // All time if no range selected
+      if (!selectedDateRange.from || !selectedDateRange.to) return true; 
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
   }, [allTransactions, isLoading, selectedDateRange, user]);
   
   const recentTransactionsForDisplay = useMemo(() => {
-    // Show last 5 transactions regardless of date range, or filtered by date range if a specific range is active
     const source = (selectedDateRange.from || selectedDateRange.to) ? periodTransactions : allTransactions;
     return source.slice(0, 5);
   }, [periodTransactions, allTransactions, selectedDateRange]);
@@ -130,32 +130,75 @@ export default function DashboardPage() {
     return Object.entries(categoryTotals)
       .map(([category, amount]) => ({ name: category, amount, categoryDetails: categories.find(c=>c.name === category) }))
       .sort((a, b) => b.amount - a.amount)
-      .slice(0, 5); // Show top 5, plus an "Others" if more
+      .slice(0, 5); 
   }, [periodTransactions, categories, preferredCurrency, isLoading]);
 
+  const netWorthCompositionData = useMemo((): NetWorthChartDataPoint[] => {
+    if (isLoading || typeof window === 'undefined' || !accounts.length) return [];
+    
+    const assetCategoryTotal = accounts
+      .filter(acc => acc.category === 'asset' && acc.includeInNetWorth !== false && acc.balances && acc.primaryCurrency)
+      .reduce((sum, acc) => {
+        const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
+        if (primaryBalance && primaryBalance.amount > 0) { // Only positive balances contribute to asset types
+          sum += convertCurrency(primaryBalance.amount, acc.primaryCurrency!, preferredCurrency);
+        }
+        return sum;
+      }, 0);
 
-  if (isLoadingAuth || (!userPreferences && user)) { // Check for userPreferences too
+    const cryptoCategoryTotal = accounts
+      .filter(acc => acc.category === 'crypto' && acc.includeInNetWorth !== false && acc.balances && acc.primaryCurrency)
+      .reduce((sum, acc) => {
+         const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
+        if (primaryBalance && primaryBalance.amount > 0) { // Only positive balances contribute to asset types
+          sum += convertCurrency(primaryBalance.amount, acc.primaryCurrency!, preferredCurrency);
+        }
+        return sum;
+      }, 0);
+
+    const data: NetWorthChartDataPoint[] = [];
+    if (assetCategoryTotal > 0) {
+      data.push({ name: 'Traditional Assets', value: assetCategoryTotal, fill: 'hsl(var(--chart-1))' });
+    }
+    if (cryptoCategoryTotal > 0) {
+      data.push({ name: 'Crypto Assets', value: cryptoCategoryTotal, fill: 'hsl(var(--chart-2))' });
+    }
+    
+    // If there are liabilities (negative total net worth, or just no positive assets)
+    // the chart might look empty or skewed. This chart focuses on ASSET composition.
+    // Liabilities could be a separate chart or KPI.
+    
+    return data;
+  }, [accounts, preferredCurrency, isLoading]);
+
+
+  if (isLoadingAuth || (!userPreferences && user)) { 
     return (
       <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2 space-y-4">
-                <Skeleton className="h-40 w-full" /> {/* Total Balance Placeholder */}
+                <Skeleton className="h-40 w-full" />
             </div>
             <div className="space-y-4">
-                <Skeleton className="h-60 w-full" /> {/* Goals Placeholder */}
-                <Skeleton className="h-64 w-full" /> {/* Upcoming Bills Placeholder */}
+                <Skeleton className="h-60 w-full" />
+                <Skeleton className="h-64 w-full" />
             </div>
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
              <div className="lg:col-span-2">
-                 <Skeleton className="h-80 w-full" /> {/* Recent Transactions Placeholder */}
+                 <Skeleton className="h-80 w-full" />
              </div>
              <div>
-                 <Skeleton className="h-72 w-full" /> {/* Statistics Placeholder */}
+                 <Skeleton className="h-72 w-full" />
              </div>
         </div>
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <Skeleton className="h-72 w-full" /> {/* Expenses Breakdown Placeholder */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"> {/* Changed to lg:grid-cols-3 for consistency */}
+            <div className="lg:col-span-2">
+                <Skeleton className="h-72 w-full" />
+            </div>
+            <div className="lg:col-span-1">
+                <Skeleton className="h-72 w-full" />
+            </div>
         </div>
       </div>
     );
@@ -163,22 +206,17 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
-        {/* Top Row: Total Balance (2/3 width), Goals (1/3 width), Upcoming Bills (1/3 width on smaller screens, moves below Goals) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4"> {/* Added mb-4 */}
-            {/* Total Balance Card - Takes 2/3 width on large screens */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2">
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
             </div>
-
-            {/* Right Column for Goals and Upcoming Bills */}
             <div className="space-y-4">
                 <GoalsCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <UpcomingBillsCard subscriptions={subscriptions} preferredCurrency={preferredCurrency} isLoading={isLoading || isLoadingAuth} accounts={accounts}/>
             </div>
         </div>
 
-        {/* Second Row: Recent Transactions (2/3 width), Statistics (1/3 width) */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4"> {/* Added mb-4 */}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-4">
             <div className="lg:col-span-2">
                 <RecentTransactionsCard 
                     transactions={recentTransactionsForDisplay} 
@@ -192,13 +230,40 @@ export default function DashboardPage() {
                 <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
             </div>
         </div>
-
-        {/* Third Row: Expenses Breakdown (Full Width or as desired) */}
-        <ExpensesBreakdownCard 
-            data={expensesBreakdownData} 
-            currency={preferredCurrency} 
-            isLoading={isLoading}
-        />
+        
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2">
+                <ExpensesBreakdownCard 
+                    data={expensesBreakdownData} 
+                    currency={preferredCurrency} 
+                    isLoading={isLoading}
+                />
+            </div>
+            <div className="lg:col-span-1">
+                 <Card className="h-full">
+                    <CardHeader className="py-3 px-4">
+                        <CardTitle className="text-base">Portfolio Composition</CardTitle>
+                        <CardDescription className="text-xs">Distribution of your positive assets.</CardDescription>
+                    </CardHeader>
+                    <CardContent className="h-[280px] sm:h-[300px] pt-0 pb-3 px-4">
+                        {isLoading || accounts.length === 0 ? (
+                            <div className="flex h-full items-center justify-center">
+                                <Skeleton className="h-full w-full" />
+                            </div>
+                        ) : netWorthCompositionData.length > 0 ? (
+                            <NetWorthCompositionChart
+                            data={netWorthCompositionData}
+                            currency={preferredCurrency}
+                            />
+                        ) : (
+                            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+                                No portfolio data to display.
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+            </div>
+        </div>
     </div>
   );
 }
