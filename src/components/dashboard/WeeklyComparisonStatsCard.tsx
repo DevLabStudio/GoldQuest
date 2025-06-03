@@ -1,19 +1,20 @@
+
 'use client';
 
 import type { FC } from 'react';
-import { useMemo } from 'react'; // Added missing import
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { useMemo } from 'react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend } from 'recharts'; // Changed Tooltip alias
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { ChartConfig, ChartContainer, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart';
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent } from '@/components/ui/chart'; // Added ChartTooltip
 import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { Transaction } from '@/services/transactions'; // Assuming Transaction type is available
+import type { Transaction } from '@/services/transactions';
 import { subDays, format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO, isSameDay } from 'date-fns';
 
 
 interface WeeklyComparisonStatsCardProps {
   preferredCurrency: string;
-  periodTransactions: Transaction[]; // Pass all transactions for the selected period
+  periodTransactions: Transaction[];
   isLoading: boolean;
 }
 
@@ -24,8 +25,8 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
     const today = new Date();
     const startOfThisWeek = startOfWeek(today, { weekStartsOn: 0 }); // Sunday
     const endOfThisWeek = endOfWeek(today, { weekStartsOn: 0 });
-    const startOfLastWeek = startOfWeek(subDays(today, 7), { weekStartsOn: 0 });
-    const endOfLastWeek = endOfWeek(subDays(today, 7), { weekStartsOn: 0 });
+    // const startOfLastWeek = startOfWeek(subDays(today, 7), { weekStartsOn: 0 });
+    // const endOfLastWeek = endOfWeek(subDays(today, 7), { weekStartsOn: 0 });
 
     const thisWeekDays = eachDayOfInterval({ start: startOfThisWeek, end: endOfThisWeek });
     // const lastWeekDays = eachDayOfInterval({ start: startOfLastWeek, end: endOfLastWeek });
@@ -128,3 +129,4 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 };
 
 export default WeeklyComparisonStatsCard;
+
