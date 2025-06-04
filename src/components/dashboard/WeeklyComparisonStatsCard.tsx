@@ -56,6 +56,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
     const durationInDays = differenceInDays(endDate, startDate) + 1;
     let granularity: 'daily' | 'weekly' | 'monthly' = 'daily';
 
+    // Updated granularity logic
     if (isAllTimeSelection || isFullYearSelection) {
         granularity = 'monthly';
     } else { 
@@ -63,6 +64,8 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             granularity = 'monthly';
         } else if (durationInDays > 31) {
             granularity = 'weekly';
+        } else {
+            granularity = 'daily'; // default for shorter periods
         }
     }
 
@@ -204,4 +207,3 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 };
 
 export default WeeklyComparisonStatsCard;
-
