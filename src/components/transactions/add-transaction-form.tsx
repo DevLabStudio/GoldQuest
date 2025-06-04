@@ -21,6 +21,8 @@ import type { Tag } from '@/services/tags';
 import type { Transaction } from '@/services/transactions';
 import { getCurrencySymbol, supportedCurrencies, convertCurrency } from '@/lib/currency';
 import { toast } from "@/hooks/use-toast";
+import { getSubscriptions, type Subscription } from '@/services/subscriptions'; // Added
+import { Skeleton } from '@/components/ui/skeleton'; // Added
 
 const transactionTypes = ['expense', 'income', 'transfer'] as const;
 
@@ -29,6 +31,7 @@ const baseSchema = z.object({
   date: z.date({ required_error: "Transaction date is required" }),
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
+  subscriptionId: z.string().optional().nullable(), // Added
   transactionCurrency: z.string().min(3, "Transaction currency is required").refine(
       (val) => supportedCurrencies.includes(val.toUpperCase()),
       { message: "Unsupported transaction currency" }
@@ -52,6 +55,9 @@ const transferSchema = baseSchema.extend({
       { message: "Unsupported destination currency" }
   ).optional(),
   toAccountAmount: z.coerce.number({ invalid_type_error: "Destination amount must be a number" }).positive("Destination amount must be positive").optional(),
+  subscriptionId: z.string().optional().nullable().refine(() => false, { // Transfers cannot be linked to subscriptions
+    message: "Transfers cannot be linked to subscriptions.", // This message won't show due to UI hiding field
+  }),
 });
 
 const formSchema = z.discriminatedUnion('type', [
@@ -93,10 +99,11 @@ interface AddTransactionFormProps {
       date: Date;
       description?: string;
       tags?: string[];
+      subscriptionId?: string | null; // Added
     }) => Promise<void> | void;
   isLoading: boolean;
   initialType?: typeof transactionTypes[number] | null;
-  initialData?: Partial<AddTransactionFormData & { date: Date | string; id?: string }>;
+  initialData?: Partial<AddTransactionFormData & { date: Date | string; id?: string; subscriptionId?: string | null }>;
 }
 
 const parseTagsInput = (input: string | undefined): string[] => {
@@ -110,12 +117,36 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     tags,
     onTransactionAdded,
     onTransferAdded,
-    isLoading,
+    isLoading: propIsLoading, // Renamed to avoid conflict with local loading state
     initialType: initialTypeFromParent,
     initialData
 }) => {
   const resolvedInitialType = initialTypeFromParent ?? (initialData?.type || 'expense');
   const [calculatedRate, setCalculatedRate] = useState<string | null>(null);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(false); // Changed initial to false
+  const [isFormLoading, setIsFormLoading] = useState(propIsLoading);
+
+  useEffect(() => {
+    setIsFormLoading(propIsLoading);
+  }, [propIsLoading]);
+
+  useEffect(() => {
+    const fetchSubscriptions = async () => {
+      setIsLoadingSubscriptions(true);
+      try {
+        const fetchedSubs = await getSubscriptions();
+        setSubscriptions(fetchedSubs);
+      } catch (error) {
+        console.error("Failed to fetch subscriptions:", error);
+        toast({ title: "Error", description: "Could not load subscriptions for linking.", variant: "destructive" });
+      } finally {
+        setIsLoadingSubscriptions(false);
+      }
+    };
+    fetchSubscriptions();
+  }, []);
+
 
   const form = useForm<AddTransactionFormData>({
     resolver: zodResolver(formSchema),
@@ -130,6 +161,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 transactionCurrency: (initialData as Transaction)?.transactionCurrency || 'BRL',
                 toAccountCurrency: (initialData as any)?.toAccountCurrency,
                 toAccountAmount: (initialData as any)?.toAccountAmount,
+                subscriptionId: initialData.subscriptionId === undefined ? null : initialData.subscriptionId,
             };
             // Set currency based on related account's primary currency if editing
             if (base.type !== 'transfer' && (initialData as any).accountId) {
@@ -150,6 +182,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             fromAccountId: accounts[0]?.id,
             toAccountId: accounts[1]?.id,
             amount: undefined, category: undefined, tags: [],
+            subscriptionId: null,
             transactionCurrency: accounts[0]?.primaryCurrency || 'BRL',
             toAccountCurrency: accounts[1]?.primaryCurrency || accounts[0]?.primaryCurrency || 'BRL',
             toAccountAmount: undefined,
@@ -281,6 +314,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             date: values.date,
             description: values.description || `Transfer from ${fromAccount.name} to ${toAccount.name}`,
             tags: finalTags,
+            subscriptionId: null, // Transfers are not linked to subscriptions
         });
       } else {
         console.warn("onTransferAdded callback not provided.");
@@ -306,6 +340,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         description: values.description || values.category || 'Transaction',
         category: values.category!,
         tags: finalTags,
+        subscriptionId: values.subscriptionId || null,
       };
       await onTransactionAdded(transactionData);
     }
@@ -313,11 +348,25 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
   const getButtonText = () => {
     const isEditing = !!(initialData && initialData.id);
-    if (isLoading) return isEditing ? "Saving..." : "Adding...";
+    if (isFormLoading) return isEditing ? "Saving..." : "Adding...";
     if (isEditing) return "Save Changes";
     const typeLabel = transactionType ? transactionType.charAt(0).toUpperCase() + transactionType.slice(1) : 'Transaction';
     return `Add ${typeLabel}`;
   };
+
+  if (isLoadingSubscriptions && !isEditingExisting) { // Show skeleton only for new transactions while subs load
+      return (
+          <div className="space-y-6 py-4">
+              <Skeleton className="h-10 w-full" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <Skeleton className="h-10 w-full" />
+                  <Skeleton className="h-10 w-full" />
+              </div>
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+          </div>
+      );
+  }
 
   return (
     <Form {...form}>
@@ -335,6 +384,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     if (newType === 'transfer') {
                         form.setValue('accountId', undefined);
                         form.setValue('category', undefined);
+                        form.setValue('subscriptionId', null); // No subscription for transfers
                         const fromAcc = accounts.find(a => a.id === form.getValues('fromAccountId'));
                         form.setValue('transactionCurrency', fromAcc?.primaryCurrency || 'BRL');
                         const toAcc = accounts.find(a => a.id === form.getValues('toAccountId'));
@@ -582,6 +632,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 
 
                 {transactionType !== 'transfer' && (
+                  <>
                     <FormField
                         control={form.control}
                         name="category"
@@ -609,6 +660,37 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                             </FormItem>
                         )}
                     />
+                    <FormField
+                        control={form.control}
+                        name="subscriptionId"
+                        render={({ field }) => (
+                            <FormItem>
+                                <FormLabel>Link to Subscription (Optional)</FormLabel>
+                                <Select
+                                    onValueChange={(value) => field.onChange(value === "__NONE__" ? null : value)}
+                                    value={field.value || "__NONE__"}
+                                    disabled={isLoadingSubscriptions}
+                                >
+                                    <FormControl>
+                                        <SelectTrigger>
+                                            <SelectValue placeholder={isLoadingSubscriptions ? "Loading subscriptions..." : "Select a subscription"} />
+                                        </SelectTrigger>
+                                    </FormControl>
+                                    <SelectContent>
+                                        <SelectItem value="__NONE__">None</SelectItem>
+                                        {subscriptions.filter(sub => sub.type === transactionType).sort((a,b) => a.name.localeCompare(b.name)).map((sub) => (
+                                            <SelectItem key={sub.id} value={sub.id}>
+                                                {sub.name} ({formatCurrency(sub.amount, sub.currency, sub.currency, false)})
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                                <FormDescription>Link this transaction to a recurring subscription.</FormDescription>
+                                <FormMessage />
+                            </FormItem>
+                        )}
+                    />
+                  </>
                 )}
                  <FormField
                     control={form.control}
@@ -633,7 +715,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             </div>
         </div>
 
-        <Button type="submit" className="w-full" disabled={isLoading}>
+        <Button type="submit" className="w-full" disabled={isFormLoading || isLoadingSubscriptions}>
           {getButtonText()}
         </Button>
       </form>

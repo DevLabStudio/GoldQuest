@@ -25,6 +25,7 @@ export interface Transaction {
   category: string;
   accountId: string;
   tags?: string[];
+  subscriptionId?: string | null; // Link to a subscription
   createdAt?: object | string; // For server timestamp or ISO string for localStorage
   updatedAt?: object | string; // For server timestamp or ISO string for localStorage
   // Optional: to store original CSV foreign values for reference if needed
@@ -37,6 +38,7 @@ export interface Transaction {
 // Type for data passed to addTransaction - transactionCurrency is now mandatory
 export type NewTransactionData = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & {
     transactionCurrency: string;
+    subscriptionId?: string | null;
     originalImportData?: {
         foreignAmount?: number | null;
         foreignCurrency?: string | null;
@@ -150,6 +152,7 @@ export async function getTransactions(
                 tags: txData.tags || [],
                 category: txData.category || 'Uncategorized',
                 transactionCurrency: txData.transactionCurrency || allAppAccounts.find(a => a.id === txData.accountId)?.primaryCurrency || 'USD',
+                subscriptionId: txData.subscriptionId === undefined ? null : txData.subscriptionId,
                 // Convert Firebase server timestamps to ISO strings if they exist
                 createdAt: txData.createdAt && typeof txData.createdAt === 'object' ? new Date().toISOString() : txData.createdAt as string,
                 updatedAt: txData.updatedAt && typeof txData.updatedAt === 'object' ? new Date().toISOString() : txData.updatedAt as string,
@@ -193,6 +196,7 @@ export async function addTransaction(
     id: newTransactionRef.key,
     category: category?.trim() || 'Uncategorized',
     tags: transactionData.tags || [],
+    subscriptionId: transactionData.subscriptionId === undefined ? null : transactionData.subscriptionId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     originalImportData: {
@@ -236,6 +240,7 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
 
   const dataToUpdateFirebase = {
     ...updatedTransaction,
+    subscriptionId: updatedTransaction.subscriptionId === undefined ? null : updatedTransaction.subscriptionId,
     updatedAt: serverTimestamp(),
     originalImportData: {
         foreignAmount: updatedTransaction.originalImportData?.foreignAmount === undefined ? null : updatedTransaction.originalImportData.foreignAmount,
