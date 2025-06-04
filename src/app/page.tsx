@@ -11,7 +11,7 @@ import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonSt
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
 import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
 import UpcomingBillsCard from '@/components/dashboard/UpcomingBillsCard';
-import SubscriptionsBarChart from '@/components/dashboard/subscriptions-bar-chart'; // Changed from PieChart to BarChart
+// import SubscriptionsBarChart from '@/components/dashboard/subscriptions-bar-chart'; // Removed as per previous request
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
@@ -112,11 +112,6 @@ export default function DashboardPage() {
     });
   }, [allTransactions, isLoading, selectedDateRange, user]);
   
-  const recentTransactionsForDisplay = useMemo(() => {
-    const source = (selectedDateRange.from || selectedDateRange.to) ? periodTransactions : allTransactions;
-    return source.slice(0, 5);
-  }, [periodTransactions, allTransactions, selectedDateRange]);
-
 
   const expensesBreakdownData = useMemo(() => {
     if (isLoading || !periodTransactions.length || !categories.length) return [];
@@ -206,7 +201,7 @@ export default function DashboardPage() {
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
                 <RecentTransactionsCard 
-                    transactions={recentTransactionsForDisplay} 
+                    transactions={periodTransactions} // Pass all transactions for the period
                     categories={categories}
                     accounts={accounts}
                     preferredCurrency={preferredCurrency} 

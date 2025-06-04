@@ -117,7 +117,7 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
           </TabsList>
           <TabsContent value={activeTab} className={filteredTransactions.length === 0 ? "min-h-[100px] flex flex-col items-center justify-center" : ""}>
             {filteredTransactions.length > 0 ? (
-              <ScrollArea className="h-[240px] pr-2">
+              <ScrollArea className="pr-2"> {/* Removed fixed height h-[240px] */}
                 {filteredTransactions.map(tx => <TransactionItem key={tx.id} transaction={tx} />)}
               </ScrollArea>
             ) : (
@@ -134,3 +134,4 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
 };
 
 export default RecentTransactionsCard;
+
