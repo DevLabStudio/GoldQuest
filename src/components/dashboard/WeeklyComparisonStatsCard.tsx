@@ -40,19 +40,17 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
     if (selectedDateRange.from && selectedDateRange.to) {
         startDate = selectedDateRange.from;
         endDate = selectedDateRange.to;
-        // Check if the range perfectly matches a full year
         const fromStartOfYear = startOfYearDFNS(selectedDateRange.from);
         const fromEndOfYear = endOfYearDFNS(selectedDateRange.from);
         if (isSameDay(selectedDateRange.from, fromStartOfYear) && isSameDay(selectedDateRange.to, fromEndOfYear)) {
             isFullYearSelection = true;
         }
     } else if (periodTransactions.length > 0) {
-        // For "All Time" with data, determine range from transactions
         const dates = periodTransactions.map(tx => parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z').getTime());
         startDate = startOfDay(new Date(Math.min(...dates)));
         endDate = endOfDay(new Date(Math.max(...dates)));
     } else {
-        return []; // No date range and no transactions
+        return []; 
     }
     
     const durationInDays = differenceInDays(endDate, startDate) + 1;
@@ -60,7 +58,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 
     if (isAllTimeSelection || isFullYearSelection) {
         granularity = 'monthly';
-    } else { // Original logic for other date ranges
+    } else { 
         if (durationInDays > 180) {
             granularity = 'monthly';
         } else if (durationInDays > 31) {
@@ -68,29 +66,38 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
         }
     }
 
-    const data: { name: string; spending: number }[] = [];
+    const data: { name: string; income: number; expenses: number }[] = [];
 
     if (granularity === 'daily') {
         const daysInPeriod = eachDayOfInterval({ start: startDate, end: endDate });
         for (const day of daysInPeriod) {
-            const spending = periodTransactions
+            const income = periodTransactions
+                .filter(tx => tx.amount > 0 && tx.category !== "Transfer" && isSameDay(parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z'), day))
+                .reduce((sum, tx) => sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency), 0);
+            const expenses = periodTransactions
                 .filter(tx => tx.amount < 0 && tx.category !== "Transfer" && isSameDay(parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z'), day))
                 .reduce((sum, tx) => sum + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency)), 0);
-            data.push({ name: formatDateFns(day, 'd MMM'), spending });
+            data.push({ name: formatDateFns(day, 'd MMM'), income, expenses });
         }
     } else if (granularity === 'weekly') {
-        const weeksInPeriod = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 1 }); // Monday as start of week
+        const weeksInPeriod = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 1 });
         for (const weekStart of weeksInPeriod) {
             const actualWeekEnd = endOfWeekDFNS(weekStart, { weekStartsOn: 1 });
             const effectiveWeekEnd = actualWeekEnd > endDate ? endDate : actualWeekEnd; 
 
-            const spending = periodTransactions
+            const income = periodTransactions
+                .filter(tx => {
+                    const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                    return tx.amount > 0 && tx.category !== "Transfer" && isWithinIntervalDFNS(txDate, { start: weekStart, end: effectiveWeekEnd });
+                })
+                .reduce((sum, tx) => sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency), 0);
+            const expenses = periodTransactions
                 .filter(tx => {
                     const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
                     return tx.amount < 0 && tx.category !== "Transfer" && isWithinIntervalDFNS(txDate, { start: weekStart, end: effectiveWeekEnd });
                 })
                 .reduce((sum, tx) => sum + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency)), 0);
-            data.push({ name: `W${formatDateFns(weekStart, 'w')}`, spending }); 
+            data.push({ name: `W${formatDateFns(weekStart, 'w')}`, income, expenses }); 
         }
     } else { // monthly
         const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate });
@@ -98,13 +105,19 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             const actualMonthEnd = endOfMonthDFNS(monthStart);
             const effectiveMonthEnd = actualMonthEnd > endDate ? endDate : actualMonthEnd;
 
-            const spending = periodTransactions
+            const income = periodTransactions
+                .filter(tx => {
+                    const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                    return tx.amount > 0 && tx.category !== "Transfer" && isWithinIntervalDFNS(txDate, { start: monthStart, end: effectiveMonthEnd });
+                })
+                .reduce((sum, tx) => sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency), 0);
+            const expenses = periodTransactions
                 .filter(tx => {
                     const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
                     return tx.amount < 0 && tx.category !== "Transfer" && isWithinIntervalDFNS(txDate, { start: monthStart, end: effectiveMonthEnd });
                 })
                 .reduce((sum, tx) => sum + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency)), 0);
-            data.push({ name: formatDateFns(monthStart, 'MMM yy'), spending });
+            data.push({ name: formatDateFns(monthStart, 'MMM yy'), income, expenses });
         }
     }
     return data;
@@ -113,9 +126,13 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 
 
   const chartConfig = {
-    spending: {
-      label: "Spending",
-      color: "hsl(var(--chart-1))",
+    income: {
+      label: "Income",
+      color: "hsl(var(--chart-2))", // Greenish
+    },
+    expenses: {
+      label: "Expenses",
+      color: "hsl(var(--chart-4))", // Reddish
     },
   } satisfies ChartConfig;
 
@@ -123,7 +140,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
      return (
       <Card>
         <CardHeader className="py-3 px-4">
-          <Skeleton className="h-5 w-3/4 mb-0.5" />
+          <Skeleton className="h-5 w-1/4 mb-0.5" /> 
           <Skeleton className="h-3 w-1/2" />
         </CardHeader>
         <CardContent className="pt-2 pb-3 px-4 min-h-[280px] flex items-center justify-center">
@@ -136,14 +153,14 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
   return (
     <Card>
       <CardHeader className="py-3 px-4">
-        <CardTitle className="text-base">Spending Statistics</CardTitle>
-        <CardDescription className="text-xs">Spending trend for the selected period.</CardDescription>
+        <CardTitle className="text-base">Statistics</CardTitle>
+        <CardDescription className="text-xs">Income vs. Expenses trend for the selected period.</CardDescription>
       </CardHeader>
       <CardContent className={chartData.length > 0 ? "h-[280px] pb-0 pt-2 px-4" : "p-4 text-center min-h-[280px] flex flex-col items-center justify-center"}>
         {chartData.length > 0 ? (
             <ChartContainer config={chartConfig} className="h-full w-full">
             <ResponsiveContainer>
-                <BarChart data={chartData} margin={{ top: 5, right: 0, left: -30, bottom: 0 }}>
+                <BarChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
                 <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={6} className="text-xs fill-muted-foreground" />
                 <YAxis 
@@ -154,13 +171,13 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     cursor={false}
                     content={
                     <ChartTooltipContent
-                        formatter={(value) => ( 
+                        formatter={(value, name) => ( 
                         <>
                             <span
                             className="w-2 h-2 rounded-full mr-1.5"
-                            style={{ backgroundColor: chartConfig.spending.color }}
+                            style={{ backgroundColor: chartConfig[name as keyof typeof chartConfig]?.color || 'transparent' }}
                             />
-                            Spending: {formatCurrency(Number(value), preferredCurrency, preferredCurrency, false)}
+                            {chartConfig[name as keyof typeof chartConfig]?.label || name}: {formatCurrency(Number(value), preferredCurrency, preferredCurrency, false)}
                         </>
                         )}
                         indicator="dot"
@@ -168,7 +185,8 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     }
                 />
                 <Legend content={<ChartLegendContent wrapperStyle={{paddingTop: 8}} className="text-xs"/>} />
-                <Bar dataKey="spending" fill="var(--color-spending)" radius={3} barSize={chartData.length > 30 ? 8 : 12}/>
+                <Bar dataKey="income" fill="var(--color-income)" radius={3} barSize={chartData.length > 15 ? 6 : (chartData.length > 7 ? 8 : 10)} />
+                <Bar dataKey="expenses" fill="var(--color-expenses)" radius={3} barSize={chartData.length > 15 ? 6 : (chartData.length > 7 ? 8 : 10)} />
                 </BarChart>
             </ResponsiveContainer>
             </ChartContainer>
@@ -176,7 +194,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             <>
               <BarChart2 className="h-8 w-8 text-muted-foreground/50 mb-1" />
               <p className="text-muted-foreground text-xs">
-                No spending data for the selected period.
+                No income or expense data for the selected period.
               </p>
             </>
         )}
