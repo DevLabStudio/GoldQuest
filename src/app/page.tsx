@@ -10,7 +10,7 @@ import BudgetManagementCard from "@/components/dashboard/BudgetManagementCard";
 import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard";
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
 import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
-import SubscriptionsPieChart from '@/components/dashboard/subscriptions-pie-chart'; // New Import
+import SubscriptionsBarChart from '@/components/dashboard/subscriptions-bar-chart';
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
@@ -177,7 +177,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-4">
                 <Skeleton className="h-40 w-full" />
-                <Skeleton className="h-60 w-full" /> {/* Placeholder for Subscriptions Card */}
+                <Skeleton className="h-60 w-full" />
                 <Skeleton className="h-80 w-full" />
                 <Skeleton className="h-72 w-full" />
             </div>
@@ -197,7 +197,7 @@ export default function DashboardPage() {
             {/* Left Column */}
             <div className="lg:col-span-2 space-y-4">
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
-                <SubscriptionsPieChart dateRangeLabel={dateRangeLabel} />
+                <SubscriptionsBarChart dateRangeLabel={dateRangeLabel} />
                 <RecentTransactionsCard 
                     transactions={recentTransactionsForDisplay} 
                     categories={categories}
@@ -216,7 +216,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-1 space-y-4">
                 <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
-                <Card className="h-full">
+                <Card>
                     <CardHeader className="py-3 px-4">
                         <CardTitle className="text-base">Portfolio Composition</CardTitle>
                         <CardDescription className="text-xs">Distribution of your positive assets.</CardDescription>
@@ -243,4 +243,3 @@ export default function DashboardPage() {
     </div>
   );
 }
-

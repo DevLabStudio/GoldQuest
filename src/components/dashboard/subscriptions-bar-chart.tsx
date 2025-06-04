@@ -140,11 +140,11 @@ const SubscriptionsBarChart: FC<SubscriptionsBarChartProps> = ({ dateRangeLabel 
   if (isLoading) {
     return (
       <Card className="shadow-lg bg-card text-card-foreground">
-        <CardHeader className="pb-2">
-          <Skeleton className="h-5 w-3/4" />
-          <Skeleton className="h-4 w-1/2 mt-1" />
+        <CardHeader className="py-3 px-4">
+          <Skeleton className="h-5 w-3/4 mb-0.5" />
+          <Skeleton className="h-4 w-1/2 mt-0.5" />
         </CardHeader>
-        <CardContent className="p-0 h-[300px] flex items-center justify-center">
+        <CardContent className="p-0 min-h-[300px] flex items-center justify-center">
           <Skeleton className="h-full w-full" />
         </CardContent>
       </Card>
@@ -154,14 +154,14 @@ const SubscriptionsBarChart: FC<SubscriptionsBarChartProps> = ({ dateRangeLabel 
   if (chartData.length === 0) {
     return (
       <Card className="shadow-lg bg-card text-card-foreground">
-        <CardHeader className="pb-2">
-          <CardTitle>Subscriptions</CardTitle>
-          <CardDescription>
+        <CardHeader className="py-3 px-4">
+          <CardTitle className="text-base">Subscriptions</CardTitle>
+          <CardDescription className="text-xs">
             Total Monthly: {formatCurrency(0, preferredCurrency, preferredCurrency, false)} ({dateRangeLabel})
           </CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-col items-center justify-center p-6 text-center min-h-[100px]">
-          <p className="text-muted-foreground">No expense subscription data to display for the selected period.</p>
+        <CardContent className="flex flex-col items-center justify-center p-4 text-center min-h-[100px]">
+          <p className="text-muted-foreground text-sm">No expense subscription data to display for the selected period.</p>
         </CardContent>
       </Card>
     );
@@ -169,38 +169,40 @@ const SubscriptionsBarChart: FC<SubscriptionsBarChartProps> = ({ dateRangeLabel 
 
   return (
     <Card className="shadow-lg bg-card text-card-foreground flex flex-col">
-      <CardHeader className="pb-2">
-        <CardTitle>Subscriptions</CardTitle>
-        <CardDescription>
+      <CardHeader className="py-3 px-4">
+        <CardTitle className="text-base">Subscriptions</CardTitle>
+        <CardDescription className="text-xs">
             Monthly Cost by Category ({formatCurrency(totalMonthlySubscriptionCost, preferredCurrency, preferredCurrency, false)} Total / {dateRangeLabel})
         </CardDescription>
       </CardHeader>
-      <CardContent className="flex-1 p-0 min-h-[300px]"> {/* Use min-height and allow growth */}
+      <CardContent className="flex-1 p-0 min-h-[300px] pb-4">
         <ChartContainer
           config={chartConfig}
           className="w-full h-full"
         >
-          <ResponsiveContainer width="100%" height={Math.max(300, chartData.length * 40 + 60)}> {/* Dynamic height */}
+          <ResponsiveContainer width="100%" height={Math.max(280, chartData.length * 35 + 60)}> {/* Dynamic height */}
             <BarChart
               layout="vertical"
               data={chartData}
               margin={{ top: 5, right: 30, left: 10, bottom: 5 }}
             >
-              <CartesianGrid horizontal={false} strokeDasharray="3 3" />
-              <XAxis 
-                type="number" 
-                tickFormatter={(value) => getCurrencySymbol(preferredCurrency) + value / 1000 + 'k'}
+              <CartesianGrid horizontal={false} strokeDasharray="3 3" stroke="hsl(var(--border))" />
+              <XAxis
+                type="number"
+                tickFormatter={(value) => getCurrencySymbol(preferredCurrency) + (value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value.toFixed(0))}
                 axisLine={false}
                 tickLine={false}
-                className="text-xs"
+                className="text-xs fill-muted-foreground"
+                tickMargin={6}
               />
               <YAxis
                 dataKey="name"
                 type="category"
-                width={100} // Adjust as needed for category names
+                width={100}
                 tickLine={false}
                 axisLine={false}
-                className="text-xs truncate"
+                className="text-xs fill-muted-foreground truncate"
+                tickMargin={6}
               />
               <RechartsTooltip
                 cursor={{ fill: 'hsl(var(--muted))' }}
@@ -217,10 +219,13 @@ const SubscriptionsBarChart: FC<SubscriptionsBarChartProps> = ({ dateRangeLabel 
                         </span>
                       </div>
                     )}
+                    labelClassName="font-semibold"
+                    wrapperClassName="rounded-lg border bg-popover px-2.5 py-1.5 text-xs shadow-xl"
+
                   />
                 }
               />
-              <Bar dataKey="value" layout="vertical" radius={[0, 4, 4, 0]}>
+              <Bar dataKey="value" layout="vertical" radius={[0, 4, 4, 0]} barSize={20}>
                 {chartData.map((entry) => (
                   <Cell key={`cell-${entry.name}`} fill={entry.fill} />
                 ))}
