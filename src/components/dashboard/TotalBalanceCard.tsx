@@ -83,35 +83,31 @@ const TotalBalanceCard: FC<TotalBalanceCardProps> = ({ accounts, preferredCurren
       ) : includedAccounts.length > 0 ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 mt-2">
           {includedAccounts.map(account => {
-            const primaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0];
-            if (!primaryBalanceEntry) return null;
+            // Calculate the total value of this account in the preferredCurrency
+            const accountValueInPreferredCurrency = account.balances.reduce((sum, balanceEntry) => {
+                return sum + convertCurrency(balanceEntry.amount, balanceEntry.currency, preferredCurrency);
+            }, 0);
 
             return (
               <div
                 key={account.id}
-                className="bg-primary-foreground/10 p-2.5 rounded-lg flex flex-col cursor-pointer hover:bg-primary-foreground/20 transition-colors justify-between min-h-[5rem]" // Added min-height and p-2.5, justify-between
+                className="bg-primary-foreground/10 p-2.5 rounded-lg flex flex-col cursor-pointer hover:bg-primary-foreground/20 transition-colors justify-between min-h-[5rem]"
                 onClick={() => router.push(`/accounts/${account.id}`)}
                 role="button"
                 tabIndex={0}
                 onKeyDown={(e) => { if(e.key === 'Enter' || e.key === ' ') router.push(`/accounts/${account.id}`)}}
               >
-                <div className="flex items-start gap-1.5"> {/* Changed to items-start */}
+                <div className="flex items-start gap-1.5">
                   <AccountTypeIcon type={account.type} category={account.category} />
-                  <div className="flex flex-col"> {/* Name and Type text container */}
+                  <div className="flex flex-col">
                     <span className="text-xs font-medium text-primary-foreground/90" title={account.name}>{account.name}</span>
                     <span className="text-[0.65rem] text-primary-foreground/70 leading-tight">{account.type.charAt(0).toUpperCase() + account.type.slice(1)}</span>
                   </div>
                 </div>
-                <div className="text-right w-full mt-1"> {/* Added mt-1 */}
+                <div className="text-right w-full mt-1">
                   <p className="text-sm font-semibold text-primary-foreground">
-                    {formatCurrency(primaryBalanceEntry.amount, primaryBalanceEntry.currency, primaryBalanceEntry.currency, false)}
+                    {formatCurrency(accountValueInPreferredCurrency, preferredCurrency, preferredCurrency, false)}
                   </p>
-                  {/* Optional: Converted balance (consider removing if too cluttered) */}
-                  {/* {primaryBalanceEntry.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                    <p className="text-[0.6rem] text-primary-foreground/60">
-                      (≈ {formatCurrency(primaryBalanceEntry.amount, primaryBalanceEntry.currency, preferredCurrency, true)})
-                    </p>
-                  )} */}
                 </div>
               </div>
             );
