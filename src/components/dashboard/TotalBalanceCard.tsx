@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -96,8 +97,8 @@ const TotalBalanceCard: FC<TotalBalanceCardProps> = ({ accounts, preferredCurren
               >
                 <div className="flex items-start gap-1.5"> {/* Changed to items-start */}
                   <AccountTypeIcon type={account.type} category={account.category} />
-                  <div className="flex flex-col">
-                    <span className="text-xs font-medium text-primary-foreground/90 truncate max-w-[calc(100%-1.25rem)]" title={account.name}>{account.name}</span>
+                  <div className="flex flex-col"> {/* Name and Type text container */}
+                    <span className="text-xs font-medium text-primary-foreground/90" title={account.name}>{account.name}</span>
                     <span className="text-[0.65rem] text-primary-foreground/70 leading-tight">{account.type.charAt(0).toUpperCase() + account.type.slice(1)}</span>
                   </div>
                 </div>
@@ -124,3 +125,4 @@ const TotalBalanceCard: FC<TotalBalanceCardProps> = ({ accounts, preferredCurren
 };
 
 export default TotalBalanceCard;
+
