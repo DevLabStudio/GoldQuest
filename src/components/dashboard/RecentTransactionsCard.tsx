@@ -99,8 +99,8 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
     <Card>
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
         <div>
-            <CardTitle className="text-base">Recent Transactions</CardTitle>
-            <CardDescription className="text-xs">Your latest financial activities.</CardDescription>
+            <CardTitle className="text-base">Transactions</CardTitle>
+            <CardDescription className="text-xs">Summary of financial activities for the selected period.</CardDescription>
         </div>
         <Link href="/transactions" passHref>
             <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary/80 h-auto px-1.5 py-0.5">
@@ -117,13 +117,13 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
           </TabsList>
           <TabsContent value={activeTab} className={filteredTransactions.length === 0 ? "min-h-[100px] flex flex-col items-center justify-center" : ""}>
             {filteredTransactions.length > 0 ? (
-              <ScrollArea className="h-[240px] pr-2"> {/* Height maintained when transactions exist */}
+              <ScrollArea className="h-[240px] pr-2">
                 {filteredTransactions.map(tx => <TransactionItem key={tx.id} transaction={tx} />)}
               </ScrollArea>
             ) : (
-              <div className="text-center py-4 text-muted-foreground text-sm"> {/* Reduced padding for empty state */}
+              <div className="text-center py-4 text-muted-foreground text-sm">
                 <LayoutList className="mx-auto h-8 w-8 text-muted-foreground/50 mb-1" />
-                No {activeTab !== 'all' ? activeTab : ''} transactions to display.
+                No {activeTab !== 'all' ? activeTab : ''} transactions to display for the selected period.
               </div>
             )}
           </TabsContent>
