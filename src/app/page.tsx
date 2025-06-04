@@ -11,6 +11,7 @@ import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonSt
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
 import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
 import UpcomingBillsCard from '@/components/dashboard/UpcomingBillsCard';
+import SubscriptionsBarChart from '@/components/dashboard/subscriptions-bar-chart'; // Changed from PieChart to BarChart
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
@@ -220,13 +221,13 @@ export default function DashboardPage() {
 
             {/* Right Column */}
             <div className="lg:col-span-1 space-y-4">
-                <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <UpcomingBillsCard 
                     subscriptions={subscriptions} 
                     preferredCurrency={preferredCurrency} 
                     isLoading={isLoading}
                     accounts={accounts}
                 />
+                <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <Card>
                     <CardHeader className="py-3 px-4">
                         <CardTitle className="text-base">Portfolio Composition</CardTitle>
@@ -254,3 +255,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
