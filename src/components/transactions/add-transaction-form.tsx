@@ -19,7 +19,7 @@ import type { Account } from '@/services/account-sync';
 import type { Category } from '@/services/categories';
 import type { Tag } from '@/services/tags';
 import type { Transaction } from '@/services/transactions';
-import { getCurrencySymbol, supportedCurrencies, convertCurrency, formatCurrency } from '@/lib/currency'; // Ensure this import is correct
+import { getCurrencySymbol, supportedCurrencies, convertCurrency, formatCurrency } from '@/lib/currency'; // Corrected import
 import { toast } from "@/hooks/use-toast";
 import { getSubscriptions, type Subscription } from '@/services/subscriptions';
 import { Skeleton } from '@/components/ui/skeleton';
