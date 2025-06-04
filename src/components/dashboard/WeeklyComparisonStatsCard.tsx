@@ -77,7 +77,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             const expenses = periodTransactions
                 .filter(tx => tx.amount < 0 && tx.category !== "Transfer" && isSameDay(parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z'), day))
                 .reduce((sum, tx) => sum + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency)), 0);
-            data.push({ name: formatDateFns(day, 'd MMM'), income, expenses });
+            data.push({ name: formatDateFns(day, 'dd/MM'), income, expenses });
         }
     } else if (granularity === 'weekly') {
         const weeksInPeriod = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 1 });
@@ -128,11 +128,11 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
   const chartConfig = {
     income: {
       label: "Income",
-      color: "hsl(var(--chart-2))", // Greenish
+      color: "hsl(var(--chart-2))", 
     },
     expenses: {
       label: "Expenses",
-      color: "hsl(var(--chart-4))", // Reddish
+      color: "hsl(var(--chart-4))", 
     },
   } satisfies ChartConfig;
 
