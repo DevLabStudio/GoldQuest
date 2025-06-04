@@ -13,6 +13,7 @@ import {
     startOfDay, endOfDay, 
     startOfWeek as startOfWeekDFNS, endOfWeek as endOfWeekDFNS, 
     startOfMonth as startOfMonthDFNS, endOfMonth as endOfMonthDFNS, 
+    startOfYear as startOfYearDFNS, endOfYear as endOfYearDFNS,
     eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, 
     isWithinInterval as isWithinIntervalDFNS, parseISO, format as formatDateFns, differenceInDays, isSameDay
 } from 'date-fns';
@@ -33,11 +34,20 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
     if (isLoading || !periodTransactions) return [];
 
     let startDate: Date, endDate: Date;
+    const isAllTimeSelection = !selectedDateRange.from && !selectedDateRange.to;
+    let isFullYearSelection = false;
 
     if (selectedDateRange.from && selectedDateRange.to) {
         startDate = selectedDateRange.from;
         endDate = selectedDateRange.to;
+        // Check if the range perfectly matches a full year
+        const fromStartOfYear = startOfYearDFNS(selectedDateRange.from);
+        const fromEndOfYear = endOfYearDFNS(selectedDateRange.from);
+        if (isSameDay(selectedDateRange.from, fromStartOfYear) && isSameDay(selectedDateRange.to, fromEndOfYear)) {
+            isFullYearSelection = true;
+        }
     } else if (periodTransactions.length > 0) {
+        // For "All Time" with data, determine range from transactions
         const dates = periodTransactions.map(tx => parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z').getTime());
         startDate = startOfDay(new Date(Math.min(...dates)));
         endDate = endOfDay(new Date(Math.max(...dates)));
@@ -46,12 +56,16 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
     }
     
     const durationInDays = differenceInDays(endDate, startDate) + 1;
-
     let granularity: 'daily' | 'weekly' | 'monthly' = 'daily';
-    if (durationInDays > 180) {
+
+    if (isAllTimeSelection || isFullYearSelection) {
         granularity = 'monthly';
-    } else if (durationInDays > 31) {
-        granularity = 'weekly';
+    } else { // Original logic for other date ranges
+        if (durationInDays > 180) {
+            granularity = 'monthly';
+        } else if (durationInDays > 31) {
+            granularity = 'weekly';
+        }
     }
 
     const data: { name: string; spending: number }[] = [];
@@ -65,10 +79,10 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             data.push({ name: formatDateFns(day, 'd MMM'), spending });
         }
     } else if (granularity === 'weekly') {
-        const weeksInPeriod = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 0 }); // Sunday as start of week
+        const weeksInPeriod = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 1 }); // Monday as start of week
         for (const weekStart of weeksInPeriod) {
-            const actualWeekEnd = endOfWeekDFNS(weekStart, { weekStartsOn: 0 });
-            const effectiveWeekEnd = actualWeekEnd > endDate ? endDate : actualWeekEnd; // Ensure weekEnd doesn't exceed period
+            const actualWeekEnd = endOfWeekDFNS(weekStart, { weekStartsOn: 1 });
+            const effectiveWeekEnd = actualWeekEnd > endDate ? endDate : actualWeekEnd; 
 
             const spending = periodTransactions
                 .filter(tx => {
@@ -76,7 +90,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     return tx.amount < 0 && tx.category !== "Transfer" && isWithinIntervalDFNS(txDate, { start: weekStart, end: effectiveWeekEnd });
                 })
                 .reduce((sum, tx) => sum + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency)), 0);
-            data.push({ name: `Sem ${formatDateFns(weekStart, 'w')}`, spending }); // "Wk 23"
+            data.push({ name: `W${formatDateFns(weekStart, 'w')}`, spending }); 
         }
     } else { // monthly
         const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate });
@@ -112,8 +126,8 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
           <Skeleton className="h-5 w-3/4 mb-0.5" />
           <Skeleton className="h-3 w-1/2" />
         </CardHeader>
-        <CardContent className="pt-2 pb-3 px-4">
-            <Skeleton className="h-[260px] w-full" />
+        <CardContent className="pt-2 pb-3 px-4 min-h-[280px] flex items-center justify-center">
+            <Skeleton className="h-full w-full" />
         </CardContent>
       </Card>
     );
@@ -125,7 +139,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
         <CardTitle className="text-base">Spending Statistics</CardTitle>
         <CardDescription className="text-xs">Spending trend for the selected period.</CardDescription>
       </CardHeader>
-      <CardContent className={chartData.length > 0 ? "h-[280px] pb-0 pt-2 px-4" : "p-4 text-center min-h-[100px] flex flex-col items-center justify-center"}>
+      <CardContent className={chartData.length > 0 ? "h-[280px] pb-0 pt-2 px-4" : "p-4 text-center min-h-[280px] flex flex-col items-center justify-center"}>
         {chartData.length > 0 ? (
             <ChartContainer config={chartConfig} className="h-full w-full">
             <ResponsiveContainer>
@@ -140,7 +154,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     cursor={false}
                     content={
                     <ChartTooltipContent
-                        formatter={(value) => ( // name and other args are available if needed
+                        formatter={(value) => ( 
                         <>
                             <span
                             className="w-2 h-2 rounded-full mr-1.5"
@@ -154,7 +168,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     }
                 />
                 <Legend content={<ChartLegendContent wrapperStyle={{paddingTop: 8}} className="text-xs"/>} />
-                <Bar dataKey="spending" fill="var(--color-spending)" radius={3} barSize={12}/>
+                <Bar dataKey="spending" fill="var(--color-spending)" radius={3} barSize={chartData.length > 30 ? 8 : 12}/>
                 </BarChart>
             </ResponsiveContainer>
             </ChartContainer>
@@ -172,3 +186,4 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 };
 
 export default WeeklyComparisonStatsCard;
+
