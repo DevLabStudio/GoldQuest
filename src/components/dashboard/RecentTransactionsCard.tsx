@@ -15,7 +15,7 @@ import type { Category } from '@/services/categories';
 import { getCategoryStyle } from '@/services/categories';
 import { formatCurrency, convertCurrency } from '@/lib/currency';
 import { format as formatDateFns, parseISO } from 'date-fns';
-import { ArrowRight } from 'lucide-react';
+import { ArrowRight, LayoutList } from 'lucide-react';
 
 interface RecentTransactionsCardProps {
   transactions: Transaction[];
@@ -67,12 +67,13 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
 
   if (isLoading) {
     return (
-      <Card className="h-full">
+      <Card>
         <CardHeader className="py-3 px-4">
           <Skeleton className="h-5 w-3/4" />
           <Skeleton className="h-3 w-1/2 mt-0.5" />
         </CardHeader>
         <CardContent className="space-y-3 pt-2 pb-3 px-4">
+          <Skeleton className="h-9 w-full mb-3" /> 
           {[...Array(3)].map((_, i) => (
             <div key={i} className="flex items-center justify-between py-2 border-b">
               <div className="flex items-center gap-2">
@@ -95,7 +96,7 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
 
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
         <div>
             <CardTitle className="text-base">Recent Transactions</CardTitle>
@@ -114,13 +115,14 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
             <TabsTrigger value="revenue" className="text-xs">Revenue</TabsTrigger>
             <TabsTrigger value="expenses" className="text-xs">Expenses</TabsTrigger>
           </TabsList>
-          <TabsContent value={activeTab}>
+          <TabsContent value={activeTab} className={filteredTransactions.length === 0 ? "min-h-[100px] flex flex-col items-center justify-center" : ""}>
             {filteredTransactions.length > 0 ? (
-              <ScrollArea className="h-[240px] pr-2"> {/* Adjust height as needed */}
+              <ScrollArea className="h-[240px] pr-2"> {/* Height maintained when transactions exist */}
                 {filteredTransactions.map(tx => <TransactionItem key={tx.id} transaction={tx} />)}
               </ScrollArea>
             ) : (
-              <div className="text-center py-8 text-muted-foreground text-sm">
+              <div className="text-center py-4 text-muted-foreground text-sm"> {/* Reduced padding for empty state */}
+                <LayoutList className="mx-auto h-8 w-8 text-muted-foreground/50 mb-1" />
                 No {activeTab !== 'all' ? activeTab : ''} transactions to display.
               </div>
             )}
