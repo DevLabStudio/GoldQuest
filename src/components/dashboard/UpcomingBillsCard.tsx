@@ -24,11 +24,11 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
   const upcomingBills = subscriptions
     .filter(sub => sub.type === 'expense' && isFuture(parseISO(sub.nextPaymentDate)))
     .sort((a, b) => parseISO(a.nextPaymentDate).getTime() - parseISO(b.nextPaymentDate).getTime())
-    .slice(0, 3); 
+    .slice(0, 3);
 
   if (isLoading) {
      return (
-      <Card className="h-full">
+      <Card>
         <CardHeader className="py-3 px-4">
           <Skeleton className="h-5 w-3/5 mb-0.5" />
           <Skeleton className="h-3 w-4/5" />
@@ -52,7 +52,7 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
   }
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
         <div>
             <CardTitle className="text-base">Upcoming Bills</CardTitle>
@@ -64,15 +64,15 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
             </Button>
         </Link>
       </CardHeader>
-      <CardContent className="pt-2 pb-3 px-4">
+      <CardContent className={upcomingBills.length > 0 ? "pt-2 pb-3 px-4" : "p-4 text-center"}>
         {upcomingBills.length > 0 ? (
           <div className="space-y-2">
             {upcomingBills.map(bill => {
                 const dueDate = parseISO(bill.nextPaymentDate);
                 const account = accounts.find(acc => acc.id === bill.accountId);
-                const { icon: CategoryIcon } = getCategoryStyle(bill.category); 
-                
-                let lastChargeDate = 'N/A'; 
+                const { icon: CategoryIcon } = getCategoryStyle(bill.category);
+
+                let lastChargeDate = 'N/A';
                 if (bill.lastPaidMonth) {
                     try {
                         const [year, month] = bill.lastPaidMonth.split('-').map(Number);
@@ -100,9 +100,9 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
             })}
           </div>
         ) : (
-          <div className="text-center py-8 text-muted-foreground">
-            <CalendarDays className="mx-auto h-10 w-10 text-muted-foreground/50 mb-1.5" />
-            No upcoming bills.
+          <div className="text-muted-foreground"> {/* Removed py-4 from here */}
+            <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/50 mb-1" /> {/* Icon smaller, margin smaller */}
+            <p className="text-xs">No upcoming bills.</p> {/* Text smaller */}
           </div>
         )}
       </CardContent>
