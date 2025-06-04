@@ -9,12 +9,12 @@ import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent, ChartLe
 import { formatCurrency, getCurrencySymbol, convertCurrency } from '@/lib/currency';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Transaction } from '@/services/transactions';
-import { 
-    startOfDay, endOfDay, 
-    startOfWeek as startOfWeekDFNS, endOfWeek as endOfWeekDFNS, 
-    startOfMonth as startOfMonthDFNS, endOfMonth as endOfMonthDFNS, 
+import {
+    startOfDay, endOfDay,
+    startOfWeek as startOfWeekDFNS, endOfWeek as endOfWeekDFNS,
+    startOfMonth as startOfMonthDFNS, endOfMonth as endOfMonthDFNS,
     startOfYear as startOfYearDFNS, endOfYear as endOfYearDFNS,
-    eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval, 
+    eachDayOfInterval, eachWeekOfInterval, eachMonthOfInterval,
     isWithinInterval as isWithinIntervalDFNS, parseISO, format as formatDateFns, differenceInDays, isSameDay
 } from 'date-fns';
 import { BarChart2 } from 'lucide-react';
@@ -35,37 +35,40 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 
     let startDate: Date, endDate: Date;
     const isAllTimeSelection = !selectedDateRange.from && !selectedDateRange.to;
-    let isFullYearSelection = false;
 
+    let isFullYearSelection = false;
     if (selectedDateRange.from && selectedDateRange.to) {
-        startDate = selectedDateRange.from;
-        endDate = selectedDateRange.to;
         const fromStartOfYear = startOfYearDFNS(selectedDateRange.from);
         const fromEndOfYear = endOfYearDFNS(selectedDateRange.from);
         if (isSameDay(selectedDateRange.from, fromStartOfYear) && isSameDay(selectedDateRange.to, fromEndOfYear)) {
             isFullYearSelection = true;
         }
+    }
+
+
+    if (selectedDateRange.from && selectedDateRange.to) {
+        startDate = selectedDateRange.from;
+        endDate = selectedDateRange.to;
     } else if (periodTransactions.length > 0) {
         const dates = periodTransactions.map(tx => parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z').getTime());
         startDate = startOfDay(new Date(Math.min(...dates)));
         endDate = endOfDay(new Date(Math.max(...dates)));
     } else {
-        return []; 
+        return [];
     }
-    
+
     const durationInDays = differenceInDays(endDate, startDate) + 1;
     let granularity: 'daily' | 'weekly' | 'monthly' = 'daily';
 
-    // Updated granularity logic
     if (isAllTimeSelection || isFullYearSelection) {
         granularity = 'monthly';
-    } else { 
+    } else {
         if (durationInDays > 180) {
             granularity = 'monthly';
         } else if (durationInDays > 31) {
             granularity = 'weekly';
         } else {
-            granularity = 'daily'; // default for shorter periods
+            granularity = 'daily';
         }
     }
 
@@ -86,7 +89,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
         const weeksInPeriod = eachWeekOfInterval({ start: startDate, end: endDate }, { weekStartsOn: 1 });
         for (const weekStart of weeksInPeriod) {
             const actualWeekEnd = endOfWeekDFNS(weekStart, { weekStartsOn: 1 });
-            const effectiveWeekEnd = actualWeekEnd > endDate ? endDate : actualWeekEnd; 
+            const effectiveWeekEnd = actualWeekEnd > endDate ? endDate : actualWeekEnd;
 
             const income = periodTransactions
                 .filter(tx => {
@@ -100,7 +103,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     return tx.amount < 0 && tx.category !== "Transfer" && isWithinIntervalDFNS(txDate, { start: weekStart, end: effectiveWeekEnd });
                 })
                 .reduce((sum, tx) => sum + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency)), 0);
-            data.push({ name: `W${formatDateFns(weekStart, 'w')}`, income, expenses }); 
+            data.push({ name: `W${formatDateFns(weekStart, 'w')}`, income, expenses });
         }
     } else { // monthly
         const monthsInPeriod = eachMonthOfInterval({ start: startDate, end: endDate });
@@ -131,11 +134,11 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
   const chartConfig = {
     income: {
       label: "Income",
-      color: "hsl(var(--chart-2))", 
+      color: "hsl(var(--chart-2))",
     },
     expenses: {
       label: "Expenses",
-      color: "hsl(var(--chart-4))", 
+      color: "hsl(var(--chart-4))",
     },
   } satisfies ChartConfig;
 
@@ -143,7 +146,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
      return (
       <Card>
         <CardHeader className="py-3 px-4">
-          <Skeleton className="h-5 w-1/4 mb-0.5" /> 
+          <Skeleton className="h-5 w-1/4 mb-0.5" />
           <Skeleton className="h-3 w-1/2" />
         </CardHeader>
         <CardContent className="pt-2 pb-3 px-4 min-h-[280px] flex items-center justify-center">
@@ -165,8 +168,15 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             <ResponsiveContainer>
                 <BarChart data={chartData} margin={{ top: 5, right: 0, left: -25, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="name" tickLine={false} axisLine={false} tickMargin={6} className="text-xs fill-muted-foreground" />
-                <YAxis 
+                <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    tickMargin={6}
+                    className="text-xs fill-muted-foreground"
+                    tickFormatter={(value) => value} // Use the 'name' value directly
+                />
+                <YAxis
                     tickFormatter={(value) => `${getCurrencySymbol(preferredCurrency)}${value >= 1000 ? (value / 1000).toFixed(0) + 'k' : value.toFixed(0)}`}
                     tickLine={false} axisLine={false} tickMargin={6} className="text-xs fill-muted-foreground"
                 />
@@ -174,7 +184,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
                     cursor={false}
                     content={
                     <ChartTooltipContent
-                        formatter={(value, name) => ( 
+                        formatter={(value, name) => (
                         <>
                             <span
                             className="w-2 h-2 rounded-full mr-1.5"
@@ -207,3 +217,4 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 };
 
 export default WeeklyComparisonStatsCard;
+
