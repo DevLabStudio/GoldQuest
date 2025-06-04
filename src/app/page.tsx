@@ -6,12 +6,11 @@ import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalBalanceCard from "@/components/dashboard/TotalBalanceCard";
 import RecentTransactionsCard from "@/components/dashboard/RecentTransactionsCard";
-import BudgetManagementCard from "@/components/dashboard/BudgetManagementCard";
+import InvestmentsOverviewCard from "@/components/dashboard/InvestmentsOverviewCard"; // Updated import
 import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard";
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
-import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
+// NetWorthCompositionChart import removed
 import UpcomingBillsCard from '@/components/dashboard/UpcomingBillsCard';
-// import SubscriptionsBarChart from '@/components/dashboard/subscriptions-bar-chart'; // Removed as per previous request
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
@@ -128,39 +127,6 @@ export default function DashboardPage() {
       .slice(0, 5); 
   }, [periodTransactions, categories, preferredCurrency, isLoading]);
 
-  const netWorthCompositionData = useMemo((): NetWorthChartDataPoint[] => {
-    if (isLoading || typeof window === 'undefined' || !accounts.length) return [];
-    
-    const assetCategoryTotal = accounts
-      .filter(acc => acc.category === 'asset' && acc.includeInNetWorth !== false && acc.balances && acc.primaryCurrency)
-      .reduce((sum, acc) => {
-        const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
-        if (primaryBalance && primaryBalance.amount > 0) { 
-          sum += convertCurrency(primaryBalance.amount, acc.primaryCurrency!, preferredCurrency);
-        }
-        return sum;
-      }, 0);
-
-    const cryptoCategoryTotal = accounts
-      .filter(acc => acc.category === 'crypto' && acc.includeInNetWorth !== false && acc.balances && acc.primaryCurrency)
-      .reduce((sum, acc) => {
-         const primaryBalance = acc.balances.find(b => b.currency === acc.primaryCurrency);
-        if (primaryBalance && primaryBalance.amount > 0) { 
-          sum += convertCurrency(primaryBalance.amount, acc.primaryCurrency!, preferredCurrency);
-        }
-        return sum;
-      }, 0);
-
-    const data: NetWorthChartDataPoint[] = [];
-    if (assetCategoryTotal > 0) {
-      data.push({ name: 'Traditional Assets', value: assetCategoryTotal, fill: 'hsl(var(--chart-1))' });
-    }
-    if (cryptoCategoryTotal > 0) {
-      data.push({ name: 'Crypto Assets', value: cryptoCategoryTotal, fill: 'hsl(var(--chart-2))' });
-    }
-        
-    return data;
-  }, [accounts, preferredCurrency, isLoading]);
 
   const dateRangeLabel = useMemo(() => {
     if (selectedDateRange.from && selectedDateRange.to) {
@@ -186,7 +152,7 @@ export default function DashboardPage() {
             <div className="lg:col-span-1 space-y-4">
                 <Skeleton className="h-[376px] w-full" />
                 <Skeleton className="h-72 w-full" />
-                <Skeleton className="h-72 w-full" />
+                {/* Removed Portfolio Composition Skeleton */}
             </div>
         </div>
       </div>
@@ -201,7 +167,7 @@ export default function DashboardPage() {
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
                 <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
                 <RecentTransactionsCard 
-                    transactions={periodTransactions} // Pass all transactions for the period
+                    transactions={periodTransactions} 
                     categories={categories}
                     accounts={accounts}
                     preferredCurrency={preferredCurrency} 
@@ -222,32 +188,14 @@ export default function DashboardPage() {
                     isLoading={isLoading}
                     accounts={accounts}
                 />
-                <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
-                <Card>
-                    <CardHeader className="py-3 px-4">
-                        <CardTitle className="text-base">Portfolio Composition</CardTitle>
-                        <CardDescription className="text-xs">Distribution of your positive assets.</CardDescription>
-                    </CardHeader>
-                    <CardContent className="h-[280px] sm:h-[300px] pt-0 pb-3 px-4">
-                        {isLoading || accounts.length === 0 ? (
-                            <div className="flex h-full items-center justify-center">
-                                <Skeleton className="h-full w-full" />
-                            </div>
-                        ) : netWorthCompositionData.length > 0 ? (
-                            <NetWorthCompositionChart
-                            data={netWorthCompositionData}
-                            currency={preferredCurrency}
-                            />
-                        ) : (
-                            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
-                                No portfolio data to display.
-                            </div>
-                        )}
-                    </CardContent>
-                </Card>
+                <InvestmentsOverviewCard 
+                    accounts={accounts} 
+                    preferredCurrency={preferredCurrency} 
+                    isLoading={isLoading} 
+                />
+                {/* Portfolio Composition Card Removed */}
             </div>
         </div>
     </div>
   );
 }
-
