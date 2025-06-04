@@ -10,21 +10,22 @@ import type { Subscription } from '@/services/subscriptions';
 import type { Account } from '@/services/account-sync';
 import { getCategoryStyle } from '@/services/categories';
 import { formatCurrency } from '@/lib/currency';
-import { format as formatDateFns, parseISO, isFuture, differenceInDays } from 'date-fns';
-import { CalendarDays, ArrowRight } from 'lucide-react';
+import { format as formatDateFns, parseISO } from 'date-fns';
+import { CalendarDays, ArrowRight, TrendingUp, TrendingDown } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Added ScrollArea
+import { cn } from '@/lib/utils';
 
-interface UpcomingBillsCardProps {
+interface SubscriptionsCardProps {
   subscriptions: Subscription[];
   preferredCurrency: string;
   isLoading: boolean;
   accounts: Account[];
 }
 
-const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferredCurrency, isLoading, accounts }) => {
-  const upcomingBills = subscriptions
-    .filter(sub => sub.type === 'expense' && isFuture(parseISO(sub.nextPaymentDate)))
-    .sort((a, b) => parseISO(a.nextPaymentDate).getTime() - parseISO(b.nextPaymentDate).getTime())
-    .slice(0, 3);
+const SubscriptionsCard: FC<SubscriptionsCardProps> = ({ subscriptions, preferredCurrency, isLoading, accounts }) => {
+  // Show all subscriptions, sorted by next payment date
+  const processedSubscriptions = subscriptions
+    .sort((a, b) => parseISO(a.nextPaymentDate).getTime() - parseISO(b.nextPaymentDate).getTime());
 
   if (isLoading) {
      return (
@@ -34,7 +35,7 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
           <Skeleton className="h-3 w-4/5" />
         </CardHeader>
         <CardContent className="space-y-3 pt-2 pb-3 px-4">
-          {[...Array(2)].map((_, i) => (
+          {[...Array(3)].map((_, i) => ( // Show more skeletons as we expect more items potentially
             <div key={i} className="flex items-center justify-between py-1.5 border-b">
               <div className="flex items-center gap-2">
                 <Skeleton className="h-8 w-8 rounded-md" />
@@ -55,54 +56,63 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
     <Card>
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
         <div>
-            <CardTitle className="text-base">Upcoming Bills</CardTitle>
-            <CardDescription className="text-xs">Your next recurring payments.</CardDescription>
+            <CardTitle className="text-base">Subscriptions</CardTitle>
+            <CardDescription className="text-xs">Your recurring income and expenses.</CardDescription>
         </div>
         <Link href="/financial-control" passHref>
             <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary/80 h-auto px-1.5 py-0.5">
-                View All <ArrowRight className="ml-1 h-3 w-3" />
+                Manage <ArrowRight className="ml-1 h-3 w-3" />
             </Button>
         </Link>
       </CardHeader>
-      <CardContent className={upcomingBills.length > 0 ? "pt-2 pb-3 px-4" : "p-4 text-center"}>
-        {upcomingBills.length > 0 ? (
-          <div className="space-y-2">
-            {upcomingBills.map(bill => {
-                const dueDate = parseISO(bill.nextPaymentDate);
-                const account = accounts.find(acc => acc.id === bill.accountId);
-                const { icon: CategoryIcon } = getCategoryStyle(bill.category);
+      <CardContent className={processedSubscriptions.length > 0 ? "pt-2 pb-3 px-4" : "p-4 text-center"}>
+        {processedSubscriptions.length > 0 ? (
+          <ScrollArea className="h-[260px] pr-2">
+            <div className="space-y-2">
+              {processedSubscriptions.map(sub => {
+                  const dueDate = parseISO(sub.nextPaymentDate);
+                  // const account = accounts.find(acc => acc.id === sub.accountId);
+                  const { icon: CategoryIcon } = getCategoryStyle(sub.category);
+                  const isIncome = sub.type === 'income';
 
-                let lastChargeDate = 'N/A';
-                if (bill.lastPaidMonth) {
-                    try {
-                        const [year, month] = bill.lastPaidMonth.split('-').map(Number);
-                        lastChargeDate = formatDateFns(new Date(year, month -1, parseInt(formatDateFns(dueDate, 'dd')) ), 'dd MMM, yyyy');
-                    } catch (e) { /* ignore date parse error */ }
-                }
-
-              return (
-                <div key={bill.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
-                  <div className="flex items-center gap-2">
-                    <div className="flex flex-col items-center justify-center p-1.5 bg-background rounded-md border w-10 h-10">
-                        <span className="text-xs text-muted-foreground">{formatDateFns(dueDate, 'MMM')}</span>
-                        <span className="text-base font-bold text-primary">{formatDateFns(dueDate, 'dd')}</span>
+                return (
+                  <div key={sub.id} className="flex items-center justify-between p-2 bg-muted/50 rounded-md">
+                    <div className="flex items-center gap-2">
+                      <div className={cn(
+                        "flex flex-col items-center justify-center p-1.5 rounded-md border w-10 h-10",
+                        isIncome ? "bg-green-500/10 border-green-500/30" : "bg-red-500/10 border-red-500/30"
+                      )}>
+                          <span className={cn("text-xs", isIncome ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>{formatDateFns(dueDate, 'MMM')}</span>
+                          <span className={cn("text-base font-bold", isIncome ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400")}>{formatDateFns(dueDate, 'dd')}</span>
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-foreground truncate max-w-[100px] sm:max-w-[120px]" title={sub.name}>{sub.name}</p>
+                        <p className="text-xs text-muted-foreground">{sub.category} - {sub.frequency}</p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-medium text-foreground truncate max-w-[100px]" title={bill.name}>{bill.name}</p>
-                      <p className="text-xs text-muted-foreground">{bill.category} - {bill.frequency}</p>
+                    <div className="text-right">
+                        <p className={cn(
+                            "text-xs font-semibold",
+                            isIncome ? "text-green-500 dark:text-green-400" : "text-red-500 dark:text-red-400"
+                        )}>
+                            {isIncome ? '+' : '-'}
+                            {formatCurrency(sub.amount, sub.currency, preferredCurrency, false)}
+                        </p>
+                        {sub.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                            <p className="text-xs text-muted-foreground">
+                                (≈ {formatCurrency(sub.amount, sub.currency, preferredCurrency, true)})
+                            </p>
+                        )}
                     </div>
                   </div>
-                  <p className="text-xs font-semibold text-foreground">
-                    {formatCurrency(bill.amount, bill.currency, preferredCurrency, false)}
-                  </p>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
         ) : (
-          <div className="text-muted-foreground"> {/* Removed py-4 from here */}
-            <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/50 mb-1" /> {/* Icon smaller, margin smaller */}
-            <p className="text-xs">No upcoming bills.</p> {/* Text smaller */}
+          <div className="text-muted-foreground text-sm"> {/* Ensure consistent padding & text size */}
+            <CalendarDays className="mx-auto h-8 w-8 text-muted-foreground/50 mb-1" />
+            <p>No subscriptions found.</p>
           </div>
         )}
       </CardContent>
@@ -110,4 +120,4 @@ const UpcomingBillsCard: FC<UpcomingBillsCardProps> = ({ subscriptions, preferre
   );
 };
 
-export default UpcomingBillsCard;
+export default SubscriptionsCard;
