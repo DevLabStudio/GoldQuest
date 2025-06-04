@@ -6,16 +6,15 @@ import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import TotalBalanceCard from "@/components/dashboard/TotalBalanceCard";
 import RecentTransactionsCard from "@/components/dashboard/RecentTransactionsCard";
-import BudgetManagementCard from "@/components/dashboard/BudgetManagementCard"; // New Import
+import BudgetManagementCard from "@/components/dashboard/BudgetManagementCard";
 import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard";
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
 import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
-
+import SubscriptionsPieChart from '@/components/dashboard/subscriptions-pie-chart'; // New Import
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
-// Subscriptions import removed as UpcomingBillsCard is removed
 import { getUserPreferences } from '@/lib/preferences';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns, isSameDay, subDays } from 'date-fns';
@@ -29,7 +28,6 @@ export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  // subscriptions state removed
   const [isLoading, setIsLoading] = useState(true);
   
   const preferredCurrency = useMemo(() => userPreferences?.preferredCurrency || 'BRL', [userPreferences]);
@@ -49,8 +47,6 @@ export default function DashboardPage() {
       const fetchedCategories = await getCategories();
       setCategories(fetchedCategories);
       
-      // subscriptions fetching removed
-
       if (fetchedAccounts.length > 0) {
         const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
         const transactionsByAccount = await Promise.all(transactionPromises);
@@ -76,7 +72,6 @@ export default function DashboardPage() {
         setAccounts([]);
         setAllTransactions([]);
         setCategories([]);
-        // setSubscriptions([]); // Removed
     }
 
     const handleStorageChange = (event: StorageEvent) => {
@@ -165,6 +160,16 @@ export default function DashboardPage() {
     return data;
   }, [accounts, preferredCurrency, isLoading]);
 
+  const dateRangeLabel = useMemo(() => {
+    if (selectedDateRange.from && selectedDateRange.to) {
+        if (isSameDay(selectedDateRange.from, selectedDateRange.to)) {
+            return formatDateFns(selectedDateRange.from, 'MMM d, yyyy');
+        }
+        return `${formatDateFns(selectedDateRange.from, 'MMM d')} - ${formatDateFns(selectedDateRange.to, 'MMM d, yyyy')}`;
+    }
+    return 'All Time';
+  }, [selectedDateRange]);
+
 
   if (isLoadingAuth || (!userPreferences && user)) { 
     return (
@@ -172,24 +177,13 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="lg:col-span-2 space-y-4">
                 <Skeleton className="h-40 w-full" />
-            </div>
-            <div className="space-y-4"> {/* This will now hold the BudgetManagementCard */}
-                <Skeleton className="h-[376px] w-full" /> {/* Adjusted height to be approx sum of Goals+Upcoming */}
-            </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-             <div className="lg:col-span-2">
-                 <Skeleton className="h-80 w-full" />
-             </div>
-             <div>
-                 <Skeleton className="h-72 w-full" />
-             </div>
-        </div>
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4">
-            <div className="lg:col-span-2">
+                <Skeleton className="h-60 w-full" /> {/* Placeholder for Subscriptions Card */}
+                <Skeleton className="h-80 w-full" />
                 <Skeleton className="h-72 w-full" />
             </div>
-            <div className="lg:col-span-1">
+            <div className="lg:col-span-1 space-y-4">
+                <Skeleton className="h-[376px] w-full" />
+                <Skeleton className="h-72 w-full" />
                 <Skeleton className="h-72 w-full" />
             </div>
         </div>
@@ -199,20 +193,11 @@ export default function DashboardPage() {
 
   return (
     <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
-        {/* Removed mb-4 from this div to reduce space */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4"> 
-            <div className="lg:col-span-2">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left Column */}
+            <div className="lg:col-span-2 space-y-4">
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
-            </div>
-            {/* Replace GoalsCard and UpcomingBillsCard with BudgetManagementCard */}
-            <div className="lg:row-span-2"> {/* Make BudgetManagementCard span two "rows" if needed, or just be tall */}
-                <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
-            </div>
-        </div>
-
-        {/* Added mt-4 to ensure spacing between this row and the one above */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4"> 
-            <div className="lg:col-span-2">
+                <SubscriptionsPieChart dateRangeLabel={dateRangeLabel} />
                 <RecentTransactionsCard 
                     transactions={recentTransactionsForDisplay} 
                     categories={categories}
@@ -220,23 +205,18 @@ export default function DashboardPage() {
                     preferredCurrency={preferredCurrency} 
                     isLoading={isLoading}
                 />
-            </div>
-            <div>
-                <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
-            </div>
-        </div>
-        
-        {/* Added mt-4 to ensure spacing */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-4"> 
-            <div className="lg:col-span-2">
                 <ExpensesBreakdownCard 
                     data={expensesBreakdownData} 
                     currency={preferredCurrency} 
                     isLoading={isLoading}
                 />
             </div>
-            <div className="lg:col-span-1">
-                 <Card className="h-full">
+
+            {/* Right Column */}
+            <div className="lg:col-span-1 space-y-4">
+                <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
+                <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
+                <Card className="h-full">
                     <CardHeader className="py-3 px-4">
                         <CardTitle className="text-base">Portfolio Composition</CardTitle>
                         <CardDescription className="text-xs">Distribution of your positive assets.</CardDescription>
@@ -263,3 +243,4 @@ export default function DashboardPage() {
     </div>
   );
 }
+
