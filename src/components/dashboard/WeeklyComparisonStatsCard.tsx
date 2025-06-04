@@ -10,6 +10,7 @@ import { formatCurrency, getCurrencySymbol } from '@/lib/currency';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { Transaction } from '@/services/transactions';
 import { subDays, format, startOfWeek, endOfWeek, eachDayOfInterval, parseISO, isSameDay } from 'date-fns';
+import { BarChart2 } from 'lucide-react'; // Icon for empty state
 
 
 interface WeeklyComparisonStatsCardProps {
@@ -66,7 +67,7 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 
   if (isLoading) {
      return (
-      <Card className="h-full">
+      <Card>
         <CardHeader className="py-3 px-4">
           <Skeleton className="h-5 w-3/4 mb-0.5" />
           <Skeleton className="h-3 w-1/2" />
@@ -79,12 +80,12 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
   }
 
   return (
-    <Card className="h-full">
+    <Card>
       <CardHeader className="py-3 px-4">
         <CardTitle className="text-base">Statistics</CardTitle>
         <CardDescription className="text-xs">Weekly spending comparison (Placeholder data for 'Last Week').</CardDescription>
       </CardHeader>
-      <CardContent className="h-[280px] pb-0 pt-2 px-4"> {/* Adjusted height and padding */}
+      <CardContent className={chartData.length > 0 ? "h-[280px] pb-0 pt-2 px-4" : "p-4 text-center min-h-[100px] flex flex-col items-center justify-center"}> {/* Adjusted height and padding */}
         {chartData.length > 0 ? (
             <ChartContainer config={chartConfig} className="h-full w-full">
             <ResponsiveContainer>
@@ -119,9 +120,12 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
             </ResponsiveContainer>
             </ChartContainer>
         ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
+            <>
+              <BarChart2 className="h-8 w-8 text-muted-foreground/50 mb-1" />
+              <p className="text-muted-foreground text-xs">
                 No spending data for this week.
-            </div>
+              </p>
+            </>
         )}
       </CardContent>
     </Card>
@@ -129,3 +133,4 @@ const WeeklyComparisonStatsCard: FC<WeeklyComparisonStatsCardProps> = ({ preferr
 };
 
 export default WeeklyComparisonStatsCard;
+
