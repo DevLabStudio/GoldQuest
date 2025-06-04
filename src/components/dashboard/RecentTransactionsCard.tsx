@@ -28,12 +28,13 @@ interface RecentTransactionsCardProps {
 const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({ 
     transactions, accounts, categories, preferredCurrency, isLoading 
 }) => {
-  const [activeTab, setActiveTab] = useState<'all' | 'revenue' | 'expenses'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'revenue' | 'expenses' | 'swaps'>('all');
 
   const filteredTransactions = useMemo(() => {
     if (activeTab === 'all') return transactions;
-    if (activeTab === 'revenue') return transactions.filter(tx => tx.amount > 0);
-    if (activeTab === 'expenses') return transactions.filter(tx => tx.amount < 0);
+    if (activeTab === 'revenue') return transactions.filter(tx => tx.amount > 0 && tx.category !== 'Transfer');
+    if (activeTab === 'expenses') return transactions.filter(tx => tx.amount < 0 && tx.category !== 'Transfer');
+    if (activeTab === 'swaps') return transactions.filter(tx => tx.category === 'Transfer');
     return [];
   }, [transactions, activeTab]);
 
@@ -110,10 +111,11 @@ const RecentTransactionsCard: FC<RecentTransactionsCardProps> = ({
       </CardHeader>
       <CardContent className="pt-2 pb-3 px-4">
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as any)} className="w-full">
-          <TabsList className="grid w-full grid-cols-3 mb-3 h-9">
+          <TabsList className="grid w-full grid-cols-4 mb-3 h-9">
             <TabsTrigger value="all" className="text-xs">All</TabsTrigger>
             <TabsTrigger value="revenue" className="text-xs">Revenue</TabsTrigger>
             <TabsTrigger value="expenses" className="text-xs">Expenses</TabsTrigger>
+            <TabsTrigger value="swaps" className="text-xs">Swaps</TabsTrigger>
           </TabsList>
           <TabsContent value={activeTab} className={filteredTransactions.length === 0 ? "min-h-[100px] flex flex-col items-center justify-center" : ""}>
             {filteredTransactions.length > 0 ? (
