@@ -19,10 +19,10 @@ import type { Account } from '@/services/account-sync';
 import type { Category } from '@/services/categories';
 import type { Tag } from '@/services/tags';
 import type { Transaction } from '@/services/transactions';
-import { getCurrencySymbol, supportedCurrencies, convertCurrency } from '@/lib/currency';
+import { getCurrencySymbol, supportedCurrencies, convertCurrency, formatCurrency } from '@/lib/currency'; // Ensure this import is correct
 import { toast } from "@/hooks/use-toast";
-import { getSubscriptions, type Subscription } from '@/services/subscriptions'; // Added
-import { Skeleton } from '@/components/ui/skeleton'; // Added
+import { getSubscriptions, type Subscription } from '@/services/subscriptions';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const transactionTypes = ['expense', 'income', 'transfer'] as const;
 
@@ -31,7 +31,7 @@ const baseSchema = z.object({
   date: z.date({ required_error: "Transaction date is required" }),
   category: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  subscriptionId: z.string().optional().nullable(), // Added
+  subscriptionId: z.string().optional().nullable(),
   transactionCurrency: z.string().min(3, "Transaction currency is required").refine(
       (val) => supportedCurrencies.includes(val.toUpperCase()),
       { message: "Unsupported transaction currency" }
@@ -55,8 +55,8 @@ const transferSchema = baseSchema.extend({
       { message: "Unsupported destination currency" }
   ).optional(),
   toAccountAmount: z.coerce.number({ invalid_type_error: "Destination amount must be a number" }).positive("Destination amount must be positive").optional(),
-  subscriptionId: z.string().optional().nullable().refine(() => false, { // Transfers cannot be linked to subscriptions
-    message: "Transfers cannot be linked to subscriptions.", // This message won't show due to UI hiding field
+  subscriptionId: z.string().optional().nullable().refine(() => false, {
+    message: "Transfers cannot be linked to subscriptions.",
   }),
 });
 
@@ -99,7 +99,7 @@ interface AddTransactionFormProps {
       date: Date;
       description?: string;
       tags?: string[];
-      subscriptionId?: string | null; // Added
+      subscriptionId?: string | null;
     }) => Promise<void> | void;
   isLoading: boolean;
   initialType?: typeof transactionTypes[number] | null;
@@ -117,14 +117,14 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     tags,
     onTransactionAdded,
     onTransferAdded,
-    isLoading: propIsLoading, // Renamed to avoid conflict with local loading state
+    isLoading: propIsLoading,
     initialType: initialTypeFromParent,
     initialData
 }) => {
   const resolvedInitialType = initialTypeFromParent ?? (initialData?.type || 'expense');
   const [calculatedRate, setCalculatedRate] = useState<string | null>(null);
   const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(false); // Changed initial to false
+  const [isLoadingSubscriptions, setIsLoadingSubscriptions] = useState(false);
   const [isFormLoading, setIsFormLoading] = useState(propIsLoading);
 
   useEffect(() => {
@@ -163,7 +163,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                 toAccountAmount: (initialData as any)?.toAccountAmount,
                 subscriptionId: initialData.subscriptionId === undefined ? null : initialData.subscriptionId,
             };
-            // Set currency based on related account's primary currency if editing
             if (base.type !== 'transfer' && (initialData as any).accountId) {
                 const acc = accounts.find(a => a.id === (initialData as any).accountId);
                 base.transactionCurrency = (initialData as Transaction)?.transactionCurrency || acc?.primaryCurrency || 'BRL';
@@ -175,7 +174,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             }
             return base;
         }
-        // New transaction defaults
         return {
             type: resolvedInitialType, description: "", date: new Date(),
             accountId: accounts[0]?.id,
@@ -225,7 +223,6 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     if (transactionType === 'expense' || transactionType === 'income') {
         const account = accounts.find(acc => acc.id === selectedAccountId);
         if (account && account.primaryCurrency) {
-            // For new tx or if account changes, set to primary. If editing, form defaultValues should have used tx's currency.
              if (!isEditing || (isEditing && selectedAccountId !== (initialData as any)?.accountId)) {
                 form.setValue('transactionCurrency', account.primaryCurrency);
             }
@@ -252,7 +249,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                  form.setValue('toAccountAmount', sourceAmt, { shouldValidate: true });
             }
         } else if (fromAccount && toAccount && fromAccount.primaryCurrency && toAccount.primaryCurrency && fromAccount.primaryCurrency.toUpperCase() !== toAccount.primaryCurrency.toUpperCase()) {
-            if (form.getValues('toAccountAmount') === form.getValues('amount') && !isEditing) { // Clear only if it was auto-filled for new tx
+            if (form.getValues('toAccountAmount') === form.getValues('amount') && !isEditing) {
                  form.setValue('toAccountAmount', undefined, { shouldValidate: true });
             }
         } else {
@@ -314,7 +311,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
             date: values.date,
             description: values.description || `Transfer from ${fromAccount.name} to ${toAccount.name}`,
             tags: finalTags,
-            subscriptionId: null, // Transfers are not linked to subscriptions
+            subscriptionId: null,
         });
       } else {
         console.warn("onTransferAdded callback not provided.");
@@ -335,7 +332,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
         ...(initialData && (initialData as Transaction).id && { id: (initialData as Transaction).id }),
         accountId: values.accountId!,
         amount: transactionAmount,
-        transactionCurrency: account.primaryCurrency, // Use the selected account's primary currency
+        transactionCurrency: account.primaryCurrency,
         date: formatDateFns(values.date, 'yyyy-MM-dd'),
         description: values.description || values.category || 'Transaction',
         category: values.category!,
@@ -354,7 +351,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
     return `Add ${typeLabel}`;
   };
 
-  if (isLoadingSubscriptions && !isEditingExisting) { // Show skeleton only for new transactions while subs load
+  if (isLoadingSubscriptions && !isEditingExisting) {
       return (
           <div className="space-y-6 py-4">
               <Skeleton className="h-10 w-full" />
@@ -384,7 +381,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                     if (newType === 'transfer') {
                         form.setValue('accountId', undefined);
                         form.setValue('category', undefined);
-                        form.setValue('subscriptionId', null); // No subscription for transfers
+                        form.setValue('subscriptionId', null);
                         const fromAcc = accounts.find(a => a.id === form.getValues('fromAccountId'));
                         form.setValue('transactionCurrency', fromAcc?.primaryCurrency || 'BRL');
                         const toAcc = accounts.find(a => a.id === form.getValues('toAccountId'));
@@ -455,7 +452,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         const toAcc = accounts.find(a => a.id === form.getValues('toAccountId'));
                                         if (toAcc && toAcc.primaryCurrency && acc.primaryCurrency.toUpperCase() === toAcc.primaryCurrency.toUpperCase()) {
                                              form.setValue('toAccountAmount', form.getValues('amount'));
-                                        } else if (toAcc) { // Currencies are different or toAcc not selected yet
+                                        } else if (toAcc) {
                                             form.setValue('toAccountAmount', undefined);
                                         }
                                     }
@@ -495,7 +492,7 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
                                         const fromAcc = accounts.find(a => a.id === form.getValues('fromAccountId'));
                                         if (fromAcc && fromAcc.primaryCurrency && acc.primaryCurrency.toUpperCase() === fromAcc.primaryCurrency.toUpperCase()) {
                                             form.setValue('toAccountAmount', form.getValues('amount'));
-                                        } else if (fromAcc) { // Currencies are different
+                                        } else if (fromAcc) {
                                             form.setValue('toAccountAmount', undefined);
                                         }
                                     }
@@ -724,6 +721,3 @@ const AddTransactionForm: FC<AddTransactionFormProps> = ({
 };
 
 export default AddTransactionForm;
-
-
-    
