@@ -44,7 +44,7 @@ const BudgetManagementCard: FC<BudgetManagementCardProps> = ({ preferredCurrency
 
   if (isLoading) {
     return (
-      <Card className="h-full shadow-lg">
+      <Card className="shadow-lg">
         <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
           <Skeleton className="h-5 w-1/2" />
           <Skeleton className="h-6 w-6 rounded-full" />
@@ -71,7 +71,7 @@ const BudgetManagementCard: FC<BudgetManagementCardProps> = ({ preferredCurrency
   }
 
   return (
-    <Card className="h-full shadow-lg">
+    <Card className="shadow-lg">
       <CardHeader className="flex flex-row items-center justify-between py-3 px-4">
         <div className="flex items-center gap-2">
           <BarChartBig className="h-5 w-5 text-primary" />
@@ -131,4 +131,3 @@ const BudgetManagementCard: FC<BudgetManagementCardProps> = ({ preferredCurrency
 };
 
 export default BudgetManagementCard;
-

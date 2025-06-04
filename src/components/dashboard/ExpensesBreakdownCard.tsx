@@ -62,7 +62,7 @@ const CategoryExpenseItem: FC<{ item: ExpenseItemData, currency: string }> = ({ 
 const ExpensesBreakdownCard: FC<ExpensesBreakdownCardProps> = ({ data, currency, isLoading }) => {
     if (isLoading) {
         return (
-            <Card className="h-full">
+            <Card>
                 <CardHeader className="py-3 px-4">
                     <Skeleton className="h-5 w-3/4 mb-0.5" />
                     <Skeleton className="h-3 w-1/2" />
@@ -87,7 +87,7 @@ const ExpensesBreakdownCard: FC<ExpensesBreakdownCardProps> = ({ data, currency,
     }
 
     return (
-        <Card className="h-full">
+        <Card>
         <CardHeader className="py-3 px-4">
             <CardTitle className="text-base">Expenses Breakdown</CardTitle>
             <CardDescription className="text-xs">Your spending by category for the selected period. <span className="text-xs text-muted-foreground/80">(*Comparison data is placeholder)</span></CardDescription>
