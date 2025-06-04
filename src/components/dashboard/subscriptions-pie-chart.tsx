@@ -11,14 +11,14 @@ import { getSubscriptions, type Subscription, type SubscriptionFrequency } from 
 import { getCategories, type Category as CategoryType, getCategoryStyle } from '@/services/categories';
 import { getUserPreferences } from '@/lib/preferences';
 import { convertCurrency, formatCurrency } from '@/lib/currency';
-import { useDateRange } from '@/contexts/DateRangeContext'; 
+import { useDateRange } from '@/contexts/DateRangeContext';
 import { isWithinInterval, parseISO, startOfMonth, endOfMonth } from 'date-fns';
 
 
 export interface SubscriptionPieChartDataPoint {
-  name: string; 
-  value: number; 
-  fill: string; 
+  name: string;
+  value: number;
+  fill: string;
 }
 
 const calculateMonthlyEquivalent = (
@@ -93,9 +93,9 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
     subscriptions.forEach(sub => {
       if (sub.type === 'expense') {
         const subStartDate = parseISO(sub.startDate);
-        let isActiveInRange = true; 
+        let isActiveInRange = true;
         if (selectedDateRange.from && selectedDateRange.to) {
-           isActiveInRange = subStartDate <= selectedDateRange.to; 
+           isActiveInRange = subStartDate <= selectedDateRange.to;
         }
 
         if(isActiveInRange) {
@@ -120,7 +120,7 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
           fill: color,
         };
       })
-      .filter(item => item.value > 0) 
+      .filter(item => item.value > 0)
       .sort((a, b) => b.value - a.value);
   }, [isLoading, subscriptions, categories, preferredCurrency, selectedDateRange]);
 
@@ -155,13 +155,15 @@ const SubscriptionsPieChart: FC<SubscriptionsPieChartProps> = ({ dateRangeLabel 
 
   if (chartData.length === 0) {
     return (
-      <Card className="shadow-lg bg-card text-card-foreground h-full">
+      <Card className="shadow-lg bg-card text-card-foreground"> {/* Removed h-full */}
         <CardHeader className="pb-2">
           <CardTitle>Subscriptions</CardTitle>
-           {/* CardDescription removed */}
+          <CardDescription>
+            Total Monthly: {formatCurrency(0, preferredCurrency, preferredCurrency, false)} ({dateRangeLabel})
+          </CardDescription>
         </CardHeader>
-        <CardContent className="flex-1 flex flex-col items-center justify-center p-0 h-[250px] sm:h-[300px]">
-          <p className="text-muted-foreground">No expense subscription data.</p>
+        <CardContent className="flex flex-col items-center justify-center p-6 text-center min-h-[100px]"> {/* Removed fixed height, added padding and text-center, min-height */}
+          <p className="text-muted-foreground">No expense subscription data to display for the selected period.</p>
         </CardContent>
       </Card>
     );
