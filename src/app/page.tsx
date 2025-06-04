@@ -10,12 +10,12 @@ import BudgetManagementCard from "@/components/dashboard/BudgetManagementCard";
 import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard";
 import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
 import NetWorthCompositionChart, { type NetWorthChartDataPoint } from "@/components/dashboard/net-worth-composition-chart";
-import UpcomingBillsCard from '@/components/dashboard/UpcomingBillsCard'; // Changed from SubscriptionsBarChart
+import UpcomingBillsCard from '@/components/dashboard/UpcomingBillsCard';
 
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
 import { getCategories, type Category } from '@/services/categories';
-import { getSubscriptions, type Subscription } from '@/services/subscriptions'; // Added for UpcomingBillsCard
+import { getSubscriptions, type Subscription } from '@/services/subscriptions';
 import { getUserPreferences } from '@/lib/preferences';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns, isSameDay, subDays } from 'date-fns';
@@ -29,7 +29,7 @@ export default function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]); // Added for UpcomingBillsCard
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const preferredCurrency = useMemo(() => userPreferences?.preferredCurrency || 'BRL', [userPreferences]);
@@ -43,14 +43,14 @@ export default function DashboardPage() {
     }
     setIsLoading(true);
     try {
-      const [fetchedAccounts, fetchedCategories, fetchedSubscriptions] = await Promise.all([ // Added fetchedSubscriptions
+      const [fetchedAccounts, fetchedCategories, fetchedSubscriptions] = await Promise.all([
         getAccounts(),
         getCategories(),
         getSubscriptions(),
       ]);
       setAccounts(fetchedAccounts);
       setCategories(fetchedCategories);
-      setSubscriptions(fetchedSubscriptions); // Set subscriptions state
+      setSubscriptions(fetchedSubscriptions);
       
       if (fetchedAccounts.length > 0) {
         const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
@@ -77,7 +77,7 @@ export default function DashboardPage() {
         setAccounts([]);
         setAllTransactions([]);
         setCategories([]);
-        setSubscriptions([]); // Clear subscriptions if no user
+        setSubscriptions([]);
     }
 
     const handleStorageChange = (event: StorageEvent) => {
@@ -203,12 +203,7 @@ export default function DashboardPage() {
             {/* Left Column */}
             <div className="lg:col-span-2 space-y-4">
                 <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
-                <UpcomingBillsCard 
-                    subscriptions={subscriptions} 
-                    preferredCurrency={preferredCurrency} 
-                    isLoading={isLoading}
-                    accounts={accounts}
-                />
+                <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
                 <RecentTransactionsCard 
                     transactions={recentTransactionsForDisplay} 
                     categories={categories}
@@ -226,7 +221,12 @@ export default function DashboardPage() {
             {/* Right Column */}
             <div className="lg:col-span-1 space-y-4">
                 <BudgetManagementCard preferredCurrency={preferredCurrency} isLoading={isLoading} />
-                <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
+                <UpcomingBillsCard 
+                    subscriptions={subscriptions} 
+                    preferredCurrency={preferredCurrency} 
+                    isLoading={isLoading}
+                    accounts={accounts}
+                />
                 <Card>
                     <CardHeader className="py-3 px-4">
                         <CardTitle className="text-base">Portfolio Composition</CardTitle>
