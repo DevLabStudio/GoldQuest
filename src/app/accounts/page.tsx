@@ -418,8 +418,15 @@ export default function AccountsPage() {
                         const primaryBalanceEntry = account.balances && account.balances.length > 0
                             ? account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0]
                             : null;
-                        const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
-                        const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+                        
+                        // Calculate total account value in preferred currency
+                        const accountValueInPreferredCurrency = account.balances.reduce((sum, balance) => {
+                            return sum + convertCurrency(balance.amount, balance.currency, preferredCurrency);
+                        }, 0);
+
+                        const originalDisplayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+                        const originalDisplayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+                        
                         const IconComponent = account.category === 'crypto' ? BitcoinIcon : Landmark;
                         
                         let netWorthStatusIcon;
@@ -476,11 +483,12 @@ export default function AccountsPage() {
                                 </CardHeader>
                                 <CardContent className="flex-grow space-y-3 pt-0 pb-3 px-4">
                                     <div className="text-2xl font-bold text-primary">
-                                        {formatCurrency(displayBalance, displayCurrency, displayCurrency, false)}
+                                        {formatCurrency(accountValueInPreferredCurrency, preferredCurrency, preferredCurrency, false)}
                                     </div>
-                                    {preferredCurrency && typeof displayCurrency === 'string' && displayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                    {/* Show original primary balance if currencies differ */}
+                                    {preferredCurrency && typeof originalDisplayCurrency === 'string' && originalDisplayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
                                         <div className="text-xs text-muted-foreground -mt-2">
-                                            (≈ {formatCurrency(displayBalance, displayCurrency, preferredCurrency, true)})
+                                            (Original: {formatCurrency(originalDisplayBalance, originalDisplayCurrency, originalDisplayCurrency, false)})
                                         </div>
                                     )}
                                     <div className="flex flex-wrap gap-2 items-center">
@@ -494,11 +502,11 @@ export default function AccountsPage() {
                                         {netWorthStatusIcon}
                                     </div>
                                     
-                                    {account.balances && account.balances.filter(b => b.currency !== account.primaryCurrency).length > 0 && (
+                                    {account.balances && account.balances.filter(b => b.currency.toUpperCase() !== (account.primaryCurrency || '').toUpperCase()).length > 0 && (
                                         <div>
                                             <p className="text-xs text-muted-foreground mb-1 mt-2">Other balances:</p>
                                             <div className="flex flex-wrap gap-1">
-                                            {account.balances.filter(b => b.currency !== account.primaryCurrency).map(bal => (
+                                            {account.balances.filter(b => b.currency.toUpperCase() !== (account.primaryCurrency || '').toUpperCase()).map(bal => (
                                                 <Badge key={bal.currency} variant="outline" className="text-xs font-normal px-1.5 py-0.5">
                                                     {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
                                                 </Badge>
@@ -567,6 +575,4 @@ export default function AccountsPage() {
     </div>
   );
 }
-
-
-
+    
