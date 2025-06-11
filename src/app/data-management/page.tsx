@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { addTransaction, type Transaction, clearAllSessionTransactions, type NewTransactionData } from '@/services/transactions';
-import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount } from '@/services/account-sync';
+import { getAccounts, addAccount, type Account, type NewAccountData, updateAccount, recalculateAllAccountBalances } from '@/services/account-sync';
 import { getCategories, addCategory as addCategoryToDb, type Category, updateCategory as updateCategoryInDb, getCategoryStyle } from '@/services/categories';
 import { getTags, addTag as addTagToDb, type Tag, getTagStyle } from '@/services/tags';
 import { getGroups, addGroup as addGroupToDb, updateGroup as updateGroupInDb, type Group } from '@/services/groups';
@@ -1800,48 +1800,15 @@ export default function DataManagementPage() {
       }
       updateProgress();
 
-
-      // Restore other data types...
-      const dataTypesToRestore = [
-          { name: 'Subscriptions', file: 'goldquest_subscriptions.csv', addFn: addSubscriptionToDb, serviceName: 'subscription' },
-          { name: 'Loans', file: 'goldquest_loans.csv', addFn: addLoanToDb, serviceName: 'loan' },
-          { name: 'Credit Cards', file: 'goldquest_credit_cards.csv', addFn: addCreditCardToDb, serviceName: 'credit card' },
-          { name: 'Budgets', file: 'goldquest_budgets.csv', addFn: addBudgetToDb, serviceName: 'budget' },
-      ];
-
-      for (const dataType of dataTypesToRestore) {
-          const fileContent = zip.file(dataType.file);
-          if (fileContent) {
-              const csvData = await fileContent.async('text');
-              const parsedItems = Papa.parse<any>(csvData, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
-              for (const item of parsedItems) {
-                  try {
-                      let itemData = { ...item };
-                      delete itemData.id; 
-                      if (itemData.accountId) itemData.accountId = oldAccountIdToNewIdMap[itemData.accountId] || itemData.accountId;
-                      if (itemData.groupId) itemData.groupId = oldGroupIdToNewIdMap[itemData.groupId] || itemData.groupId;
-                      
-                      if(dataType.serviceName === 'subscription' && itemData.tags && typeof itemData.tags === 'string') itemData.tags = itemData.tags.split('|').filter(Boolean);
-                      if(dataType.serviceName === 'budget' && itemData.selectedIds && typeof itemData.selectedIds === 'string') {
-                          const oldSelectedIds = itemData.selectedIds.split('|').filter(Boolean);
-                          itemData.selectedIds = oldSelectedIds.map((oldId: string) => 
-                            itemData.appliesTo === 'categories' ? oldCategoryIdToNewIdMap[oldId] : oldGroupIdToNewIdMap[oldId]
-                          ).filter(Boolean);
-                      }
-                      if (itemData.startDate && typeof itemData.startDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.startDate)) itemData.startDate = formatDateFns(new Date(itemData.startDate), 'yyyy-MM-dd');
-                      if (itemData.nextPaymentDate && typeof itemData.nextPaymentDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.nextPaymentDate)) itemData.nextPaymentDate = formatDateFns(new Date(itemData.nextPaymentDate), 'yyyy-MM-dd');
-                      if (itemData.endDate && typeof itemData.endDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.endDate)) itemData.endDate = formatDateFns(new Date(itemData.endDate), 'yyyy-MM-dd');
-                      if (itemData.paymentDueDate && typeof itemData.paymentDueDate !== 'string' && !/^\d{4}-\d{2}-\d{2}$/.test(itemData.paymentDueDate)) itemData.paymentDueDate = formatDateFns(new Date(itemData.paymentDueDate), 'yyyy-MM-dd');
-
-                      await dataType.addFn(itemData);
-                  } catch (e: any) {
-                       console.error(`Error restoring ${dataType.name} item: ${e.message}`, item);
-                       overallSuccess = false;
-                  }
-              }
-              toast({ title: "Restore Progress", description: `${dataType.name} restored.` });
-          }
-          updateProgress();
+      // NOVO: Forçar recálculo dos saldos das contas após a restauração
+      try {
+        toast({ title: "Recalculando saldos", description: "Ajustando saldos finais das contas..." });
+        await recalculateAllAccountBalances();
+        setAccounts(await getAccounts());
+        toast({ title: "Saldos atualizados", description: "Os saldos das contas foram recalculados com sucesso." });
+      } catch (e: any) {
+        console.error("Erro ao recalcular saldos das contas:", e);
+        toast({ title: "Erro ao recalcular saldos", description: e.message, variant: "destructive" });
       }
       
     } catch (restoreError: any) {
