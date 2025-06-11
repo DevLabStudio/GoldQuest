@@ -30,8 +30,8 @@ interface AuthContextType {
   signIn: (email: string, pass: string) => Promise<User | null>;
   signInWithGoogle: () => Promise<User | null>;
   signOut: () => Promise<void>;
-  userPreferences: UserPreferences | null; // Add userPreferences to context
-  refreshUserPreferences: () => Promise<void>; // Add function to refresh preferences
+  userPreferences: UserPreferences | null;
+  refreshUserPreferences: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,90 +40,74 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [userPreferences, setUserPreferences] = useState<UserPreferences | null>(null);
-  const [theme, setThemeState] = useState<UserPreferences['theme']>('system');
+  const [currentTheme, setCurrentTheme] = useState<UserPreferences['theme']>('system'); // Renamed from setThemeState to avoid confusion
   const router = useRouter();
 
-  const fetchUserPreferences = useCallback(async () => {
-    if (firebaseInitialized && firebaseAuthInstance?.currentUser) {
+  const fetchUserPreferences = useCallback(async (firebaseUser: User | null) => {
+    if (firebaseInitialized && firebaseUser) {
       try {
         const prefs = await getUserPreferences();
         setUserPreferences(prefs);
-        setThemeState(prefs.theme || 'system');
+        setCurrentTheme(prefs.theme || 'system');
       } catch (error) {
         console.error("AuthProvider: Failed to fetch user preferences:", error);
-        // Fallback to default if fetching fails
-        const defaultPrefs = { preferredCurrency: 'BRL', theme: 'system' } as UserPreferences;
+        const defaultPrefs = { preferredCurrency: 'BRL', investmentsPreferredCurrency: 'USD', theme: 'system' } as UserPreferences;
         setUserPreferences(defaultPrefs);
-        setThemeState(defaultPrefs.theme);
+        setCurrentTheme(defaultPrefs.theme);
       }
     } else {
-        // No user or Firebase not ready, use default
-        const defaultPrefs = { preferredCurrency: 'BRL', theme: 'system' } as UserPreferences;
+        const defaultPrefs = { preferredCurrency: 'BRL', investmentsPreferredCurrency: 'USD', theme: 'system' } as UserPreferences;
         setUserPreferences(defaultPrefs);
-        setThemeState(defaultPrefs.theme);
+        setCurrentTheme(defaultPrefs.theme);
     }
-  }, []);
+  }, []); // Removed firebaseAuthInstance from dependencies as it's stable or handled by firebaseInitialized
 
   useEffect(() => {
     if (!firebaseInitialized || !firebaseAuthInstance) {
       setIsLoadingAuth(false);
       setUser(null);
-      fetchUserPreferences(); // Fetch default/localStorage preferences
+      fetchUserPreferences(null); // Fetch default/localStorage preferences
       console.warn(`AuthContext: Firebase not properly initialized. ${firebaseInitializationError || "Authentication features may be disabled."}`);
       return () => {};
     }
 
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (firebaseUser) => {
       setUser(firebaseUser);
-      if (firebaseUser) {
-        await fetchUserPreferences();
-      } else {
-        // User signed out, reset to default preferences
-        const defaultPrefs = { preferredCurrency: 'BRL', theme: 'system' } as UserPreferences;
-        setUserPreferences(defaultPrefs);
-        setThemeState(defaultPrefs.theme);
-      }
+      await fetchUserPreferences(firebaseUser); // Pass firebaseUser to fetchUserPreferences
       setIsLoadingAuth(false);
     });
     return () => unsubscribe();
-  }, [router, firebaseInitialized, firebaseInitializationError, fetchUserPreferences]);
+  }, [firebaseInitialized, firebaseInitializationError, fetchUserPreferences]); // fetchUserPreferences is stable due to useCallback
 
   const ensureFirebaseAuth = useCallback((): Auth => {
     if (!firebaseInitialized || !firebaseAuthInstance) {
       throw new Error(firebaseInitializationError || "Firebase authentication service is not available. Please check configuration.");
     }
     return firebaseAuthInstance;
-  }, [firebaseInitializationError]);
+  }, [firebaseInitializationError]); // Added firebaseInitializationError
 
   const ensureGoogleAuthProvider = useCallback((): GoogleAuthProvider => {
     if (!firebaseInitialized || !firebaseGoogleAuthProviderInstance) {
         throw new Error(firebaseInitializationError || "Firebase Google Auth Provider is not available. Please check configuration.");
     }
     return firebaseGoogleAuthProviderInstance;
-  },[firebaseInitializationError]);
+  },[firebaseInitializationError]); // Added firebaseInitializationError
 
   const setAppTheme = async (newTheme: UserPreferences['theme']) => {
-    if (userPreferences) {
-      const updatedPrefs = { ...userPreferences, theme: newTheme };
-      try {
-        await saveUserPreferences(updatedPrefs);
-        setUserPreferences(updatedPrefs); // Update local state of preferences
-        setThemeState(newTheme); // Update local theme state
-         // Dispatch a storage event to notify other components (like AuthWrapper for theme)
-        window.dispatchEvent(new Event('storage'));
-      } catch (error) {
-        console.error("AuthProvider: Failed to save theme preference:", error);
-      }
-    } else { // If userPreferences is null (e.g. user not logged in, or initial load)
-        // We can still attempt to save a non-user-specific preference or a default
-        // For now, let's assume we only save if userPreferences (and thus user) exists.
-        // Or, save to localStorage directly if this is a non-user specific theme setting
-        console.warn("AuthProvider: User preferences not loaded, cannot save theme.");
+    const currentPrefs = userPreferences || { preferredCurrency: 'BRL', investmentsPreferredCurrency: 'USD', theme: 'system' };
+    const updatedPrefs: UserPreferences = { ...currentPrefs, theme: newTheme };
+    try {
+      await saveUserPreferences(updatedPrefs);
+      setUserPreferences(updatedPrefs);
+      setCurrentTheme(newTheme);
+      window.dispatchEvent(new Event('storage'));
+    } catch (error) {
+      console.error("AuthProvider: Failed to save theme preference:", error);
     }
   };
   
   const refreshUserPreferences = async () => {
-    await fetchUserPreferences();
+    await fetchUserPreferences(user); // Pass current user to refresh
   };
 
 
@@ -131,7 +115,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const currentAuth = ensureFirebaseAuth();
     try {
       const userCredential = await createUserWithEmailAndPassword(currentAuth, email, pass);
-      await fetchUserPreferences(); // Fetch prefs for new user
+      await fetchUserPreferences(userCredential.user); // Fetch prefs for new user
       return userCredential.user;
     } catch (error) {
       console.error('Error signing up:', error);
@@ -143,7 +127,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const currentAuth = ensureFirebaseAuth();
     try {
       const userCredential = await signInWithEmailAndPassword(currentAuth, email, pass);
-      await fetchUserPreferences(); // Fetch prefs on sign in
+      await fetchUserPreferences(userCredential.user); // Fetch prefs on sign in
       return userCredential.user;
     } catch (error) {
       console.error('Error signing in:', error);
@@ -156,7 +140,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const provider = ensureGoogleAuthProvider();
     try {
       const result = await signInWithPopup(currentAuth, provider);
-      await fetchUserPreferences(); // Fetch prefs on Google sign in
+      await fetchUserPreferences(result.user); // Fetch prefs on Google sign in
       return result.user;
     } catch (error) {
       console.error('Error signing in with Google:', error);
@@ -168,7 +152,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
     const currentAuth = ensureFirebaseAuth();
     try {
       await firebaseSignOut(currentAuth);
-      // Preferences are reset in onAuthStateChanged
+      // Preferences are reset by onAuthStateChanged -> fetchUserPreferences(null)
       router.push('/login');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -184,7 +168,7 @@ export const AuthProvider: FC<{ children: ReactNode }> = ({ children }) => {
         isLoadingAuth,
         isFirebaseActive: firebaseInitialized,
         firebaseError: firebaseInitializationError,
-        theme: theme || 'system',
+        theme: currentTheme || 'system', // Use currentTheme state here
         setAppTheme,
         signUp,
         signIn,
@@ -206,4 +190,3 @@ export const useAuthContext = (): AuthContextType => {
   }
   return context;
 };
-

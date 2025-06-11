@@ -1,13 +1,19 @@
+
+'use client';
+
 import { database, auth } from '@/lib/firebase';
-import { ref, set, get, push, remove, update, serverTimestamp } from 'firebase/database';
+import { ref, set, get, push, remove, update, serverTimestamp, query, orderByChild, limitToLast } from 'firebase/database';
 import type { User } from 'firebase/auth';
-import { getAccounts as getAllAccounts, updateAccount as updateAccountInDb, type Account } from './account-sync'; // Renamed getAccounts to avoid conflict
+import { getAccounts as getAllAccounts, updateAccount as updateAccountInDb, type Account } from './account-sync';
 import { convertCurrency } from '@/lib/currency';
 // Import ref path getters from other services
 import { getCategoriesRefPath } from './categories';
 import { getTagsRefPath } from './tags';
 import { getGroupsRefPath } from './groups';
 import { getSubscriptionsRefPath } from './subscriptions';
+import { getLoansRefPath } from './loans';
+import { getCreditCardsRefPath } from './credit-cards';
+import { getBudgetsRefPath } from './budgets';
 
 
 export interface Transaction {
@@ -19,6 +25,7 @@ export interface Transaction {
   category: string;
   accountId: string;
   tags?: string[];
+  subscriptionId?: string | null; // Link to a subscription
   createdAt?: object | string; // For server timestamp or ISO string for localStorage
   updatedAt?: object | string; // For server timestamp or ISO string for localStorage
   // Optional: to store original CSV foreign values for reference if needed
@@ -31,11 +38,16 @@ export interface Transaction {
 // Type for data passed to addTransaction - transactionCurrency is now mandatory
 export type NewTransactionData = Omit<Transaction, 'id' | 'createdAt' | 'updatedAt'> & {
     transactionCurrency: string;
-    originalImportData?: { // Ensure this is part of the type if passed directly
+    subscriptionId?: string | null;
+    originalImportData?: {
         foreignAmount?: number | null;
         foreignCurrency?: string | null;
     }
 };
+
+interface AddTransactionOptions {
+  skipBalanceModification?: boolean;
+}
 
 
 function getTransactionsRefPath(currentUser: User | null, accountId: string) {
@@ -53,95 +65,124 @@ async function modifyAccountBalance(accountId: string, amountInTransactionCurren
     const accountToUpdate = accounts.find(acc => acc.id === accountId);
 
     if (accountToUpdate) {
-        let amountInAccountCurrency = amountInTransactionCurrency;
-        if (transactionCurrency.toUpperCase() !== accountToUpdate.currency.toUpperCase()) {
-            amountInAccountCurrency = convertCurrency(
+        if (!accountToUpdate.primaryCurrency || !Array.isArray(accountToUpdate.balances)) {
+            console.error(`Account ${accountId} is missing primaryCurrency or has invalid balances array for balance modification.`);
+            return; // Cannot proceed safely
+        }
+
+        const primaryBalanceIndex = accountToUpdate.balances.findIndex(b => b.currency === accountToUpdate.primaryCurrency);
+
+        if (primaryBalanceIndex === -1) {
+            console.warn(`Account ${accountId} does not have a balance entry for its primary currency ${accountToUpdate.primaryCurrency}. Creating one.`);
+            // If primary currency balance entry doesn't exist, create it. This assumes it starts at 0.
+            // A more robust solution might depend on application logic if this state is unexpected.
+            accountToUpdate.balances.push({ currency: accountToUpdate.primaryCurrency, amount: 0 });
+            // Re-find the index, it will be the last one.
+            // This recursive call is potentially problematic, better to handle explicitly:
+             const newPrimaryBalanceIndex = accountToUpdate.balances.findIndex(b => b.currency === accountToUpdate.primaryCurrency);
+             if(newPrimaryBalanceIndex === -1) {
+                console.error(`Failed to create or find primary balance entry for ${accountToUpdate.primaryCurrency} in account ${accountId}.`);
+                return;
+             }
+             // Continue with newPrimaryBalanceIndex below
+        }
+        
+        // Use the found (or newly created) index.
+        const targetBalanceIndex = accountToUpdate.balances.findIndex(b => b.currency === accountToUpdate.primaryCurrency);
+        if (targetBalanceIndex === -1) { // Should not happen if the above logic is correct
+            console.error(`Critical error: Primary balance for ${accountToUpdate.primaryCurrency} still not found in account ${accountId}.`);
+            return;
+        }
+
+
+        let amountInPrimaryCurrency = amountInTransactionCurrency;
+        if (transactionCurrency && accountToUpdate.primaryCurrency && transactionCurrency.toUpperCase() !== accountToUpdate.primaryCurrency.toUpperCase()) {
+            amountInPrimaryCurrency = convertCurrency(
                 amountInTransactionCurrency,
                 transactionCurrency,
-                accountToUpdate.currency
+                accountToUpdate.primaryCurrency
             );
         }
-        const balanceChange = operation === 'add' ? amountInAccountCurrency : -amountInAccountCurrency;
-        // Ensure newBalance calculation handles floating point inaccuracies for currency
-        const newBalance = parseFloat((accountToUpdate.balance + balanceChange).toFixed(2));
 
+        const balanceChange = operation === 'add' ? amountInPrimaryCurrency : -amountInPrimaryCurrency;
+        
+        const updatedBalances = [...accountToUpdate.balances];
+        updatedBalances[targetBalanceIndex] = {
+            ...updatedBalances[targetBalanceIndex],
+            amount: parseFloat((updatedBalances[targetBalanceIndex].amount + balanceChange).toFixed(2))
+        };
 
         await updateAccountInDb({
             ...accountToUpdate,
-            balance: newBalance,
+            balances: updatedBalances, // Pass the updated balances array
             lastActivity: new Date().toISOString(),
         });
-        console.log(`Account ${accountToUpdate.name} balance updated by ${balanceChange} ${accountToUpdate.currency}. New balance: ${newBalance}`);
     } else {
         console.warn(`Account ID ${accountId} not found for balance update.`);
     }
 }
-
-// Helper function to get transactions from localStorage (internal to this service)
-async function _getTransactionsFromLocalStorage(accountId: string): Promise<Transaction[]> {
-    const currentUser = auth.currentUser;
-    if (!currentUser?.uid) return [];
-    const key = `transactions-${accountId}-${currentUser.uid}`;
-    const data = localStorage.getItem(key);
-    try {
-        return data ? JSON.parse(data) : [];
-    } catch (e) {
-        console.error("Error parsing transactions from localStorage for account:", accountId, e);
-        return []; // Return empty array on parsing error
-    }
-}
-
-// Helper function to save transactions to localStorage (internal to this service)
-async function _saveTransactionsToLocalStorage(accountId: string, transactions: Transaction[]): Promise<void> {
-    const currentUser = auth.currentUser;
-    if (!currentUser?.uid) return;
-    const key = `transactions-${accountId}-${currentUser.uid}`;
-    localStorage.setItem(key, JSON.stringify(transactions));
-}
-
 
 export async function getTransactions(
     accountId: string,
     options?: { limit?: number }
 ): Promise<Transaction[]> {
   const currentUser = auth.currentUser;
-   if (!currentUser?.uid) {
+  if (!currentUser?.uid) {
     console.warn("getTransactions called without authenticated user. Returning empty array.");
     return [];
   }
-  const storageKey = `transactions-${accountId}-${currentUser.uid}`;
-  const data = localStorage.getItem(storageKey);
+  const transactionsRefPath = getTransactionsRefPath(currentUser, accountId);
+  const accountTransactionsRef = ref(database, transactionsRefPath);
 
-  console.log("Fetching transactions for account:", accountId, "from localStorage key:", storageKey);
+  try {
+    const dataQuery = options?.limit && options.limit > 0
+        ? query(accountTransactionsRef, orderByChild('date'), limitToLast(options.limit))
+        : query(accountTransactionsRef, orderByChild('date'));
 
-  if (data) {
-      try {
-        const allAppAccounts = await getAllAccounts(); // Fetch accounts for currency fallback
-        const transactionsArray = (JSON.parse(data) as Transaction[])
-            .map(tx => ({ // Ensure default values for robustness with old data
-                ...tx,
-                tags: tx.tags || [],
-                category: tx.category || 'Uncategorized',
-                transactionCurrency: tx.transactionCurrency || allAppAccounts.find(a=>a.id === tx.accountId)?.currency || 'USD'
-            }))
-            .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    const snapshot = await get(dataQuery);
+    if (snapshot.exists()) {
+      const transactionsData = snapshot.val();
+      const allAppAccounts = await getAllAccounts(); // Needed for fallback currency
+      const transactionsArray = Object.entries(transactionsData)
+        .map(([id, data]) => {
+            const txData = data as Omit<Transaction, 'id'>;
+            return {
+                id,
+                ...txData,
+                tags: txData.tags || [],
+                category: txData.category || 'Uncategorized',
+                transactionCurrency: txData.transactionCurrency || allAppAccounts.find(a => a.id === txData.accountId)?.primaryCurrency || 'USD',
+                subscriptionId: txData.subscriptionId === undefined ? null : txData.subscriptionId,
+                // Convert Firebase server timestamps to ISO strings if they exist
+                createdAt: txData.createdAt && typeof txData.createdAt === 'object' ? new Date().toISOString() : txData.createdAt as string,
+                updatedAt: txData.updatedAt && typeof txData.updatedAt === 'object' ? new Date().toISOString() : txData.updatedAt as string,
+            };
+        })
+        .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()); // Sort descending by date
 
-        if (options?.limit && options.limit > 0) {
-            return transactionsArray.slice(0, options.limit);
-        }
-        return transactionsArray;
-      } catch(e) {
-          console.error("Error parsing transactions from localStorage during getTransactions for account:", accountId, e);
-          localStorage.removeItem(storageKey); // Clear corrupted data
-          return []; // Return empty if parsing fails
-      }
+      // If a limit was applied by Firebase, it's already handled.
+      // If no limit option or limit was larger than actual data, slice here if needed (though Firebase limit is more efficient)
+      // This client-side slice is mainly for consistency if options.limit was used but Firebase query didn't support it as expected.
+      return options?.limit && options.limit > 0 && transactionsArray.length > options.limit
+        ? transactionsArray.slice(0, options.limit)
+        : transactionsArray;
+    }
+    return [];
+  } catch (error) {
+    console.error("Error fetching transactions from Firebase:", error);
+    throw error; // Re-throw other errors
   }
-  return [];
 }
 
-export async function addTransaction(transactionData: NewTransactionData): Promise<Transaction> {
+export async function addTransaction(
+  transactionData: NewTransactionData,
+  options?: AddTransactionOptions
+): Promise<Transaction> {
   const currentUser = auth.currentUser;
   const { accountId, amount, transactionCurrency, category } = transactionData;
+  if (!currentUser?.uid) {
+    throw new Error("User not authenticated. Cannot add transaction.");
+  }
   const transactionsRefPath = getTransactionsRefPath(currentUser, accountId);
   const accountTransactionsRef = ref(database, transactionsRefPath);
   const newTransactionRef = push(accountTransactionsRef);
@@ -155,34 +196,25 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
     id: newTransactionRef.key,
     category: category?.trim() || 'Uncategorized',
     tags: transactionData.tags || [],
+    subscriptionId: transactionData.subscriptionId === undefined ? null : transactionData.subscriptionId,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     originalImportData: {
-        foreignAmount: transactionData.originalImportData?.foreignAmount ?? null,
-        foreignCurrency: transactionData.originalImportData?.foreignCurrency ?? null,
+        foreignAmount: transactionData.originalImportData?.foreignAmount === undefined ? null : transactionData.originalImportData.foreignAmount,
+        foreignCurrency: transactionData.originalImportData?.foreignCurrency === undefined ? null : transactionData.originalImportData.foreignCurrency,
     }
   };
 
   const dataToSave = { ...newTransaction } as any;
-  delete dataToSave.id;
+  delete dataToSave.id; // Firebase key is the ID
 
-
-  console.log("Adding transaction to Firebase RTDB:", newTransaction);
   try {
     await set(newTransactionRef, dataToSave);
-    if (category?.toLowerCase() !== 'opening balance') {
+    if (category?.toLowerCase() !== 'opening balance' && !options?.skipBalanceModification) {
         await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
-
-    // Update localStorage transaction list
-    const storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    // Ensure createdAt/updatedAt are strings for localStorage
-    const newTxForStorage = { ...newTransaction, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
-    storedTransactions.push(newTxForStorage);
-    await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-
-
-    return newTransaction;
+    // Return the transaction with a client-side timestamp approximation for immediate UI use
+    return { ...newTransaction, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
   } catch (error) {
     console.error("Error adding transaction to Firebase:", error);
     throw error;
@@ -191,61 +223,47 @@ export async function addTransaction(transactionData: NewTransactionData): Promi
 
 export async function updateTransaction(updatedTransaction: Transaction): Promise<Transaction> {
   const currentUser = auth.currentUser;
-  const { id, accountId, amount, transactionCurrency } = updatedTransaction;
+  const { id, accountId, amount, transactionCurrency, category } = updatedTransaction;
+  if (!currentUser?.uid) {
+    throw new Error("User not authenticated. Cannot update transaction.");
+  }
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, id);
   const transactionRef = ref(database, transactionRefPath);
 
-  const originalSnapshot = await get(transactionRef); // Get from DB for balance adjustment
+  const originalSnapshot = await get(transactionRef);
   if (!originalSnapshot.exists()) {
     throw new Error(`Transaction with ID ${id} not found for update.`);
   }
   const originalTransactionDataFromDB = originalSnapshot.val() as Omit<Transaction, 'id'>;
-  const allAppAccounts = await getAllAccounts();
-  const originalDbTxCurrency = originalTransactionDataFromDB.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
+  const allAppAccounts = await getAllAccounts(); // Fetch accounts to determine currency if not present
+  const originalDbTxCurrency = originalTransactionDataFromDB.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.primaryCurrency || 'USD';
 
-
-  const dataToUpdateFirebase = { // Data for Firebase update
+  const dataToUpdateFirebase = {
     ...updatedTransaction,
+    subscriptionId: updatedTransaction.subscriptionId === undefined ? null : updatedTransaction.subscriptionId,
     updatedAt: serverTimestamp(),
     originalImportData: {
-        foreignAmount: updatedTransaction.originalImportData?.foreignAmount ?? null,
-        foreignCurrency: updatedTransaction.originalImportData?.foreignCurrency ?? null,
+        foreignAmount: updatedTransaction.originalImportData?.foreignAmount === undefined ? null : updatedTransaction.originalImportData.foreignAmount,
+        foreignCurrency: updatedTransaction.originalImportData?.foreignCurrency === undefined ? null : updatedTransaction.originalImportData.foreignCurrency,
     }
   } as any;
   delete dataToUpdateFirebase.id;
+  delete dataToUpdateFirebase.createdAt; // Should not update createdAt
 
-
-  console.log("Updating transaction in Firebase RTDB:", id, dataToUpdateFirebase);
   try {
-    await update(transactionRef, dataToUpdateFirebase); // Update DB
+    await update(transactionRef, dataToUpdateFirebase);
 
-    // Adjust account balances based on original (from DB) and new transaction amounts
-    await modifyAccountBalance(accountId, originalTransactionDataFromDB.amount, originalDbTxCurrency, 'subtract');
-    await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
-
-    // Update localStorage transaction list
-    const storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    const transactionIndex = storedTransactions.findIndex(t => t.id === id);
-    if (transactionIndex !== -1) {
-      // Preserve original createdAt from localStorage if it exists and is a string, otherwise use what's in updatedTransaction
-      const originalStoredCreatedAt = storedTransactions[transactionIndex].createdAt;
-      storedTransactions[transactionIndex] = {
-          ...updatedTransaction, // Apply all updates
-          createdAt: updatedTransaction.createdAt || originalStoredCreatedAt || new Date().toISOString(), // Ensure createdAt is set
-          updatedAt: new Date().toISOString(), // For localStorage, use ISO string
-      };
-      await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-    } else {
-        console.warn(`Transaction ${id} updated in DB but not found in localStorage cache for account ${accountId}. Adding it.`);
-        storedTransactions.push({
-            ...updatedTransaction,
-            createdAt: updatedTransaction.createdAt || new Date().toISOString(),
-            updatedAt: new Date().toISOString(),
-        });
-        await _saveTransactionsToLocalStorage(accountId, storedTransactions);
+    if (category?.toLowerCase() !== 'opening balance') {
+        // Revert old transaction amount from balance
+        await modifyAccountBalance(accountId, originalTransactionDataFromDB.amount, originalDbTxCurrency, 'subtract');
+        // Apply new transaction amount to balance
+        await modifyAccountBalance(accountId, amount, transactionCurrency, 'add');
     }
 
-    return updatedTransaction;
+    return {
+        ...updatedTransaction,
+        updatedAt: new Date().toISOString(), // Approximate for local state
+    };
   } catch (error) {
     console.error("Error updating transaction in Firebase:", error);
     throw error;
@@ -254,29 +272,26 @@ export async function updateTransaction(updatedTransaction: Transaction): Promis
 
 export async function deleteTransaction(transactionId: string, accountId: string): Promise<void> {
   const currentUser = auth.currentUser;
+  if (!currentUser?.uid) {
+    throw new Error("User not authenticated. Cannot delete transaction.");
+  }
   const transactionRefPath = getSingleTransactionRefPath(currentUser, accountId, transactionId);
   const transactionRef = ref(database, transactionRefPath);
 
-  const snapshot = await get(transactionRef); // Get from DB for balance adjustment
+  const snapshot = await get(transactionRef);
   if (!snapshot.exists()) {
     console.warn(`Transaction ${transactionId} not found for deletion.`);
     return;
   }
   const transactionToDelete = snapshot.val() as Omit<Transaction, 'id'>;
-  const allAppAccounts = await getAllAccounts();
-  const txCurrency = transactionToDelete.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.currency || 'USD';
+  const allAppAccounts = await getAllAccounts(); // Fetch accounts to determine currency if not present
+  const txCurrency = transactionToDelete.transactionCurrency || allAppAccounts.find(a => a.id === accountId)?.primaryCurrency || 'USD';
 
-  console.log("Deleting transaction from Firebase RTDB:", transactionRefPath);
   try {
-    await remove(transactionRef); // Remove from DB
-    // Use the currency from the transaction being deleted for accurate balance reversal
-    await modifyAccountBalance(accountId, transactionToDelete.amount, txCurrency, 'subtract');
-
-    // Update localStorage transaction list
-    let storedTransactions = await _getTransactionsFromLocalStorage(accountId);
-    storedTransactions = storedTransactions.filter(t => t.id !== transactionId);
-    await _saveTransactionsToLocalStorage(accountId, storedTransactions);
-
+    await remove(transactionRef);
+    if (transactionToDelete.category?.toLowerCase() !== 'opening balance') {
+        await modifyAccountBalance(accountId, transactionToDelete.amount, txCurrency, 'subtract');
+    }
   } catch (error) {
     console.error("Error deleting transaction from Firebase:", error);
     throw error;
@@ -292,37 +307,31 @@ export async function clearAllSessionTransactions(): Promise<void> {
 
   console.warn("Attempting to clear ALL user data for user:", currentUser.uid);
   try {
-    // Get paths for all data types
-    const userFirebaseTransactionsBasePath = `users/${currentUser.uid}/transactions`;
-    const categoriesPath = getCategoriesRefPath(currentUser);
-    const tagsPath = getTagsRefPath(currentUser);
-    const groupsPath = getGroupsRefPath(currentUser);
-    const subscriptionsPath = getSubscriptionsRefPath(currentUser);
-    const accountsPath = `users/${currentUser.uid}/accounts`; // Directly use path
+    const userRootPath = `users/${currentUser.uid}`;
+    await remove(ref(database, userRootPath)); // This removes all data under users/{uid}
 
-    // Clear from Firebase DB
-    await Promise.all([
-        remove(ref(database, userFirebaseTransactionsBasePath)),
-        remove(ref(database, categoriesPath)),
-        remove(ref(database, tagsPath)),
-        remove(ref(database, groupsPath)),
-        remove(ref(database, subscriptionsPath)),
-        remove(ref(database, accountsPath)) // Clear accounts from DB
-    ]);
-
-    // Clear from localStorage
-    const accounts = await getAllAccounts(); // This will now be empty if DB clear was first, or from old cache
-    for (const acc of accounts) { // If accounts were cleared from DB first, this loop might not run for transactions
-      const storageKey = `transactions-${acc.id}-${currentUser.uid}`;
-      localStorage.removeItem(storageKey);
-    }
-    // Clear other localStorage items
+    // Clear related localStorage items (though Firebase is now primary, good for cleanup)
+    const allKeys = Object.keys(localStorage);
+    allKeys.forEach(key => {
+        if (key.startsWith(`transactions-`) && key.endsWith(`-${currentUser.uid}`)) {
+            localStorage.removeItem(key);
+        }
+        if (key.startsWith(`user`) && key.endsWith(`-${currentUser.uid}`)) {
+            localStorage.removeItem(key);
+        }
+         if (key === `userPreferences-${currentUser.uid}`) { // From AuthContext for theme/currency
+            localStorage.removeItem(key);
+        }
+    });
+    // Remove other potential user-specific keys if they exist
     localStorage.removeItem(`userAccounts-${currentUser.uid}`);
     localStorage.removeItem(`userCategories-${currentUser.uid}`);
     localStorage.removeItem(`userTags-${currentUser.uid}`);
     localStorage.removeItem(`userGroups-${currentUser.uid}`);
     localStorage.removeItem(`userSubscriptions-${currentUser.uid}`);
-    localStorage.removeItem(`userPreferences-${currentUser.uid}`); // Also clear preferences
+    localStorage.removeItem(`userLoans-${currentUser.uid}`);
+    localStorage.removeItem(`userCreditCards-${currentUser.uid}`);
+    localStorage.removeItem(`userBudgets-${currentUser.uid}`);
 
 
     console.log("All user data cleared from Firebase and localStorage for user:", currentUser.uid);
@@ -331,3 +340,4 @@ export async function clearAllSessionTransactions(): Promise<void> {
     throw error;
   }
 }
+    

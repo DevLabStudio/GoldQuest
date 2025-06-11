@@ -16,7 +16,7 @@ import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, isWithinInterval, isSameDay } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"; // Removed DialogDescription
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Edit, Trash2, MoreHorizontal, PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, ArrowLeft, CopyPlus } from 'lucide-react';
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
@@ -26,6 +26,7 @@ import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sid
 import SpendingChart from '@/components/dashboard/spending-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const formatDate = (dateString: string): string => {
     try {
@@ -42,6 +43,7 @@ export default function AccountDetailPage() {
   const params = useParams();
   const router = useRouter();
   const accountId = typeof params.accountId === 'string' ? params.accountId : undefined;
+  const { user, isLoadingAuth } = useAuthContext();
 
   const [account, setAccount] = useState<Account | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -61,11 +63,11 @@ export default function AccountDetailPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
-
   const fetchData = useCallback(async () => {
-    if (!accountId || typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined' || !accountId) {
         setIsLoading(false);
-        if(!accountId) setError("Account ID is missing.");
+        if(!accountId && !isLoadingAuth && user) setError("Account ID is missing.");
+        else if (!user && !isLoadingAuth) setError("Please log in to view account details.");
         return;
     }
     setIsLoading(true);
@@ -102,37 +104,36 @@ export default function AccountDetailPage() {
     } finally {
         setIsLoading(false);
     }
-  }, [accountId, toast]);
+  }, [accountId, toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccount(null);
+        setTransactions([]);
+        setError("Please log in to view account details.");
+    }
+  }, [fetchData, user, isLoadingAuth]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', `transactions-${accountId}`];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
-
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
-                console.log(`Storage change for account ${accountId} (key: ${event.key || 'custom'}), refetching data...`);
                 fetchData();
             }
         }
     };
-
-    if (typeof window !== 'undefined') {
-        window.addEventListener('storage', handleStorageChange);
-    }
-
+    if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
     return () => {
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('storage', handleStorageChange);
-        }
+        if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
-  }, [accountId, fetchData]);
+  }, [accountId, fetchData, user, isLoadingAuth]);
 
 
   const filteredTransactions = useMemo(() => {
@@ -146,9 +147,7 @@ export default function AccountDetailPage() {
 
   const spendingData = useMemo(() => {
       if (isLoading || !account || !filteredTransactions.length) return [];
-
       const categoryTotals: { [key: string]: number } = {};
-
       filteredTransactions.forEach(tx => {
           if (tx.amount < 0 && tx.category !== 'Transfer') {
               const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
@@ -156,7 +155,6 @@ export default function AccountDetailPage() {
               categoryTotals[category] = (categoryTotals[category] || 0) + convertedAmount;
           }
       });
-
       return Object.entries(categoryTotals)
           .map(([category, amount]) => ({ category: category.charAt(0).toUpperCase() + category.slice(1), amount }))
           .sort((a, b) => b.amount - a.amount);
@@ -187,7 +185,6 @@ export default function AccountDetailPage() {
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
       toast({ title: "Error", description: err.message || "Could not update transaction.", variant: "destructive" });
@@ -207,7 +204,6 @@ export default function AccountDetailPage() {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
       toast({ title: "Error", description: err.message || "Could not delete transaction.", variant: "destructive" });
@@ -224,17 +220,16 @@ export default function AccountDetailPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
     }
   };
 
-   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; }) => {
+   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string;}) => {
     try {
-      const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
+      
       const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
@@ -242,7 +237,7 @@ export default function AccountDetailPage() {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -transferAmount,
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -252,8 +247,8 @@ export default function AccountDetailPage() {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: transferAmount,
-        transactionCurrency: data.transactionCurrency,
+        amount: Math.abs(data.toAccountAmount),
+        transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -264,7 +259,6 @@ export default function AccountDetailPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let the storage event handle the refetch
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -332,7 +326,7 @@ export default function AccountDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !account) {
+  if (isLoadingAuth || (isLoading && !account)) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -373,6 +367,10 @@ export default function AccountDetailPage() {
     );
   }
 
+  const primaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0];
+  // const displayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+  // const displayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+
   return (
     <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
       <div className="flex justify-between items-center mb-6">
@@ -381,9 +379,15 @@ export default function AccountDetailPage() {
                 <ArrowLeft className="mr-2 h-4 w-4" /> Back to Accounts
             </Button>
             <h1 className="text-3xl font-bold">{account.name} - Transactions</h1>
-            <p className="text-muted-foreground">Balance: {formatCurrency(account.balance, account.currency, account.currency, false)}
-                {account.currency !== preferredCurrency && ` (≈ ${formatCurrency(account.balance, account.currency, preferredCurrency, true)})`}
-            </p>
+            <div className="text-muted-foreground mt-1">
+                {account.balances.map((balance, index) => (
+                    <div key={index} className={balance.currency === account.primaryCurrency ? 'font-semibold text-foreground' : ''}>
+                        {formatCurrency(balance.amount, balance.currency, balance.currency, false)}
+                        {balance.currency.toUpperCase() !== preferredCurrency.toUpperCase() &&
+                         ` (≈ ${formatCurrency(balance.amount, balance.currency, preferredCurrency, true)})`}
+                    </div>
+                ))}
+            </div>
         </div>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -573,6 +577,7 @@ export default function AccountDetailPage() {
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
+              onTransferAdded={handleTransferAdded} 
               isLoading={isLoading}
               initialData={{
                 ...selectedTransaction,
@@ -611,11 +616,11 @@ export default function AccountDetailPage() {
               initialType={transactionTypeToAdd}
               initialData={
                 clonedTransactionData ||
-                (transactionTypeToAdd !== 'transfer' && account
-                    ? { accountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                    : (transactionTypeToAdd === 'transfer' && account
-                        ? { fromAccountId: account.id, transactionCurrency: account.currency, date: new Date() }
-                        : {date: new Date()})
+                (transactionTypeToAdd !== 'transfer' && account && account.primaryCurrency
+                    ? { accountId: account.id, transactionCurrency: account.primaryCurrency, date: new Date() }
+                    : (transactionTypeToAdd === 'transfer' && account && account.primaryCurrency
+                        ? { fromAccountId: account.id, transactionCurrency: account.primaryCurrency, date: new Date(), toAccountCurrency: allAccounts.find(a => a.id !== account.id)?.primaryCurrency || account.primaryCurrency }
+                        : {date: new Date()}) 
                 )
               }
             />
@@ -626,3 +631,4 @@ export default function AccountDetailPage() {
   );
 }
 
+    

@@ -3,28 +3,33 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { getAccounts, addAccount, deleteAccount, updateAccount, type Account, type NewAccountData } from "@/services/account-sync";
 import { getTransactions, type Transaction } from '@/services/transactions';
-import { PlusCircle, Edit, Trash2, MoreHorizontal, Eye } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogDescription } from "@/components/ui/dialog";
+import { Landmark, Bitcoin as BitcoinIcon, MoreHorizontal, Eye, Edit3 as EditIcon, Trash2, CheckCircle, XCircle, MinusCircle } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription as FormDialogDescription, DialogTrigger } from "@/components/ui/dialog"; // Renamed DialogDescription to avoid conflict
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+// Accordion components removed
 import AddAccountForm from '@/components/accounts/add-account-form';
 import AddCryptoForm from '@/components/accounts/add-crypto-form';
 import EditAccountForm from '@/components/accounts/edit-account-form';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
-import { formatCurrency, convertCurrency } from '@/lib/currency';
+import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
 import { getUserPreferences } from '@/lib/preferences';
 import { format as formatDateFns, parseISO, compareAsc, startOfDay, isSameDay, endOfDay } from 'date-fns';
 import Link from 'next/link';
 import AccountBalanceHistoryChart from '@/components/accounts/account-balance-history-chart';
 import { useDateRange } from '@/contexts/DateRangeContext';
+import { useAuthContext } from '@/contexts/AuthContext';
+import { cn } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge';
+import Image from 'next/image';
 
 
 export default function AccountsPage() {
+  const { user, isLoadingAuth } = useAuthContext();
   const [allAccounts, setAllAccounts] = useState<Account[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -37,73 +42,73 @@ export default function AccountsPage() {
   const [preferredCurrency, setPreferredCurrency] = useState('BRL');
   const { selectedDateRange } = useDateRange();
 
+  const fetchAllData = useCallback(async () => {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
+        setIsLoading(false);
+        if (!user && !isLoadingAuth) setError("Please log in to view accounts.");
+        return;
+    }
+    setIsLoading(true);
+    setError(null);
+    try {
+        const prefs = await getUserPreferences();
+        setPreferredCurrency(prefs.preferredCurrency);
 
-   const fetchAllData = useCallback(async () => {
-        if (typeof window === 'undefined') {
-            setIsLoading(false);
-            setError("Account data can only be loaded on the client.");
-            return;
+        const fetchedAccounts = await getAccounts();
+        fetchedAccounts.sort((a, b) => {
+            if (a.category === 'asset' && b.category === 'crypto') return -1;
+            if (a.category === 'crypto' && b.category === 'asset') return 1;
+            return a.name.localeCompare(b.name);
+        });
+        setAllAccounts(fetchedAccounts);
+
+        if (fetchedAccounts.length > 0) {
+            const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
+            const transactionsByAccount = await Promise.all(transactionPromises);
+            const combinedTransactions = transactionsByAccount.flat();
+            setAllTransactions(combinedTransactions);
+        } else {
+            setAllTransactions([]);
         }
-
-        setIsLoading(true);
-        setError(null);
-        try {
-            const prefs = await getUserPreferences();
-            setPreferredCurrency(prefs.preferredCurrency);
-
-            const fetchedAccounts = await getAccounts();
-            setAllAccounts(fetchedAccounts);
-
-            if (fetchedAccounts.length > 0) {
-                const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
-                const transactionsByAccount = await Promise.all(transactionPromises);
-                const combinedTransactions = transactionsByAccount.flat();
-                setAllTransactions(combinedTransactions);
-            } else {
-                setAllTransactions([]);
-            }
-
-        } catch (err) {
-            console.error("Failed to fetch accounts or transactions:", err);
-            setError("Could not load data. Please ensure local storage is accessible and try again.");
-            toast({
-                title: "Error",
-                description: "Failed to load accounts or transactions.",
-                variant: "destructive",
-            });
-        } finally {
-            setIsLoading(false);
-        }
-    }, [toast]);
-
+    } catch (err: any) {
+        console.error("Failed to fetch accounts or transactions:", err);
+        setError("Could not load data. Details: " + err.message);
+        toast({
+            title: "Error",
+            description: "Failed to load accounts or transactions. Details: " + err.message,
+            variant: "destructive",
+        });
+    } finally {
+        setIsLoading(false);
+    }
+  }, [toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchAllData();
+    if (user && !isLoadingAuth) {
+        fetchAllData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAllAccounts([]);
+        setAllTransactions([]);
+        setError("Please log in to view accounts.");
+    }
 
     const handleStorageChange = (event: StorageEvent) => {
-         if (event.type === 'storage') {
+         if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
-
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
-                console.log(`Storage change (key: ${event.key || 'custom'}), refetching data for accounts page...`);
                 fetchAllData();
             }
         }
     };
-
-    if (typeof window !== 'undefined') {
-        window.addEventListener('storage', handleStorageChange);
-    }
-
+    if (typeof window !== 'undefined') window.addEventListener('storage', handleStorageChange);
     return () => {
-        if (typeof window !== 'undefined') {
-            window.removeEventListener('storage', handleStorageChange);
-        }
+        if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
-  }, [fetchAllData]);
+  }, [fetchAllData, user, isLoadingAuth]);
 
   const handleAccountAdded = async (newAccountData: NewAccountData) => {
     try {
@@ -115,17 +120,17 @@ export default function AccountsPage() {
         description: `Account "${newAccountData.name}" added successfully.`,
       });
       window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch (err: any) {
        console.error("Failed to add account:", err);
        toast({
         title: "Error",
-        description: "Could not add the account.",
+        description: "Could not add the account. Details: " + err.message,
         variant: "destructive",
       });
     }
   };
 
-   const handleAccountUpdated = async (updatedAccountData: Account) => {
+  const handleAccountUpdated = async (updatedAccountData: Account) => {
     try {
       await updateAccount(updatedAccountData);
       setIsEditDialogOpen(false);
@@ -135,17 +140,17 @@ export default function AccountsPage() {
         description: `Account "${updatedAccountData.name}" updated successfully.`,
       });
       window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch (err: any) {
        console.error("Failed to update account:", err);
        toast({
         title: "Error",
-        description: "Could not update the account.",
+        description: "Could not update the account. Details: " + err.message,
         variant: "destructive",
       });
     }
   };
 
-   const handleDeleteAccount = async (accountId: string) => {
+  const handleDeleteAccount = async (accountId: string) => {
     try {
         await deleteAccount(accountId);
         toast({
@@ -153,11 +158,11 @@ export default function AccountsPage() {
             description: `Account removed successfully.`,
         });
         window.dispatchEvent(new Event('storage'));
-    } catch (err) {
+    } catch (err: any) {
         console.error("Failed to delete account:", err);
         toast({
             title: "Error",
-            description: "Could not delete the account.",
+            description: "Could not delete the account. Details: " + err.message,
             variant: "destructive",
         });
     }
@@ -168,15 +173,12 @@ export default function AccountsPage() {
     setIsEditDialogOpen(true);
   };
 
-  const assetAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'asset'), [allAccounts]);
-  const cryptoAccounts = useMemo(() => allAccounts.filter(acc => acc.category === 'crypto'), [allAccounts]);
-
- const accountBalanceHistoryData = useMemo(() => {
-    if (isLoading || allAccounts.length === 0 || !preferredCurrency) {
+  const accountBalanceHistoryData = useMemo(() => {
+    if (isLoading || allAccounts.length === 0 || !preferredCurrency || !allTransactions) {
         return { data: [], accountNames: [], chartConfig: {} };
     }
 
-    const relevantAccounts = [...allAccounts];
+    const relevantAccounts = allAccounts.filter(acc => acc.includeInNetWorth !== false && acc.balances && acc.balances.length > 0 && acc.primaryCurrency);
     if (relevantAccounts.length === 0) return { data: [], accountNames: [], chartConfig: {} };
 
     const accountColors = [
@@ -194,262 +196,134 @@ export default function AccountsPage() {
     const maxTxDateOverall = allTxDates.length > 0 ? allTxDates.reduce((max, d) => d > max ? d : max, allTxDates[0]) : new Date();
 
     const chartStartDate = startOfDay(selectedDateRange.from || minTxDateOverall);
-    const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall); // Use endOfDay for the chart's actual end
+    const chartEndDate = endOfDay(selectedDateRange.to || maxTxDateOverall);
+    
+    const initialChartBalances = new Map<string, number>();
 
-    // Calculate balance for each account AT THE START of chartStartDate
-    const balanceAtChartStart: { [accountId: string]: number } = {};
     relevantAccounts.forEach(acc => {
-        let currentBalance = acc.balance; // Current balance in account's native currency
+        const primaryBalanceEntry = acc.balances.find(b => b.currency === acc.primaryCurrency);
+        let balanceAtChartStart = primaryBalanceEntry ? primaryBalanceEntry.amount : 0; 
+
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return tx.accountId === acc.id && txDate >= chartStartDate; // Transactions ON or AFTER chart start
+                return tx.accountId === acc.id && txDate >= chartStartDate && txDate <= maxTxDateOverall && tx.category?.toLowerCase() !== 'opening balance';
             })
             .forEach(tx => {
-                // Subtract these from current balance to roll back to chartStartDate
-                currentBalance -= convertCurrency(tx.amount, tx.transactionCurrency, acc.currency);
+                let amountInAccountPrimaryCurrency = tx.amount;
+                if (acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
+                    amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
+                }
+                balanceAtChartStart -= amountInAccountPrimaryCurrency;
             });
-        balanceAtChartStart[acc.id] = currentBalance;
+            
+        allTransactions
+            .filter(tx => {
+                const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+                return tx.accountId === acc.id && txDate < chartStartDate && tx.category?.toLowerCase() !== 'opening balance';
+            })
+            .forEach(tx => {
+                let amountInAccountPrimaryCurrency = tx.amount;
+                 if (acc.primaryCurrency && tx.transactionCurrency.toUpperCase() !== acc.primaryCurrency.toUpperCase()) {
+                    amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, acc.primaryCurrency);
+                }
+                balanceAtChartStart += amountInAccountPrimaryCurrency;
+            });
+
+        initialChartBalances.set(acc.id, balanceAtChartStart);
     });
 
+
     const chartDatesSet = new Set<string>();
-    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); // Ensure chart start date is included
+    chartDatesSet.add(formatDateFns(chartStartDate, 'yyyy-MM-dd')); 
     allTransactions.forEach(tx => {
         const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-        if (txDate >= chartStartDate && txDate <= chartEndDate) {
+        if (txDate >= chartStartDate && txDate <= chartEndDate && relevantAccounts.some(ra => ra.id === tx.accountId) && tx.category?.toLowerCase() !== 'opening balance') {
             chartDatesSet.add(formatDateFns(startOfDay(txDate), 'yyyy-MM-dd'));
         }
     });
-    chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd')); // Ensure chart end date is included
-
+    if (allTxDates.length === 0 || chartEndDate <= new Date() || chartEndDate >= maxTxDateOverall) {
+        chartDatesSet.add(formatDateFns(chartEndDate, 'yyyy-MM-dd'));
+    }
 
     const sortedUniqueChartDates = Array.from(chartDatesSet)
         .map(d => parseISO(d))
         .sort(compareAsc)
-        .filter(date => date <= chartEndDate); // Make sure we don't go beyond chartEndDate
-
-    if (sortedUniqueChartDates.length === 0) {
-         const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
-         relevantAccounts.forEach(acc => {
-             dataPoint[acc.name] = convertCurrency(balanceAtChartStart[acc.id] || 0, acc.currency, preferredCurrency);
-         });
-         return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
-    }
+        .filter(date => date >= chartStartDate && date <= chartEndDate);
 
     const historicalData: Array<{ date: string, [key: string]: any }> = [];
-    const runningBalancesInAccountCurrency = { ...balanceAtChartStart }; // Balances are in account's native currency
+    const runningBalances = new Map<string, number>(initialChartBalances);
 
-    sortedUniqueChartDates.forEach((currentDisplayDate, index) => {
-        // If it's not the very first date in our sorted list, the runningBalances
-        // already reflect the start of currentDisplayDate (end of previousDisplayDate).
-        // For the very first date (chartStartDate), runningBalances are already set correctly.
+    if (sortedUniqueChartDates.length === 0) { 
+         const dataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
+         relevantAccounts.forEach(acc => {
+             const balanceForChart = initialChartBalances.get(acc.id) || 0;
+             dataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(balanceForChart, acc.primaryCurrency, preferredCurrency) : 0;
+         });
+         if (!isSameDay(chartStartDate, chartEndDate)) {
+            const endDataPoint = { ...dataPoint, date: formatDateFns(chartEndDate, 'yyyy-MM-dd')};
+            return { data: [dataPoint, endDataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
+         }
+         return { data: [dataPoint], accountNames: relevantAccounts.map(a => a.name), chartConfig };
+    }
+    
+    const firstDataPoint: any = { date: formatDateFns(chartStartDate, 'yyyy-MM-dd') };
+    relevantAccounts.forEach(acc => {
+        const balanceForChart = initialChartBalances.get(acc.id) || 0;
+        firstDataPoint[acc.name] = acc.primaryCurrency ? convertCurrency(balanceForChart, acc.primaryCurrency, preferredCurrency) : 0;
+    });
+    historicalData.push(firstDataPoint);
 
-        // Apply transactions FOR currentDisplayDate
+    sortedUniqueChartDates.forEach((currentDisplayDate) => {
+        if (isSameDay(currentDisplayDate, chartStartDate) && historicalData.length > 0 && historicalData[0].date === formatDateFns(chartStartDate, 'yyyy-MM-dd')) {
+            // Already processed initial balances for chartStartDate
+        }
+
         allTransactions
             .filter(tx => {
                 const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-                return isSameDay(txDate, currentDisplayDate) && relevantAccounts.some(acc => acc.id === tx.accountId);
+                return isSameDay(txDate, currentDisplayDate) && relevantAccounts.some(acc => acc.id === tx.accountId) && tx.category?.toLowerCase() !== 'opening balance';
             })
             .forEach(tx => {
                 const account = relevantAccounts.find(a => a.id === tx.accountId);
-                if (account) {
-                    const amountInAccountCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.currency);
-                    runningBalancesInAccountCurrency[tx.accountId] = (runningBalancesInAccountCurrency[tx.accountId] || 0) + amountInAccountCurrency;
+                if (account && account.primaryCurrency) {
+                    let amountInAccountPrimaryCurrency = tx.amount;
+                     if (tx.transactionCurrency.toUpperCase() !== account.primaryCurrency.toUpperCase()) {
+                        amountInAccountPrimaryCurrency = convertCurrency(tx.amount, tx.transactionCurrency, account.primaryCurrency);
+                    }
+                    runningBalances.set(tx.accountId, (runningBalances.get(tx.accountId) || 0) + amountInAccountPrimaryCurrency);
                 }
             });
-
-        // Create snapshot for the END of currentDisplayDate
+        
         const dateStr = formatDateFns(currentDisplayDate, 'yyyy-MM-dd');
-        const dailySnapshot: { date: string, [key: string]: any } = { date: dateStr };
+        const existingPointIndex = historicalData.findIndex(p => p.date === dateStr);
+        const dailySnapshot: { date: string, [key: string]: any } = existingPointIndex !== -1 ? historicalData[existingPointIndex] : { date: dateStr };
+
         relevantAccounts.forEach(acc => {
-            dailySnapshot[acc.name] = convertCurrency(runningBalancesInAccountCurrency[acc.id] || 0, acc.currency, preferredCurrency);
+            const balanceForChart = runningBalances.get(acc.id) || 0;
+            dailySnapshot[acc.name] = acc.primaryCurrency ? convertCurrency(balanceForChart, acc.primaryCurrency, preferredCurrency) : 0;
         });
         
-        // Add or update the snapshot for this date
-        const existingEntryIndex = historicalData.findIndex(hd => hd.date === dateStr);
-        if (existingEntryIndex !== -1) {
-            historicalData[existingEntryIndex] = dailySnapshot;
-        } else {
+        if (existingPointIndex === -1) {
             historicalData.push(dailySnapshot);
         }
     });
     
-    // Ensure data is sorted by date for the chart, especially if chartStartDate/EndDate points were manually added out of order initially
+    const lastChartDateStr = formatDateFns(chartEndDate, 'yyyy-MM-dd');
+    if (historicalData.length > 0 && historicalData[historicalData.length -1].date !== lastChartDateStr && !isSameDay(chartStartDate, chartEndDate) ) {
+        const lastKnownBalances = { ...historicalData[historicalData.length - 1], date: lastChartDateStr };
+        historicalData.push(lastKnownBalances);
+    }
+    
     historicalData.sort((a,b) => compareAsc(parseISO(a.date), parseISO(b.date)));
+    
+    const uniqueHistoricalData = historicalData.filter((item, index, self) =>
+        index === self.findIndex((t) => t.date === item.date)
+    );
 
-
-    return { data: historicalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
+    return { data: uniqueHistoricalData, accountNames: relevantAccounts.map(a => a.name), chartConfig };
 
   }, [allAccounts, allTransactions, preferredCurrency, isLoading, selectedDateRange]);
-
-
-
-  interface AccountTableProps {
-      accounts: Account[];
-      title: string;
-      category: 'asset' | 'crypto';
-      onAddClick: () => void;
-      isAddDialogOpen: boolean;
-      onOpenChange: (open: boolean) => void;
-      AddFormComponent: FC<{ onAccountAdded: (data: NewAccountData) => void }>;
-  }
-
-  const AccountTable: FC<AccountTableProps> = ({ accounts, title, category, onAddClick, isAddDialogOpen, onOpenChange, AddFormComponent }) => (
-    <Card className="mb-8">
-      <CardHeader>
-         <div className="flex justify-between items-center">
-            <CardTitle>{title}</CardTitle>
-             <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-               <DialogTrigger asChild>
-                 <Button variant="default" size="sm">
-                   <PlusCircle className="mr-2 h-4 w-4" /> Create new {category} account
-                 </Button>
-               </DialogTrigger>
-               <DialogContent className="sm:max-w-3xl">
-                 <DialogHeader>
-                   <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                   <DialogDescription>
-                     Enter the details of your new {category} account.
-                   </DialogDescription>
-                 </DialogHeader>
-                 <AddFormComponent onAccountAdded={handleAccountAdded} />
-               </DialogContent>
-             </Dialog>
-         </div>
-         <CardDescription>View and manage your manually added {category} accounts.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>Name</TableHead>
-              <TableHead>{category === 'asset' ? 'Bank/Institution' : 'Exchange/Wallet'}</TableHead>
-              <TableHead>Current balance</TableHead>
-              <TableHead>Last activity</TableHead>
-              <TableHead>Balance difference</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {isLoading ? (
-              [...Array(2)].map((_, i) => (
-                <TableRow key={`skeleton-${category}-${i}`}>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-28" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-24" /></TableCell>
-                  <TableCell><Skeleton className="h-5 w-20" /></TableCell>
-                  <TableCell className="text-right"><Skeleton className="h-8 w-16 inline-block" /></TableCell>
-                </TableRow>
-              ))
-            ) : accounts.length > 0 ? (
-              accounts.map((account) => (
-                <TableRow key={account.id} className="hover:bg-muted/50">
-                  <TableCell className="font-medium">
-                     <Link href={`/accounts/${account.id}`} passHref>
-                       <Button variant="link" size="sm" className="p-0 h-auto text-base font-medium text-primary hover:text-primary/80 hover:no-underline">
-                          {account.name}
-                       </Button>
-                     </Link>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{account.providerName || 'N/A'}</TableCell>
-                  <TableCell>
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-primary">
-                        {formatCurrency(account.balance, account.currency, account.currency, false)}
-                      </span>
-                      {preferredCurrency && account.currency.toUpperCase() !== preferredCurrency.toUpperCase() && (
-                        <span className="text-xs text-muted-foreground mt-1">
-                            (≈ {formatCurrency(account.balance, account.currency, preferredCurrency, true)})
-                        </span>
-                      )}
-                    </div>
-                  </TableCell>
-                   <TableCell className="text-muted-foreground">
-                       {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
-                   </TableCell>
-                   <TableCell className="text-muted-foreground">
-                       {formatCurrency(account.balanceDifference ?? 0, account.currency, preferredCurrency, false)}
-                   </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                          <span className="sr-only">Open menu</span>
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem asChild>
-                            <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
-                                <Eye className="mr-2 h-4 w-4" />
-                                <span>View Transactions</span>
-                            </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => openEditDialog(account)}>
-                          <Edit className="mr-2 h-4 w-4" />
-                          <span>Edit</span>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => handleDeleteAccount(account.id)}
-                          className="text-destructive focus:text-destructive focus:bg-destructive/10"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          <span>Delete</span>
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              ))
-            ) : (
-              <TableRow>
-                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
-                  No {category} accounts added yet.
-                   <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-                     <DialogTrigger asChild>
-                        <Button variant="default" size="sm" className="ml-2">
-                           <PlusCircle className="mr-2 h-4 w-4" /> Add your first {category} account
-                        </Button>
-                      </DialogTrigger>
-                     <DialogContent className="sm:max-w-3xl">
-                        <DialogHeader>
-                          <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                           <DialogDescription>
-                              Enter the details of your new {category} account.
-                           </DialogDescription>
-                        </DialogHeader>
-                         <AddFormComponent onAccountAdded={handleAccountAdded} />
-                     </DialogContent>
-                   </Dialog>
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </CardContent>
-        {!isLoading && accounts.length > 0 && (
-          <CardContent className="pt-4 border-t">
-              <Dialog open={isAddDialogOpen} onOpenChange={onOpenChange}>
-                  <DialogTrigger asChild>
-                      <Button variant="default" size="sm">
-                          <PlusCircle className="mr-2 h-4 w-4" /> Create new {category} account
-                      </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-3xl">
-                      <DialogHeader>
-                         <DialogTitle>Add New {category === 'asset' ? 'Asset' : 'Crypto'} Account</DialogTitle>
-                           <DialogDescription>
-                              Enter the details of your new {category} account.
-                           </DialogDescription>
-                      </DialogHeader>
-                       <AddFormComponent onAccountAdded={handleAccountAdded} />
-                  </DialogContent>
-              </Dialog>
-          </CardContent>
-        )}
-    </Card>
-  );
 
 
   return (
@@ -484,27 +358,200 @@ export default function AccountsPage() {
             </CardContent>
         </Card>
 
+        <div className="mb-8">
+            <div className="flex justify-between items-center mb-4">
+                <h2 className="text-2xl font-semibold">All Accounts</h2>
+                <div className="flex gap-2">
+                    <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="default" size="sm">
+                            <Landmark className="mr-2 h-4 w-4" /> Create Asset Account
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-3xl">
+                            <DialogHeader>
+                            <DialogTitle>Add New Asset Account</DialogTitle>
+                            <FormDialogDescription>Enter the details of your new asset account.</FormDialogDescription>
+                            </DialogHeader>
+                            <AddAccountForm onAccountAdded={handleAccountAdded} />
+                        </DialogContent>
+                    </Dialog>
+                    <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
+                        <DialogTrigger asChild>
+                            <Button variant="default" size="sm">
+                            <BitcoinIcon className="mr-2 h-4 w-4" /> Create Crypto Account
+                            </Button>
+                        </DialogTrigger>
+                        <DialogContent className="sm:max-w-3xl">
+                            <DialogHeader>
+                            <DialogTitle>Add New Crypto Account</DialogTitle>
+                            <FormDialogDescription>Enter the details of your new crypto account.</FormDialogDescription>
+                            </DialogHeader>
+                            <AddCryptoForm onAccountAdded={handleAccountAdded} />
+                        </DialogContent>
+                    </Dialog>
+                </div>
+            </div>
+            <p className="text-muted-foreground mb-6">View and manage all your financial accounts and platform holdings.</p>
 
-        <AccountTable
-            accounts={assetAccounts}
-            title="Property (Asset Accounts)"
-            category="asset"
-            onAddClick={() => setIsAddAssetDialogOpen(true)}
-            isAddDialogOpen={isAddAssetDialogOpen}
-            onOpenChange={setIsAddAssetDialogOpen}
-            AddFormComponent={AddAccountForm}
-        />
+            {isLoading && allAccounts.length === 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {[...Array(3)].map((_, i) => (
+                        <Card key={`skeleton-all-${i}`} className="p-4 border rounded-lg shadow-sm bg-card">
+                            <div className="flex justify-between items-center mb-2">
+                                <Skeleton className="h-6 w-8 rounded-md" />
+                                <Skeleton className="h-5 w-20" />
+                                <Skeleton className="h-6 w-6 rounded-full" />
+                            </div>
+                            <Skeleton className="h-7 w-3/4 mb-1" />
+                            <Skeleton className="h-4 w-1/2 mb-3" />
+                            <div className="flex justify-between items-center">
+                                <Skeleton className="h-4 w-16" />
+                                <Skeleton className="h-4 w-20" />
+                            </div>
+                        </Card>
+                    ))}
+                </div>
+            ) : allAccounts.length > 0 ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {allAccounts.map((account) => {
+                        const primaryBalanceEntry = account.balances && account.balances.length > 0
+                            ? account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0]
+                            : null;
+                        
+                        // Calculate total account value in preferred currency
+                        const accountValueInPreferredCurrency = account.balances.reduce((sum, balance) => {
+                            return sum + convertCurrency(balance.amount, balance.currency, preferredCurrency);
+                        }, 0);
 
-        <AccountTable
-            accounts={cryptoAccounts}
-            title="Self-Custody (Crypto Accounts)"
-            category="crypto"
-            onAddClick={() => setIsAddCryptoDialogOpen(true)}
-            isAddDialogOpen={isAddCryptoDialogOpen}
-            onOpenChange={setIsAddCryptoDialogOpen}
-            AddFormComponent={AddCryptoForm}
-        />
+                        const originalDisplayBalance = primaryBalanceEntry ? primaryBalanceEntry.amount : 0;
+                        const originalDisplayCurrency = primaryBalanceEntry ? primaryBalanceEntry.currency : (account.primaryCurrency || 'N/A');
+                        
+                        const IconComponent = account.category === 'crypto' ? BitcoinIcon : Landmark;
+                        
+                        let netWorthStatusIcon;
+                        if (account.includeInNetWorth === true) {
+                           netWorthStatusIcon = <CheckCircle className="h-4 w-4 text-green-500" title="Included in Net Worth" />;
+                        } else if (account.includeInNetWorth === false) {
+                           netWorthStatusIcon = <XCircle className="h-4 w-4 text-red-500" title="Excluded from Net Worth" />;
+                        } else {
+                            netWorthStatusIcon = <MinusCircle className="h-4 w-4 text-muted-foreground" title="Net Worth status not set" />;
+                        }
 
+
+                        return (
+                            <Card key={account.id} className="shadow-md hover:shadow-lg transition-shadow duration-200 flex flex-col">
+                                <CardHeader className="flex flex-row items-start justify-between pb-3 pt-4 px-4">
+                                    <div className="flex items-center gap-3">
+                                        <div className="p-2 bg-muted rounded-md">
+                                        {account.category === 'crypto' && account.providerDisplayIconUrl ? (
+                                            <Image src={account.providerDisplayIconUrl} alt={`${account.providerName} logo`} width={24} height={24} className="rounded-full object-contain" data-ai-hint={`${account.providerName} logo`}/>
+                                        ) : (
+                                            <IconComponent className="w-6 h-6 text-primary" />
+                                        )}
+                                        </div>
+                                        <div>
+                                            <CardTitle className="text-md">
+                                                <Link href={`/accounts/${account.id}`} className="font-medium text-primary hover:text-primary/80 hover:underline focus:outline-none focus:ring-1 focus:ring-primary rounded text-base p-0.5">
+                                                    {account.name}
+                                                </Link>
+                                            </CardTitle>
+                                            <CardDescription className="text-xs">{account.providerName || 'N/A'}</CardDescription>
+                                        </div>
+                                    </div>
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger asChild>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 -mt-1 -mr-1">
+                                                <MoreHorizontal className="h-4 w-4" />
+                                                <span className="sr-only">Account actions</span>
+                                            </Button>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end">
+                                            <DropdownMenuItem asChild>
+                                                <Link href={`/accounts/${account.id}`} className="flex items-center w-full">
+                                                    <Eye className="mr-2 h-4 w-4" /> View Transactions
+                                                </Link>
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => openEditDialog(account)}>
+                                                <EditIcon className="mr-2 h-4 w-4" /> Edit Account
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem onClick={() => handleDeleteAccount(account.id)} className="text-destructive focus:text-destructive focus:bg-destructive/10">
+                                                <Trash2 className="mr-2 h-4 w-4" /> Delete Account
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </CardHeader>
+                                <CardContent className="flex-grow space-y-3 pt-0 pb-3 px-4">
+                                    <div className="text-2xl font-bold text-primary">
+                                        {formatCurrency(accountValueInPreferredCurrency, preferredCurrency, preferredCurrency, false)}
+                                    </div>
+                                    {/* Show original primary balance if currencies differ */}
+                                    {preferredCurrency && typeof originalDisplayCurrency === 'string' && originalDisplayCurrency.toUpperCase() !== preferredCurrency.toUpperCase() && (
+                                        <div className="text-xs text-muted-foreground -mt-2">
+                                            (Original: {formatCurrency(originalDisplayBalance, originalDisplayCurrency, originalDisplayCurrency, false)})
+                                        </div>
+                                    )}
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                        <Badge variant="outline" className={cn(
+                                            "text-xs px-1.5 py-0.5",
+                                            account.category === 'asset' ? "border-blue-300 bg-blue-50 text-blue-700 dark:border-blue-700 dark:bg-blue-900/30 dark:text-blue-300" : "border-purple-300 bg-purple-50 text-purple-700 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-300"
+                                        )}>
+                                            {account.category === 'asset' ? 'Asset' : 'Crypto'}
+                                        </Badge>
+                                        <Badge variant="secondary" className="text-xs px-1.5 py-0.5">{account.type}</Badge>
+                                        {netWorthStatusIcon}
+                                    </div>
+                                    
+                                    {account.balances && account.balances.filter(b => b.currency.toUpperCase() !== (account.primaryCurrency || '').toUpperCase()).length > 0 && (
+                                        <div>
+                                            <p className="text-xs text-muted-foreground mb-1 mt-2">Other balances:</p>
+                                            <div className="flex flex-wrap gap-1">
+                                            {account.balances.filter(b => b.currency.toUpperCase() !== (account.primaryCurrency || '').toUpperCase()).map(bal => (
+                                                <Badge key={bal.currency} variant="outline" className="text-xs font-normal px-1.5 py-0.5">
+                                                    {formatCurrency(bal.amount, bal.currency, bal.currency, false)}
+                                                </Badge>
+                                            ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </CardContent>
+                                <CardFooter className="text-xs text-muted-foreground pt-0 pb-3 px-4">
+                                    Last activity: {account.lastActivity ? formatDateFns(parseISO(account.lastActivity), 'PP') : 'N/A'}
+                                </CardFooter>
+                            </Card>
+                        )
+                    })}
+                </div>
+            ) : (
+                <div className="text-center py-10">
+                    <p className="text-muted-foreground">No accounts added yet.</p>
+                    <div className="flex gap-2 justify-center mt-4">
+                        <Dialog open={isAddAssetDialogOpen} onOpenChange={setIsAddAssetDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="default" size="sm">
+                                <Landmark className="mr-2 h-4 w-4" /> Add Asset Account
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-3xl">
+                                <DialogHeader><DialogTitle>Add New Asset Account</DialogTitle><FormDialogDescription>Enter the details of your new asset account.</FormDialogDescription></DialogHeader>
+                                <AddAccountForm onAccountAdded={handleAccountAdded} />
+                            </DialogContent>
+                        </Dialog>
+                        <Dialog open={isAddCryptoDialogOpen} onOpenChange={setIsAddCryptoDialogOpen}>
+                            <DialogTrigger asChild>
+                                <Button variant="default" size="sm">
+                                <BitcoinIcon className="mr-2 h-4 w-4" /> Add Crypto Account
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-3xl">
+                                <DialogHeader><DialogTitle>Add New Crypto Account</DialogTitle><FormDialogDescription>Enter the details of your new crypto account.</FormDialogDescription></DialogHeader>
+                                <AddCryptoForm onAccountAdded={handleAccountAdded} />
+                            </DialogContent>
+                        </Dialog>
+                    </div>
+                </div>
+            )}
+        </div>
 
       <Dialog open={isEditDialogOpen} onOpenChange={(open) => {
           setIsEditDialogOpen(open);
@@ -513,9 +560,9 @@ export default function AccountsPage() {
           <DialogContent className="sm:max-w-3xl">
               <DialogHeader>
                   <DialogTitle>Edit Account</DialogTitle>
-                  <DialogDescription>
+                  <FormDialogDescription>
                       Modify the details of your account.
-                  </DialogDescription>
+                  </FormDialogDescription>
               </DialogHeader>
               {selectedAccount && (
                   <EditAccountForm
@@ -525,7 +572,7 @@ export default function AccountsPage() {
               )}
           </DialogContent>
       </Dialog>
-
     </div>
   );
 }
+    

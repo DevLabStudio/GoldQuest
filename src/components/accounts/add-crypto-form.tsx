@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -13,7 +14,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers';
 import { getCurrencySymbol } from '@/lib/currency';
 import type { NewAccountData } from '@/services/account-sync';
-import Image from 'next/image';
+import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
+import Image from 'next/image'; // For displaying fetched logo
 
 const allowedFiatCurrencies = ['EUR', 'USD', 'BRL'] as const;
 
@@ -24,10 +27,11 @@ const formSchema = z.object({
     required_error: "Account type is required",
   }),
   currency: z.enum(allowedFiatCurrencies, {
-      required_error: "Fiat currency is required",
+      required_error: "Fiat currency for initial balance is required",
   }),
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}).min(0, "Balance cannot be negative"),
+  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
   includeInNetWorth: z.boolean().optional(),
+  providerDisplayIconUrl: z.string().optional(), // Hidden field to store fetched URL
 });
 
 type AddCryptoFormData = z.infer<typeof formSchema>;
@@ -37,6 +41,9 @@ interface AddCryptoFormProps {
 }
 
 const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(null);
+  const [isFetchingLogo, setIsFetchingLogo] = useState(false);
+
   const form = useForm<AddCryptoFormData>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -46,21 +53,66 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
       currency: "BRL",
       balance: 0,
       includeInNetWorth: true,
+      providerDisplayIconUrl: undefined,
     },
   });
+
+  const selectedProviderName = form.watch('providerName');
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+      if (!selectedProviderName) {
+        setLogoPreviewUrl(null);
+        form.setValue('providerDisplayIconUrl', undefined);
+        return;
+      }
+      const providerInfo = allCryptoProviders.find(p => p.name === selectedProviderName);
+      if (providerInfo && providerInfo.coingeckoExchangeId) {
+        setIsFetchingLogo(true);
+        setLogoPreviewUrl(null); // Clear previous logo
+        form.setValue('providerDisplayIconUrl', undefined);
+        try {
+          const response = await fetch(`https://api.coingecko.com/api/v3/exchanges/${providerInfo.coingeckoExchangeId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.image) {
+              setLogoPreviewUrl(data.image);
+              form.setValue('providerDisplayIconUrl', data.image);
+            } else {
+              setLogoPreviewUrl(null);
+            }
+          } else {
+            console.warn(`Failed to fetch logo for ${selectedProviderName}: ${response.status}`);
+            setLogoPreviewUrl(null);
+          }
+        } catch (error) {
+          console.error(`Error fetching logo for ${selectedProviderName}:`, error);
+          setLogoPreviewUrl(null);
+        } finally {
+          setIsFetchingLogo(false);
+        }
+      } else {
+        setLogoPreviewUrl(null);
+        form.setValue('providerDisplayIconUrl', undefined);
+      }
+    };
+    fetchLogo();
+  }, [selectedProviderName, form]);
 
   function onSubmit(values: AddCryptoFormData) {
     const newAccountData: NewAccountData = {
         name: values.accountName,
         type: values.accountType,
-        balance: values.balance,
-        currency: values.currency.toUpperCase(),
+        initialBalance: values.balance,
+        initialCurrency: values.currency.toUpperCase(),
         providerName: values.providerName,
+        providerDisplayIconUrl: values.providerDisplayIconUrl,
         category: 'crypto',
         includeInNetWorth: values.includeInNetWorth ?? true,
     };
     onAccountAdded(newAccountData);
     form.reset();
+    setLogoPreviewUrl(null);
   }
 
   const selectedCurrency = form.watch('currency');
@@ -84,28 +136,28 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                     <SelectContent>
                     {allCryptoProviders.map((provider: CryptoProviderInfo) => (
                         <SelectItem key={provider.name} value={provider.name}>
-                        <div className="flex items-center">
-                            <Image
-                                src={provider.iconUrl}
-                                alt={`${provider.name} logo`}
-                                width={20}
-                                height={20}
-                                className="mr-2 rounded-sm object-contain"
-                                data-ai-hint={provider.dataAiHint}
-                            />
+                        <div className="flex items-center gap-2">
+                            {provider.iconComponent}
                             {provider.name}
                         </div>
                         </SelectItem>
                     ))}
                     <SelectItem value="Other">
-                        <div className="flex items-center">
-                            <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">💠</span>
+                        <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">💠</span>
                             Other (Specify in Name)
                         </div>
                     </SelectItem>
                     </SelectContent>
                 </Select>
                 <FormMessage />
+                {isFetchingLogo && <Skeleton className="h-10 w-10 mt-2 rounded-full" />}
+                {logoPreviewUrl && !isFetchingLogo && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Image src={logoPreviewUrl} alt={`${selectedProviderName} logo`} width={24} height={24} className="rounded-full" data-ai-hint={`${selectedProviderName} logo`}/>
+                    <span className="text-xs text-muted-foreground">Logo Preview</span>
+                  </div>
+                )}
                 </FormItem>
             )}
             />
@@ -156,7 +208,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                 name="currency"
                 render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Fiat Currency</FormLabel>
+                    <FormLabel>Initial Balance Currency</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                         <FormControl>
                         <SelectTrigger>
@@ -172,7 +224,7 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                         </SelectContent>
                     </Select>
                     <FormDescription>
-                        Select the fiat currency for this account.
+                        Fiat currency for the initial balance entry.
                     </FormDescription>
                     <FormMessage />
                 </FormItem>
@@ -185,12 +237,12 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
             name="balance"
             render={({ field }) => (
             <FormItem>
-                <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                <FormLabel>Initial Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
                 <FormControl>
-                <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''}/>
                 </FormControl>
                 <FormDescription>
-                    Amount in the selected currency.
+                    Enter the current fiat value of your crypto holdings for this account.
                 </FormDescription>
                 <FormMessage />
             </FormItem>
@@ -213,12 +265,14 @@ const AddCryptoForm: FC<AddCryptoFormProps> = ({ onAccountAdded }) => {
                   Include in Net Worth Calculations
                 </FormLabel>
                 <FormDescription>
-                  If checked, this crypto account's balance will be part of your total net worth.
+                  If checked, this crypto account's balance (in its fiat equivalent) will be part of your total net worth.
                 </FormDescription>
               </div>
             </FormItem>
           )}
         />
+        {/* Hidden field for providerDisplayIconUrl - value set by useEffect */}
+        <FormField control={form.control} name="providerDisplayIconUrl" render={({ field }) => <Input type="hidden" {...field} />} />
 
         <Button type="submit" className="w-full">Add Crypto Account</Button>
       </form>

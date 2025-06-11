@@ -8,12 +8,14 @@ import { supportedCurrencies } from './currency';
 
 export interface UserPreferences {
   preferredCurrency: string;
-  theme?: 'light' | 'dark' | 'system'; // Added theme preference
+  investmentsPreferredCurrency?: string; // New field for investment-specific currency
+  theme?: 'light' | 'dark' | 'system' | 'goldquest';
 }
 
 const defaultPreferences: UserPreferences = {
   preferredCurrency: 'BRL',
-  theme: 'system', // Default theme
+  investmentsPreferredCurrency: 'USD', // Default investment currency
+  theme: 'system',
 };
 
 function getPreferencesRefPath(currentUser: User | null) {
@@ -38,7 +40,10 @@ export async function getUserPreferences(): Promise<UserPreferences> {
         preferredCurrency: supportedCurrencies.includes(prefs.preferredCurrency?.toUpperCase() ?? '')
           ? prefs.preferredCurrency!.toUpperCase()
           : defaultPreferences.preferredCurrency,
-        theme: prefs.theme && ['light', 'dark', 'system'].includes(prefs.theme)
+        investmentsPreferredCurrency: prefs.investmentsPreferredCurrency && supportedCurrencies.includes(prefs.investmentsPreferredCurrency.toUpperCase())
+          ? prefs.investmentsPreferredCurrency.toUpperCase()
+          : defaultPreferences.investmentsPreferredCurrency,
+        theme: prefs.theme && ['light', 'dark', 'system', 'goldquest'].includes(prefs.theme)
           ? prefs.theme
           : defaultPreferences.theme,
       };
@@ -61,7 +66,10 @@ export async function saveUserPreferences(preferences: UserPreferences): Promise
     preferredCurrency: supportedCurrencies.includes(preferences.preferredCurrency.toUpperCase())
         ? preferences.preferredCurrency.toUpperCase()
         : defaultPreferences.preferredCurrency,
-    theme: preferences.theme && ['light', 'dark', 'system'].includes(preferences.theme)
+    investmentsPreferredCurrency: preferences.investmentsPreferredCurrency && supportedCurrencies.includes(preferences.investmentsPreferredCurrency.toUpperCase())
+        ? preferences.investmentsPreferredCurrency.toUpperCase()
+        : defaultPreferences.investmentsPreferredCurrency,
+    theme: preferences.theme && ['light', 'dark', 'system', 'goldquest'].includes(preferences.theme)
         ? preferences.theme
         : defaultPreferences.theme,
   };

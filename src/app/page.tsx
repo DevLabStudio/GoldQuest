@@ -1,85 +1,109 @@
 
 'use client';
 
-import { useState, useEffect, useMemo, useCallback } from 'react'; // Added useCallback
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import type { FC } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import TotalNetWorthCard from "@/components/dashboard/total-net-worth-card";
-import SpendingsBreakdown from "@/components/dashboard/spendings-breakdown";
-import IncomeSourceChart from "@/components/dashboard/income-source-chart";
-import IncomeExpensesChart from "@/components/dashboard/income-expenses-chart";
-import AssetsChart from "@/components/dashboard/assets-chart";
+import TotalBalanceCard from "@/components/dashboard/TotalBalanceCard";
+import RecentTransactionsCard from "@/components/dashboard/RecentTransactionsCard";
+import InvestmentsOverviewCard from "@/components/dashboard/InvestmentsOverviewCard";
+import WeeklyComparisonStatsCard from "@/components/dashboard/WeeklyComparisonStatsCard";
+import ExpensesBreakdownCard from "@/components/dashboard/ExpensesBreakdownCard";
+import UpcomingBillsCard from '@/components/dashboard/UpcomingBillsCard';
+
 import { getAccounts, type Account } from "@/services/account-sync";
 import { getTransactions, type Transaction } from "@/services/transactions";
-import { getCategories, type Category, getCategoryStyle } from '@/services/categories';
+import { getCategories, type Category } from '@/services/categories';
+import { getSubscriptions, type Subscription } from '@/services/subscriptions';
 import { getUserPreferences } from '@/lib/preferences';
 import { formatCurrency, convertCurrency, getCurrencySymbol } from '@/lib/currency';
-import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns, isSameDay } from 'date-fns';
+import { startOfMonth, endOfMonth, isWithinInterval, parseISO, format as formatDateFns, isSameDay, subDays, differenceInCalendarDays, addDays } from 'date-fns';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useToast } from "@/hooks/use-toast";
 import { useDateRange } from '@/contexts/DateRangeContext';
+import type { DateRange } from 'react-day-picker';
+import { useAuthContext } from '@/contexts/AuthContext';
 
+// Helper function to get the previous equivalent period
+const getPreviousPeriod = (currentRange: DateRange): DateRange | null => {
+  if (!currentRange.from || !currentRange.to) {
+    // For "All Time" or undefined ranges, we can't define a simple equivalent previous period.
+    // Or, we could default to "previous month" relative to today if that makes sense.
+    // For now, return null to indicate trend is N/A for such cases.
+    return null;
+  }
 
-const assetsData = [
-  { name: "Gold", value: 15700, fill: "hsl(var(--chart-4))" },
-  { name: "Stock", value: 22500, fill: "hsl(var(--chart-1))" },
-  { name: "Warehouse", value: 120000, fill: "hsl(var(--chart-3))" },
-  { name: "Land", value: 135000, fill: "hsl(var(--chart-2))" },
-];
+  const duration = differenceInCalendarDays(currentRange.to, currentRange.from);
+  const previousPeriodTo = subDays(currentRange.from, 1);
+  const previousPeriodFrom = subDays(previousPeriodTo, duration);
+
+  return { from: previousPeriodFrom, to: previousPeriodTo };
+};
 
 
 export default function DashboardPage() {
+  const { user, isLoadingAuth, userPreferences } = useAuthContext();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactions, setAllTransactions] = useState<Transaction[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [preferredCurrency, setPreferredCurrency] = useState('BRL'); // Default
+  
+  const preferredCurrency = useMemo(() => userPreferences?.preferredCurrency || 'BRL', [userPreferences]);
   const { toast } = useToast();
   const { selectedDateRange } = useDateRange();
 
   const fetchData = useCallback(async () => {
-    if (typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
     try {
-      const prefs = await getUserPreferences();
-      setPreferredCurrency(prefs.preferredCurrency);
-
-      const fetchedAccounts = await getAccounts();
+      const [fetchedAccounts, fetchedCategories, fetchedSubscriptions] = await Promise.all([
+        getAccounts(),
+        getCategories(),
+        getSubscriptions(),
+      ]);
       setAccounts(fetchedAccounts);
-
-      const fetchedCategories = await getCategories();
       setCategories(fetchedCategories);
-
+      setSubscriptions(fetchedSubscriptions);
+      
       if (fetchedAccounts.length > 0) {
         const transactionPromises = fetchedAccounts.map(acc => getTransactions(acc.id));
         const transactionsByAccount = await Promise.all(transactionPromises);
         const combinedTransactions = transactionsByAccount.flat();
-        setAllTransactions(combinedTransactions);
+        setAllTransactions(combinedTransactions.sort((a,b) => parseISO(b.date).getTime() - parseISO(a.date).getTime()));
       } else {
         setAllTransactions([]);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Failed to fetch dashboard data:", error);
-      toast({ title: "Error", description: "Failed to load dashboard data.", variant: "destructive" });
+      toast({ title: "Error", description: "Failed to load dashboard data. " + error.message, variant: "destructive" });
     } finally {
       setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user, isLoadingAuth]);
 
 
   useEffect(() => {
-    fetchData();
+    if (user && !isLoadingAuth && userPreferences) { 
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccounts([]);
+        setAllTransactions([]);
+        setCategories([]);
+        setSubscriptions([]);
+    }
+
     const handleStorageChange = (event: StorageEvent) => {
-        if (typeof window !== 'undefined' && event.type === 'storage') {
+        if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth && userPreferences) {
             const isLikelyOurCustomEvent = event.key === null;
-            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-', 'userSubscriptions'];
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
-                console.log("Storage changed on main dashboard, refetching data...");
                 fetchData();
             }
         }
@@ -88,156 +112,83 @@ export default function DashboardPage() {
     if (typeof window !== 'undefined') {
         window.addEventListener('storage', handleStorageChange);
     }
-
     return () => {
         if (typeof window !== 'undefined') {
             window.removeEventListener('storage', handleStorageChange);
         }
     };
-  }, [fetchData]);
-
-  const totalNetWorth = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return 0;
-    return accounts
-        .filter(acc => acc.includeInNetWorth !== false) 
-        .reduce((sum, account) => {
-            return sum + convertCurrency(account.balance, account.currency, preferredCurrency);
-        }, 0);
-  }, [accounts, preferredCurrency, isLoading]);
-
+  }, [fetchData, user, isLoadingAuth, userPreferences]);
 
   const periodTransactions = useMemo(() => {
-    if (isLoading) return [];
+    if (isLoading || !user) return [];
     return allTransactions.filter(tx => {
       const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-      if (!selectedDateRange.from || !selectedDateRange.to) return true;
+      if (!selectedDateRange.from || !selectedDateRange.to) return true; 
       return isWithinInterval(txDate, { start: selectedDateRange.from, end: selectedDateRange.to });
     });
-  }, [allTransactions, isLoading, selectedDateRange]);
+  }, [allTransactions, isLoading, selectedDateRange, user]);
+  
 
+  const expensesBreakdownData = useMemo(() => {
+    if (isLoading || !periodTransactions.length || !categories.length) return [];
 
-  const monthlyIncome = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return 0;
-    return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { 
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
-          return sum + convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
-        }
-      }
-      return sum;
-    }, 0);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
-
-  const monthlyExpenses = useMemo(() => {
-    if (isLoading || typeof window === 'undefined') return 0;
-    return periodTransactions.reduce((sum, tx) => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { 
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
-          return sum + convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
-        }
-      }
-      return sum;
-    }, 0);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
-
-
-  const spendingsBreakdownDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !categories.length || !periodTransactions.length) return [];
-    const expenseCategoryTotals: { [key: string]: number } = {};
-
+    const categoryTotalsCurrentPeriod: { [key: string]: number } = {};
     periodTransactions.forEach(tx => {
-      if (tx.amount < 0 && tx.category !== 'Transfer') { 
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
-          const categoryName = tx.category || 'Uncategorized';
-          const convertedAmount = convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
-          expenseCategoryTotals[categoryName] = (expenseCategoryTotals[categoryName] || 0) + convertedAmount;
-        }
+      if (tx.amount < 0 && tx.category !== 'Transfer') {
+        const categoryName = categories.find(c => c.name === tx.category)?.name || 'Others';
+        categoryTotalsCurrentPeriod[categoryName] = (categoryTotalsCurrentPeriod[categoryName] || 0) + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency));
       }
     });
 
-    return Object.entries(expenseCategoryTotals)
-      .map(([name, amount]) => {
-        const { icon: CategoryIcon, color } = getCategoryStyle(name);
+    const previousPeriodDateRange = getPreviousPeriod(selectedDateRange);
+    let categoryTotalsPreviousPeriod: { [key: string]: number } = {};
 
-        const categoryStyle = getCategoryStyle(name);
-        const bgColor = categoryStyle.color.split(' ').find(cls => cls.startsWith('bg-')) || 'bg-gray-500 dark:bg-gray-700';
+    if (previousPeriodDateRange && previousPeriodDateRange.from && previousPeriodDateRange.to) {
+      const previousPeriodTxs = allTransactions.filter(tx => {
+        const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
+        return isWithinInterval(txDate, { start: previousPeriodDateRange.from!, end: previousPeriodDateRange.to! });
+      });
+
+      previousPeriodTxs.forEach(tx => {
+        if (tx.amount < 0 && tx.category !== 'Transfer') {
+          const categoryName = categories.find(c => c.name === tx.category)?.name || 'Others';
+          categoryTotalsPreviousPeriod[categoryName] = (categoryTotalsPreviousPeriod[categoryName] || 0) + Math.abs(convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency));
+        }
+      });
+    }
+
+    return Object.entries(categoryTotalsCurrentPeriod)
+      .map(([categoryName, currentAmount]) => {
+        const previousAmount = categoryTotalsPreviousPeriod[categoryName] || 0;
+        let trendPercentage: number | undefined = undefined;
+        let trendDirection: 'up' | 'down' | 'neutral' = 'neutral';
+
+        if (previousPeriodDateRange) { // Only calculate trend if there's a previous period
+          if (previousAmount > 0) {
+            trendPercentage = ((currentAmount - previousAmount) / previousAmount) * 100;
+            if (trendPercentage > 1) trendDirection = 'up'; // Spending increased
+            else if (trendPercentage < -1) trendDirection = 'down'; // Spending decreased
+          } else if (currentAmount > 0) {
+            trendPercentage = 100; // Went from 0 to some spending
+            trendDirection = 'up';
+          } else {
+            trendPercentage = 0; // Both 0
+            trendDirection = 'neutral';
+          }
+        }
 
         return {
-          name: name.charAt(0).toUpperCase() + name.slice(1),
-          amount,
-          icon: <CategoryIcon />,
-          bgColor: bgColor,
+          name: categoryName,
+          amount: currentAmount,
+          categoryDetails: categories.find(c => c.name === categoryName),
+          trendPercentage: trendPercentage,
+          trendDirection: trendDirection,
         };
       })
       .sort((a, b) => b.amount - a.amount)
-      .slice(0, 3);
-  }, [periodTransactions, accounts, categories, preferredCurrency, isLoading]);
+      .slice(0, 5);
+  }, [periodTransactions, allTransactions, categories, preferredCurrency, isLoading, selectedDateRange]);
 
-  const incomeSourceDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !periodTransactions.length) return [];
-    const incomeCategoryTotals: { [key: string]: number } = {};
-    const chartColors = ["hsl(var(--chart-1))", "hsl(var(--chart-2))", "hsl(var(--chart-3))", "hsl(var(--chart-4))", "hsl(var(--chart-5))"];
-    let colorIndex = 0;
-
-    periodTransactions.forEach(tx => {
-      if (tx.amount > 0 && tx.category !== 'Transfer') { 
-        const account = accounts.find(acc => acc.id === tx.accountId);
-        if (account && account.includeInNetWorth !== false) { 
-          const categoryName = tx.category || 'Uncategorized Income';
-          const convertedAmount = convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
-          incomeCategoryTotals[categoryName] = (incomeCategoryTotals[categoryName] || 0) + convertedAmount;
-        }
-      }
-    });
-
-    return Object.entries(incomeCategoryTotals)
-      .map(([source, amount]) => ({
-        source: source.charAt(0).toUpperCase() + source.slice(1),
-        amount,
-        fill: chartColors[colorIndex++ % chartColors.length],
-      }))
-      .sort((a, b) => b.amount - a.amount);
-  }, [periodTransactions, accounts, preferredCurrency, isLoading]);
-
-
-  const monthlyIncomeExpensesDataActual = useMemo(() => {
-    if (isLoading || typeof window === 'undefined' || !allTransactions.length) return [];
-
-    const monthlyData: { [month: string]: { income: number; expenses: number } } = {};
-
-    const today = new Date();
-    const last12MonthsKeys: string[] = [];
-    for (let i = 11; i >= 0; i--) {
-        const targetMonthDate = new Date(today.getFullYear(), today.getMonth() - i, 1);
-        const monthKey = formatDateFns(targetMonthDate, 'MMM');
-        monthlyData[monthKey] = { income: 0, expenses: 0 };
-        last12MonthsKeys.push(monthKey);
-    }
-
-
-    allTransactions.forEach(tx => {
-        const txDate = parseISO(tx.date.includes('T') ? tx.date : tx.date + 'T00:00:00Z');
-        const monthKey = formatDateFns(txDate, 'MMM');
-        const account = accounts.find(acc => acc.id === tx.accountId);
-
-        if (account && monthlyData[monthKey] && tx.category !== 'Transfer' && account.includeInNetWorth !== false) { 
-            if (tx.amount > 0) {
-                monthlyData[monthKey].income += convertCurrency(tx.amount, tx.transactionCurrency, preferredCurrency);
-            } else if (tx.amount < 0) {
-                monthlyData[monthKey].expenses += convertCurrency(Math.abs(tx.amount), tx.transactionCurrency, preferredCurrency);
-            }
-        }
-    });
-
-    return last12MonthsKeys.map(monthKey => ({
-        month: monthKey,
-        income: monthlyData[monthKey].income,
-        expenses: monthlyData[monthKey].expenses,
-    }));
-  }, [allTransactions, accounts, preferredCurrency, isLoading]);
 
   const dateRangeLabel = useMemo(() => {
     if (selectedDateRange.from && selectedDateRange.to) {
@@ -250,68 +201,61 @@ export default function DashboardPage() {
   }, [selectedDateRange]);
 
 
-  if (isLoading && typeof window !== 'undefined' && accounts.length === 0) {
+  if (isLoadingAuth || (!userPreferences && user)) { 
     return (
-      <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <div className="xl:col-span-2"><Skeleton className="h-[160px] w-full" /></div>
-          <Skeleton className="h-[160px] w-full" />
-          <Skeleton className="h-[160px] w-full" />
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          <div className="xl:col-span-2"><Skeleton className="h-[300px] w-full" /></div>
-        </div>
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-          <Skeleton className="h-[350px] w-full" />
-          <Skeleton className="h-[350px] w-full" />
+      <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            <div className="lg:col-span-2 space-y-4">
+                <Skeleton className="h-40 w-full" />
+                <Skeleton className="h-60 w-full" />
+                <Skeleton className="h-80 w-full" />
+                <Skeleton className="h-72 w-full" />
+            </div>
+            <div className="lg:col-span-1 space-y-4">
+                <Skeleton className="h-[376px] w-full" />
+                <Skeleton className="h-72 w-full" />
+            </div>
         </div>
       </div>
     );
   }
 
-
   return (
-    <div className="container mx-auto py-6 px-4 md:px-6 lg:px-8 space-y-6 min-h-screen">
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          <TotalNetWorthCard accounts={accounts} preferredCurrency={preferredCurrency} />
-        </div>
-         <SpendingsBreakdown title={`Top Spendings (${dateRangeLabel})`} data={spendingsBreakdownDataActual} currency={preferredCurrency} />
-      </div>
+    <div className="container mx-auto py-4 px-4 md:px-6 lg:px-8 min-h-screen">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+            {/* Left Column */}
+            <div className="lg:col-span-2 space-y-4">
+                <TotalBalanceCard accounts={accounts} preferredCurrency={preferredCurrency} isLoading={isLoading} />
+                <WeeklyComparisonStatsCard preferredCurrency={preferredCurrency} periodTransactions={periodTransactions} isLoading={isLoading} />
+                <RecentTransactionsCard 
+                    transactions={periodTransactions} 
+                    categories={categories}
+                    accounts={accounts}
+                    preferredCurrency={preferredCurrency} 
+                    isLoading={isLoading}
+                />
+                <ExpensesBreakdownCard 
+                    data={expensesBreakdownData} 
+                    currency={preferredCurrency} 
+                    isLoading={isLoading}
+                />
+            </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        <div className="xl:col-span-2">
-          {isLoading || incomeSourceDataActual.length === 0 ? (
-            <Card className="shadow-lg bg-card text-card-foreground h-full">
-                 <CardHeader>
-                    <CardTitle>Income Source ({dateRangeLabel})</CardTitle>
-                  </CardHeader>
-                  <CardContent className="h-[250px] pb-0 flex items-center justify-center">
-                    {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income data for this period.</p>}
-                  </CardContent>
-            </Card>
-          ) : (
-            <IncomeSourceChart data={incomeSourceDataActual} currency={preferredCurrency} />
-          )}
+            {/* Right Column */}
+            <div className="lg:col-span-1 space-y-4">
+                <UpcomingBillsCard 
+                    subscriptions={subscriptions} 
+                    preferredCurrency={preferredCurrency} 
+                    isLoading={isLoading}
+                    accounts={accounts}
+                />
+                <InvestmentsOverviewCard 
+                    accounts={accounts} 
+                    preferredCurrency={preferredCurrency} 
+                    isLoading={isLoading} 
+                />
+            </div>
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-         {isLoading || monthlyIncomeExpensesDataActual.length === 0 ? (
-            <Card className="shadow-lg bg-card text-card-foreground">
-                <CardHeader className="flex flex-row items-start justify-between pb-4">
-                    <div><CardTitle>Income & Expenses (Last 12 Months)</CardTitle></div>
-                </CardHeader>
-                <CardContent className="h-[300px] w-full p-0 flex items-center justify-center">
-                     {isLoading ? <Skeleton className="h-full w-full" /> : <p className="text-muted-foreground">No income/expense data available.</p>}
-                </CardContent>
-            </Card>
-         ) : (
-            <IncomeExpensesChart data={monthlyIncomeExpensesDataActual} currency={getCurrencySymbol(preferredCurrency)} />
-         )}
-        <AssetsChart data={assetsData} currency={getCurrencySymbol(preferredCurrency)} />
-      </div>
     </div>
   );
 }
-

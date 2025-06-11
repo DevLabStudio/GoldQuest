@@ -8,7 +8,6 @@ import {
     SidebarProvider,
     Sidebar,
     SidebarHeader,
-    SidebarTrigger,
     SidebarContent,
     SidebarMenu,
     SidebarMenuItem,
@@ -19,7 +18,7 @@ import {
     SidebarGroupLabel,
 } from '@/components/ui/sidebar';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Upload, Users, LogOut, Network, PieChart, CalendarClock, Archive as ArchiveIcon, SlidersHorizontal } from 'lucide-react';
+import { Landmark, Wallet, ArrowLeftRight, Settings, ChevronDown, TrendingUp, TrendingDown, LayoutList, Users, LogOut, Network, PieChart, Database, SlidersHorizontal, FileText, ArchiveIcon, MapIcon, Bitcoin as BitcoinIcon, Repeat } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { useState, useEffect } from 'react';
@@ -28,7 +27,6 @@ import { DateRangeProvider } from '@/contexts/DateRangeContext';
 import GlobalHeader from './GlobalHeader';
 import { Button } from '@/components/ui/button';
 
-// New GoldQuest Logo
 const LogoIcon = () => (
   <svg
     width="24"
@@ -38,27 +36,15 @@ const LogoIcon = () => (
     xmlns="http://www.w3.org/2000/svg"
     className="mr-2 text-primary"
   >
-    {/* Thin grid lines */}
-    <path d="M25 43.3013L50 28.8675L75 43.3013" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 56.6987L50 71.1325L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M50 28.8675L50 71.1325" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 43.3013L25 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M75 43.3013L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 43.3013L50 56.6987L75 43.3013" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-    <path d="M25 56.6987L50 43.3013L75 56.6987" stroke="currentColor" strokeWidth="1" opacity="0.5"/>
-
-    {/* Thick "G" shape lines */}
-    <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="currentColor" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
-
-    {/* Circles at vertices */}
-    <circle cx="75" cy="25" r="5" fill="currentColor"/>
-    <circle cx="50" cy="10" r="5" fill="currentColor"/>
-    <circle cx="25" cy="25" r="5" fill="currentColor"/>
-    <circle cx="25" cy="75" r="5" fill="currentColor"/>
-    <circle cx="50" cy="90" r="5" fill="currentColor"/>
-    <circle cx="75" cy="75" r="5" fill="currentColor"/>
-    <circle cx="75" cy="50" r="5" fill="currentColor"/> {/* Added this circle */}
-    <circle cx="50" cy="50" r="5" fill="currentColor"/>
+    <path d="M75 25 L50 10 L25 25 L25 75 L50 90 L75 75 L75 50 L50 50" stroke="hsl(var(--primary))" strokeWidth="8" strokeLinecap="round" strokeLinejoin="round"/>
+    <circle cx="75" cy="25" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="50" cy="10" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="25" cy="25" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="25" cy="75" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="50" cy="90" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="75" cy="75" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="75" cy="50" r="5" fill="hsl(var(--primary))"/>
+    <circle cx="50" cy="50" r="5" fill="hsl(var(--primary))"/>
   </svg>
 );
 
@@ -69,23 +55,30 @@ interface AuthWrapperProps {
 
 export default function AuthWrapper({ children }: AuthWrapperProps) {
   const { isAuthenticated, user, signOut, isLoadingAuth, isFirebaseActive, theme, userPreferences, firebaseError } = useAuthContext();
+
+  console.log("AuthWrapper State:");
+  console.log("  isAuthenticated:", isAuthenticated);
+  console.log("  isLoadingAuth:", isLoadingAuth);
+  console.log("  isFirebaseActive:", isFirebaseActive);
+  console.log("  firebaseError:", firebaseError);
+
   const router = useRouter();
   const pathname = usePathname();
   const [isTransactionsOpen, setIsTransactionsOpen] = useState(false);
   const [isFinancialControlOpen, setIsFinancialControlOpen] = useState(false);
+  const [isInvestmentsOpen, setIsInvestmentsOpen] = useState(false);
   const [isClient, setIsClient] = useState(false);
   const [loadingDivClassName, setLoadingDivClassName] = useState("flex items-center justify-center min-h-screen");
 
 
   useEffect(() => {
     setIsClient(true);
-    // Set class name after mount to ensure styles are applied correctly
     setLoadingDivClassName("flex items-center justify-center min-h-screen bg-background text-foreground");
   }, []);
-  
+
   useEffect(() => {
       const applyTheme = () => {
-          if (!isClient) return; // Only run on client
+          if (!isClient) return;
           const root = document.documentElement;
           let currentTheme = theme;
 
@@ -94,14 +87,15 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
               currentTheme = systemPrefersDark ? 'dark' : 'light';
           }
 
-          root.classList.remove('dark', 'light');
-          root.classList.add(currentTheme);
-          root.style.colorScheme = currentTheme; // Important for native elements
+          root.classList.remove('dark', 'light', 'goldquest-theme');
+          if (currentTheme) {
+            root.classList.add(currentTheme);
+          }
+          root.style.colorScheme = (currentTheme === 'goldquest-theme' || currentTheme === 'dark') ? 'dark' : 'light';
       };
 
-      applyTheme(); 
+      applyTheme();
 
-      // Listen for system theme changes if 'system' is selected
       if (theme === 'system' && typeof window !== 'undefined') {
           const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
           const handleChange = () => applyTheme();
@@ -113,8 +107,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
 
   useEffect(() => {
     if (isClient) {
-        setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+        setIsTransactionsOpen(pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers') || pathname.startsWith('/transactions/swaps'));
         setIsFinancialControlOpen(pathname.startsWith('/financial-control'));
+        setIsInvestmentsOpen(pathname.startsWith('/investments/'));
     }
   }, [pathname, isClient]);
 
@@ -125,14 +120,12 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     }
 
     const firstLoginFlagKey = `hasLoggedInBefore-${user.uid}`;
-    
+
     if(typeof window !== 'undefined') {
         const hasLoggedInBefore = localStorage.getItem(firstLoginFlagKey);
-        // Check if preferences are loaded and specifically if the theme is set.
-        // This implies preferences have been fetched at least once.
         const preferencesLoadedAndThemeSet = userPreferences && userPreferences.theme;
 
-        if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences') {
+        if (!hasLoggedInBefore && !preferencesLoadedAndThemeSet && pathname !== '/preferences' && pathname !== '/welcome') {
           localStorage.setItem(firstLoginFlagKey, 'true');
           router.push('/preferences');
         }
@@ -141,12 +134,13 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
   }, [user, isLoadingAuth, router, pathname, isClient, isFirebaseActive, userPreferences]);
 
 
-
   const isActive = (path: string) => isClient && pathname === path;
-  const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers'));
+  const isAnyTransactionRouteActive = isClient && (pathname.startsWith('/transactions') || pathname.startsWith('/revenue') || pathname.startsWith('/expenses') || pathname.startsWith('/transfers') || pathname.startsWith('/transactions/swaps'));
   const isAnyFinancialControlRouteActive = isClient && pathname === '/financial-control';
+  const isAnyInvestmentsRouteActive = isClient && pathname.startsWith('/investments/');
   const isOrganizationActive = isClient && (pathname === '/organization' || pathname.startsWith('/categories/') || pathname.startsWith('/tags/') || pathname.startsWith('/groups/'));
   const isAccountsActive = isClient && (pathname === '/accounts' || pathname.startsWith('/accounts/'));
+  const isDataManagementActive = isClient && pathname === '/data-management';
 
 
   if (!isClient || isLoadingAuth) {
@@ -154,37 +148,37 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
       <div className={loadingDivClassName}>Loading authentication...</div>
     );
   }
-  
+
   if (firebaseError && !isFirebaseActive) {
-     if (pathname !== '/login' && pathname !== '/signup') {
-         router.push('/login'); // Redirect to login if firebase is critically broken and not on auth pages
+     if (pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome') {
+         router.push('/login');
          return <div className={loadingDivClassName}>Firebase not available. Redirecting...</div>;
      }
-     // Allow login/signup pages to render with the firebase error message handled within them
   }
 
 
   if (!isAuthenticated && isFirebaseActive) {
-    if (pathname !== '/signup' && pathname !== '/login') {
+    if (pathname !== '/signup' && pathname !== '/login' && pathname !== '/welcome') {
         return <LoginPage />;
     }
     return <>{children}</>;
   }
 
-  if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup') {
+  if(!isFirebaseActive && pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome') {
     router.push('/login');
     return <div className={loadingDivClassName}>Redirecting to login...</div>;
   }
 
-  if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup'))) {
-     // If firebase is inactive but we are on login/signup, allow those pages to render
-     if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup')) {
+  if (isAuthenticated || (!isFirebaseActive && (pathname === '/login' || pathname === '/signup' || pathname === '/welcome'))) {
+     if (!isAuthenticated && (pathname !== '/login' && pathname !== '/signup' && pathname !== '/welcome')) {
          return <LoginPage />;
      }
-      if (pathname === '/login' || pathname === '/signup') {
+      if (pathname === '/login' || pathname === '/signup' || pathname === '/welcome') {
         return <>{children}</>;
       }
 
+    console.log("Rendering main layout. isAuthenticated:", isAuthenticated);
+    console.log("Children type:", typeof children);
     return (
         <DateRangeProvider>
         <SidebarProvider>
@@ -194,7 +188,6 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                 <LogoIcon />
                 <span className="text-lg font-semibold text-primary">GoldQuest</span>
                 </div>
-                <SidebarTrigger className="md:hidden" />
             </SidebarHeader>
             <SidebarContent>
                 <SidebarMenu>
@@ -210,7 +203,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                 </SidebarGroup>
 
                 <SidebarGroup>
-                     <SidebarMenuItem>
+                    <SidebarMenuItem>
                         <Link href="/financial-control" passHref>
                             <SidebarMenuButton tooltip="Financial Control" isActive={isAnyFinancialControlRouteActive}>
                                 <SlidersHorizontal />
@@ -218,6 +211,9 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
+                 </SidebarGroup>
+
+                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/accounts" passHref>
                         <SidebarMenuButton tooltip="Manage Accounts" isActive={isAccountsActive}>
@@ -234,7 +230,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                             isActive={isAnyTransactionRouteActive}
                         >
                             <div className="flex items-center gap-2">
-                            <ArrowLeftRight />
+                            <FileText />
                             <span>Transactions</span>
                             </div>
                             <ChevronDown
@@ -279,19 +275,60 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                                  </SidebarMenuButton>
                              </Link>
                          </SidebarMenuItem>
+                         <SidebarMenuItem className="ml-4">
+                             <Link href="/transactions/swaps" passHref>
+                                 <SidebarMenuButton tooltip="View Swaps" size="sm" isActive={isActive('/transactions/swaps')}>
+                                     <Repeat />
+                                     <span>Swaps</span>
+                                 </SidebarMenuButton>
+                             </Link>
+                         </SidebarMenuItem>
                         </>
                     )}
                     </SidebarGroup>
+
                     <SidebarGroup>
                         <SidebarMenuItem>
-                            <Link href="/investments" passHref>
-                                <SidebarMenuButton tooltip="Manage Investments" isActive={isActive('/investments')}>
-                                    <Wallet />
-                                    <span>Investments</span>
-                                </SidebarMenuButton>
-                            </Link>
+                            <SidebarMenuButton
+                                tooltip="Investments"
+                                onClick={() => setIsInvestmentsOpen(!isInvestmentsOpen)}
+                                className="justify-between"
+                                isActive={isAnyInvestmentsRouteActive}
+                            >
+                                <div className="flex items-center gap-2">
+                                <Wallet />
+                                <span>Investments</span>
+                                </div>
+                                <ChevronDown
+                                    className={cn(
+                                        "h-4 w-4 transition-transform duration-200",
+                                        isInvestmentsOpen && "rotate-180"
+                                    )}
+                                />
+                            </SidebarMenuButton>
                         </SidebarMenuItem>
+                        {isInvestmentsOpen && (
+                            <>
+                                <SidebarMenuItem className="ml-4">
+                                <Link href="/investments/traditional" passHref>
+                                    <SidebarMenuButton tooltip="Traditional Finances" size="sm" isActive={isActive('/investments/traditional')}>
+                                        <Landmark />
+                                        <span>Traditional</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                            </SidebarMenuItem>
+                            <SidebarMenuItem className="ml-4">
+                                <Link href="/investments/defi" passHref>
+                                    <SidebarMenuButton tooltip="Decentralized Finances" size="sm" isActive={isActive('/investments/defi')}>
+                                        <BitcoinIcon />
+                                        <span>DeFi</span>
+                                    </SidebarMenuButton>
+                                </Link>
+                             </SidebarMenuItem>
+                            </>
+                        )}
                     </SidebarGroup>
+
                 <SidebarGroup>
                      <SidebarMenuItem>
                         <Link href="/organization" passHref>
@@ -302,6 +339,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                 </SidebarGroup>
+
                 <SidebarGroup>
                     <SidebarGroupLabel>Settings</SidebarGroupLabel>
                     <SidebarMenuItem>
@@ -313,10 +351,10 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
                         </Link>
                     </SidebarMenuItem>
                     <SidebarMenuItem>
-                        <Link href="/import" passHref>
-                        <SidebarMenuButton tooltip="Import Data" isActive={isActive('/import')}>
-                            <Upload />
-                            <span>Import Data</span>
+                        <Link href="/data-management" passHref>
+                        <SidebarMenuButton tooltip="Data Management" isActive={isDataManagementActive}>
+                            <Database />
+                            <span>Data Management</span>
                         </SidebarMenuButton>
                         </Link>
                     </SidebarMenuItem>
@@ -326,7 +364,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <SidebarFooter className="p-2 border-t border-sidebar-border">
                 <div className="flex items-center gap-3 p-2">
                 <Avatar className="h-9 w-9">
-                    <AvatarImage src={user?.photoURL || "https://picsum.photos/seed/useravatar/40/40"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
+                    <AvatarImage src={user?.photoURL || "https://placehold.co/40x40.png"} alt={user?.displayName || user?.email || "User"} data-ai-hint="user avatar" />
                     <AvatarFallback>{user?.email ? user.email.substring(0, 2).toUpperCase() : 'U'}</AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
@@ -350,8 +388,33 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
     );
   }
 
-  // Fallback for any unhandled state, though ideally one of the above conditions should always be met.
-  return <div className={loadingDivClassName}>Preparing application...</div>;
+  // Fallback for unauthenticated users on public routes (already handled), or if Firebase isn't active on those routes.
+  // For other unhandled cases, this simple layout is a fallback.
+  return (
+      <html lang="en" className={cn(oxanium.variable, theme === 'dark' ? 'dark' : theme === 'goldquest-theme' ? 'goldquest-theme' : '')} suppressHydrationWarning>
+          <head>
+              <meta charSet="utf-8" />
+              <meta name="viewport" content="width=device-width, initial-scale=1" />
+              <title>GoldQuest</title>
+              <meta name="description" content="Embark on your GoldQuest to master personal finances, track investments, and achieve your financial goals." />
+          </head>
+          <body
+          className={cn(
+              'font-sans antialiased',
+              'min-h-screen flex flex-col'
+            )}
+            suppressHydrationWarning
+          >
+             {/* Only render children if it's a public route that doesn't need AuthWrapper's full layout */}
+            {(pathname === '/login' || pathname === '/signup' || pathname === '/welcome') && children}
+
+            {/* Fallback for when firebase isn't active and user tries to access a non-public route (should ideally be caught by earlier redirect) */}
+            {!isFirebaseActive && !(pathname === '/login' || pathname === '/signup' || pathname === '/welcome') && (
+                 <div className="flex items-center justify-center min-h-screen">
+                    <p>Service temporarily unavailable. Please try again later.</p>
+                </div>
+            )}
+          </body>
+    </html>
+  );
 }
-
-

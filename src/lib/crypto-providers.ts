@@ -1,48 +1,104 @@
 
-/**
- * Lists of popular cryptocurrency exchanges and self-custody wallets, now with icon placeholders.
- * These lists are not exhaustive and can be expanded.
- */
+'use client';
+
+import React from 'react';
+import type { ReactNode } from 'react';
+import { WalletCards } from 'lucide-react'; // Generic icon
+// Only import icons we are confident about for now, or fall back to generic
+// For crypto, we are now trying to fetch logos via API for selected providers
+// and using WalletCards as a general fallback.
+
+const defaultIconSize = 20;
+
+const DefaultCryptoIcon = () => {
+  return React.createElement(WalletCards, {
+    size: defaultIconSize,
+    className: "text-muted-foreground",
+  });
+};
 
 export interface CryptoProviderInfo {
   name: string;
-  iconUrl: string;
-  dataAiHint: string;
+  type: 'exchange' | 'wallet';
+  iconComponent: ReactNode;
+  coingeckoExchangeId?: string; // For fetching exchange logos
+  dataAiHint?: string;
 }
 
-export const popularExchanges: CryptoProviderInfo[] = [
-    { name: "Binance", iconUrl: "https://picsum.photos/seed/binance/40/40", dataAiHint: "Binance logo" },
-    { name: "Coinbase", iconUrl: "https://picsum.photos/seed/coinbaseexchange/40/40", dataAiHint: "Coinbase logo" },
-    { name: "Kraken", iconUrl: "https://picsum.photos/seed/kraken/40/40", dataAiHint: "Kraken logo" },
-    { name: "Bybit", iconUrl: "https://picsum.photos/seed/bybit/40/40", dataAiHint: "Bybit logo" },
-    { name: "OKX", iconUrl: "https://picsum.photos/seed/okx/40/40", dataAiHint: "OKX logo" },
-    { name: "KuCoin", iconUrl: "https://picsum.photos/seed/kucoin/40/40", dataAiHint: "KuCoin logo" },
-    { name: "Bitstamp", iconUrl: "https://picsum.photos/seed/bitstamp/40/40", dataAiHint: "Bitstamp logo" },
-    { name: "Gate.io", iconUrl: "https://picsum.photos/seed/gateio/40/40", dataAiHint: "Gateio logo" },
-    { name: "Huobi (HTX)", iconUrl: "https://picsum.photos/seed/huobi/40/40", dataAiHint: "Huobi logo" },
-    { name: "Bitfinex", iconUrl: "https://picsum.photos/seed/bitfinex/40/40", dataAiHint: "Bitfinex logo" },
+// This map is less critical now as we try to fetch logos for specific exchanges
+// and use dynamic components or fallbacks for others.
+const specificCryptoIconDetails: {
+  [key: string]: { type: 'exchange' | 'wallet'; nameProp: string; color?: string, coingeckoExchangeId?: string };
+} = {
+  "Binance": { type: "exchange", nameProp: "binance", color: "#F0B90B", coingeckoExchangeId: "binance" },
+  "Coinbase": { type: "exchange", nameProp: "coinbase", color: "#0052FF", coingeckoExchangeId: "coinbase_exchange" }, // Or just "coinbase" if it's for the general brand
+  "Kraken": { type: "exchange", nameProp: "kraken", color: "#5842C1" },
+  "MetaMask": { type: "wallet", nameProp: "metamask", color: "#E2761B" },
+  "Ledger": { type: "wallet", nameProp: "ledger" }, // Color can be default
+  "Trust Wallet": { type: "wallet", nameProp: "trustwallet", color: "#3375BB" },
+};
+
+// This function will primarily serve as a fallback mechanism now.
+// The forms will attempt to fetch live logos for Binance/Coinbase.
+const createSpecificIcon = (
+  providerOfficialName: string,
+  _providerType: 'exchange' | 'wallet'
+): ReactNode => {
+  // For now, always return the default icon.
+  // The logo fetching will happen in the forms for Binance/Coinbase.
+  // Other icons would require a similar API or a robust library.
+  return React.createElement(DefaultCryptoIcon);
+};
+
+
+const popularExchangesRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
+  { name: "Binance", type: "exchange", dataAiHint: "Binance logo", coingeckoExchangeId: "binance" },
+  { name: "Coinbase", type: "exchange", dataAiHint: "Coinbase logo", coingeckoExchangeId: "coinbase_exchange" }, // Note: CoinGecko has "coinbase_exchange"
+  { name: "Kraken", type: "exchange", dataAiHint: "Kraken logo", coingeckoExchangeId: "kraken" },
+  { name: "OKX", type: "exchange", dataAiHint: "OKX logo", coingeckoExchangeId: "okex" }, // okex is the id for OKX
+  { name: "KuCoin", type: "exchange", dataAiHint: "KuCoin logo", coingeckoExchangeId: "kucoin" },
+  { name: "Bitstamp", type: "exchange", dataAiHint: "Bitstamp logo", coingeckoExchangeId: "bitstamp" },
+  { name: "Gate.io", type: "exchange", dataAiHint: "Gate.io logo", coingeckoExchangeId: "gate" }, // gate is id for Gate.io
+  { name: "Huobi (HTX)", type: "exchange", dataAiHint: "Huobi logo", coingeckoExchangeId: "huobi" },
+  { name: "Bitfinex", type: "exchange", dataAiHint: "Bitfinex logo", coingeckoExchangeId: "bitfinex" },
 ];
 
-export const popularWallets: CryptoProviderInfo[] = [
-    // Hardware Wallets
-    { name: "Ledger Nano S/X/Stax", iconUrl: "https://picsum.photos/seed/ledger/40/40", dataAiHint: "Ledger logo" },
-    { name: "Trezor Model One/T", iconUrl: "https://picsum.photos/seed/trezor/40/40", dataAiHint: "Trezor logo" },
-    // Software/Mobile Wallets
-    { name: "MetaMask", iconUrl: "https://picsum.photos/seed/metamask/40/40", dataAiHint: "MetaMask logo" },
-    { name: "Trust Wallet", iconUrl: "https://picsum.photos/seed/trustwallet/40/40", dataAiHint: "Trust Wallet" },
-    { name: "Exodus", iconUrl: "https://picsum.photos/seed/exodus/40/40", dataAiHint: "Exodus logo" },
-    { name: "Electrum", iconUrl: "https://picsum.photos/seed/electrum/40/40", dataAiHint: "Electrum logo" },
-    { name: "MyEtherWallet (MEW)", iconUrl: "https://picsum.photos/seed/mew/40/40", dataAiHint: "MEW logo" },
-    { name: "Phantom (Solana)", iconUrl: "https://picsum.photos/seed/phantom/40/40", dataAiHint: "Phantom Wallet" },
-    { name: "Coinbase Wallet", iconUrl: "https://picsum.photos/seed/coinbasewallet/40/40", dataAiHint: "Coinbase Wallet" },
-    { name: "Atomic Wallet", iconUrl: "https://picsum.photos/seed/atomicwallet/40/40", dataAiHint: "Atomic Wallet" },
-    { name: "BlueWallet (Bitcoin)", iconUrl: "https://picsum.photos/seed/bluewallet/40/40", dataAiHint: "BlueWallet logo" },
+const popularWalletsRaw: Array<Omit<CryptoProviderInfo, 'iconComponent'>> = [
+  { name: "Ledger Nano S/X/Stax", type: "wallet", dataAiHint: "Ledger wallet" },
+  { name: "Trezor Model One/T", type: "wallet", dataAiHint: "Trezor wallet" },
+  { name: "MetaMask", type: "wallet", dataAiHint: "MetaMask fox" },
+  { name: "Trust Wallet", type: "wallet", dataAiHint: "Trust Wallet shield" },
+  { name: "Exodus", type: "wallet", dataAiHint: "Exodus logo" },
+  { name: "Phantom (Solana)", type: "wallet", dataAiHint: "Phantom ghost" },
+  { name: "Coinbase Wallet", type: "wallet", dataAiHint: "Coinbase Wallet logo" }, // This is distinct from Coinbase Exchange
 ];
 
-// Combine and sort for potential unified dropdowns or filtering
-export const allCryptoProviders: CryptoProviderInfo[] = [...new Set([...popularExchanges, ...popularWallets])].sort(
-    (a, b) => a.name.localeCompare(b.name)
-);
+export const popularExchanges: CryptoProviderInfo[] = popularExchangesRaw.map(provider => ({
+    ...provider,
+    iconComponent: createSpecificIcon(provider.name, provider.type),
+}));
 
-popularExchanges.sort((a, b) => a.name.localeCompare(b.name));
-popularWallets.sort((a, b) => a.name.localeCompare(b.name));
+export const popularWallets: CryptoProviderInfo[] = popularWalletsRaw.map(provider => ({
+    ...provider,
+    iconComponent: createSpecificIcon(provider.name, provider.type),
+}));
+
+const allProvidersRaw = [
+    ...popularExchangesRaw,
+    ...popularWalletsRaw
+];
+
+const uniqueProviderNames = new Set<string>();
+export const allCryptoProviders: CryptoProviderInfo[] = allProvidersRaw
+  .map(provider => ({
+    ...provider,
+    iconComponent: createSpecificIcon(provider.name, provider.type),
+  }))
+  .filter(provider => {
+    if (uniqueProviderNames.has(provider.name)) {
+      return false;
+    }
+    uniqueProviderNames.add(provider.name);
+    return true;
+  })
+  .sort((a, b) => a.name.localeCompare(b.name));

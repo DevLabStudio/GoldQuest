@@ -110,7 +110,7 @@ export default function ExpensesPage() {
         if (typeof window !== 'undefined' && event.type === 'storage') {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key && event.key.includes(k));
 
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
@@ -177,7 +177,6 @@ export default function ExpensesPage() {
                 description: `Transaction "${transactionToUpdate.description}" updated.`,
             });
             window.dispatchEvent(new Event('storage'));
-            // fetchData(); // Let storage event handle refetching
         } catch (err: any) {
             console.error("Failed to update transaction:", err);
             toast({
@@ -205,7 +204,6 @@ export default function ExpensesPage() {
                description: `Transaction "${selectedTransaction.description}" removed.`,
            });
            window.dispatchEvent(new Event('storage'));
-           // fetchData(); // Let storage event handle refetching
        } catch (err: any) {
            console.error("Failed to delete transaction:", err);
            toast({
@@ -226,16 +224,14 @@ export default function ExpensesPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let storage event handle refetching
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
       toast({ title: "Error", description: `Could not add transaction: ${error.message}`, variant: "destructive" });
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[], transactionCurrency: string }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string; date: Date; description?: string; tags?: string[];}) => {
     try {
-      const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown Account';
       const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown Account';
@@ -243,7 +239,7 @@ export default function ExpensesPage() {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -transferAmount,
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -253,8 +249,8 @@ export default function ExpensesPage() {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: transferAmount,
-        transactionCurrency: data.transactionCurrency,
+        amount: Math.abs(data.toAccountAmount),
+        transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -265,7 +261,6 @@ export default function ExpensesPage() {
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let storage event handle refetching
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -552,6 +547,7 @@ export default function ExpensesPage() {
                         categories={allCategories}
                         tags={allTags}
                         onTransactionAdded={handleUpdateTransaction}
+                        onTransferAdded={handleTransferAdded}
                         isLoading={isLoading}
                         initialData={{
                             ...selectedTransaction,
@@ -611,5 +607,6 @@ export default function ExpensesPage() {
     </div>
   );
 }
+
 
 

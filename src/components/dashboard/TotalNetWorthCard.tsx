@@ -1,6 +1,10 @@
 
 'use client';
 
+// This file might be obsolete if TotalBalanceCard.tsx replaces its functionality.
+// For now, renaming the component used in page.tsx and keeping this file.
+// If TotalBalanceCard.tsx is the final one, this can be deleted.
+
 import type { FC } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -31,7 +35,7 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
   const formattedNetWorth = formatCurrency(netWorth, preferredCurrency, preferredCurrency, false);
 
   const handleAccountItemClick = (accountId: string, e: React.MouseEvent | React.KeyboardEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent Link's default navigation if we want to handle it differently or if inside another clickable
     router.push(`/accounts/${accountId}`);
   };
 
@@ -45,9 +49,10 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
           <CardContent className="pt-2 flex-grow flex flex-col">
             <div className="text-4xl font-bold mb-3">{formattedNetWorth}</div>
             {includedAccounts.length > 0 ? (
-              <ScrollArea className="flex-grow h-32">
+              <ScrollArea className="flex-grow h-32"> {/* Ensure ScrollArea has a defined height or flex-grow */}
                 <div className="space-y-1 pr-3">
                   {includedAccounts.map(account => {
+                    // Find the primary balance or the first one if primary is not set/found
                     const primaryBalanceEntry = account.balances && account.balances.length > 0
                       ? account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0]
                       : null;
@@ -58,14 +63,14 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
                       <div
                         key={account.id}
                         className="text-xs flex justify-between items-center py-0.5 hover:bg-primary-foreground/10 rounded px-1 transition-colors cursor-pointer"
-                        onClick={(e) => handleAccountItemClick(account.id, e)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' || e.key === ' ') {
-                            handleAccountItemClick(account.id, e);
-                          }
-                        }}
-                        role="link"
-                        tabIndex={0}
+                        // onClick={(e) => handleAccountItemClick(account.id, e)} // The outer Link handles navigation
+                        // onKeyDown={(e) => {
+                        //   if (e.key === 'Enter' || e.key === ' ') {
+                        //     handleAccountItemClick(account.id, e);
+                        //   }
+                        // }}
+                        // role="link" // Outer link handles this
+                        tabIndex={-1} // Not individually focusable if outer link is focusable
                       >
                         <span className="truncate max-w-[60%]">{account.name}</span>
                         <div className="text-right">
@@ -94,5 +99,3 @@ const TotalNetWorthCard: FC<TotalNetWorthCardProps> = ({ accounts, preferredCurr
 };
 
 export default TotalNetWorthCard;
-
-    

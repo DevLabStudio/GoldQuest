@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -6,7 +7,6 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,6 +14,8 @@ import { popularBanks, type BankInfo } from '@/lib/banks';
 import { allCryptoProviders, type CryptoProviderInfo } from '@/lib/crypto-providers';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import type { Account } from '@/services/account-sync';
+import { useState, useEffect } from 'react';
+import { Skeleton } from '@/components/ui/skeleton';
 import Image from 'next/image';
 
 const allowedFiatCurrenciesForCrypto = ['EUR', 'USD', 'BRL'] as const;
@@ -22,9 +24,10 @@ const formSchema = z.object({
   providerName: z.string().min(1, "Provider name is required"),
   accountName: z.string().min(2, "Account name must be at least 2 characters").max(50, "Account name too long"),
   accountType: z.string().min(1, "Account type is required"),
-  currency: z.string().min(3, "Currency is required"), // Validated dynamically below
-  balance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
+  primaryCurrency: z.string().min(3, "Primary currency is required"),
+  primaryBalance: z.coerce.number({ invalid_type_error: "Balance must be a number"}),
   includeInNetWorth: z.boolean().optional(),
+  providerDisplayIconUrl: z.string().optional(), // For crypto account logo
 });
 
 type EditAccountFormData = z.infer<typeof formSchema>;
@@ -35,11 +38,7 @@ interface EditAccountFormProps {
 }
 
 const getProviderList = (category: 'asset' | 'crypto'): Array<BankInfo | CryptoProviderInfo> => {
-    if (category === 'asset') {
-        return popularBanks;
-    } else {
-        return allCryptoProviders;
-    }
+    return category === 'asset' ? popularBanks : allCryptoProviders;
 }
 
 const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: string }[] => {
@@ -62,43 +61,134 @@ const getAccountTypes = (category: 'asset' | 'crypto'): { value: string; label: 
 }
 
 const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }) => {
+  const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(account.providerDisplayIconUrl || null);
+  const [isFetchingLogo, setIsFetchingLogo] = useState(false);
+
+  const currentPrimaryBalanceEntry = account.balances.find(b => b.currency === account.primaryCurrency) || account.balances[0] || { currency: 'USD', amount: 0 };
+
   const form = useForm<EditAccountFormData>({
     resolver: zodResolver(formSchema.refine(data => {
         if (account.category === 'crypto') {
-            return allowedFiatCurrenciesForCrypto.includes(data.currency.toUpperCase() as any);
+            return allowedFiatCurrenciesForCrypto.includes(data.primaryCurrency.toUpperCase() as any);
         }
-        return supportedCurrencies.includes(data.currency.toUpperCase());
+        return supportedCurrencies.includes(data.primaryCurrency.toUpperCase());
     }, {
         message: account.category === 'crypto' ? `Currency for crypto accounts must be one of: ${allowedFiatCurrenciesForCrypto.join(', ')}` : "Unsupported currency",
-        path: ['currency'],
+        path: ['primaryCurrency'],
     })),
     defaultValues: {
       providerName: account.providerName || "",
       accountName: account.name,
       accountType: account.type,
-      currency: account.currency.toUpperCase(),
-      balance: account.balance,
+      primaryCurrency: account.primaryCurrency || currentPrimaryBalanceEntry.currency,
+      primaryBalance: currentPrimaryBalanceEntry.amount,
       includeInNetWorth: account.includeInNetWorth ?? true,
+      providerDisplayIconUrl: account.providerDisplayIconUrl || undefined,
     },
   });
 
+  const selectedProviderName = form.watch('providerName');
+
+  useEffect(() => {
+    const fetchLogo = async () => {
+      if (account.category !== 'crypto' || !selectedProviderName) {
+        // Only fetch for crypto and if provider is selected
+        if (account.category !== 'crypto') setLogoPreviewUrl(null); // Clear if not crypto
+        form.setValue('providerDisplayIconUrl', undefined);
+        return;
+      }
+      const providerInfo = allCryptoProviders.find(p => p.name === selectedProviderName);
+      if (providerInfo && providerInfo.coingeckoExchangeId) {
+        setIsFetchingLogo(true);
+        // Do not clear existing logoPreviewUrl immediately if it came from initialData.
+        // form.setValue('providerDisplayIconUrl', undefined); // Clear this before setting new one
+        try {
+          const response = await fetch(`https://api.coingecko.com/api/v3/exchanges/${providerInfo.coingeckoExchangeId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.image) {
+              setLogoPreviewUrl(data.image);
+              form.setValue('providerDisplayIconUrl', data.image);
+            } else {
+               // If fetch succeeds but no image, keep existing or clear if no initial
+               if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+            }
+          } else {
+            console.warn(`Failed to fetch logo for ${selectedProviderName}: ${response.status}`);
+            if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+          }
+        } catch (error) {
+          console.error(`Error fetching logo for ${selectedProviderName}:`, error);
+          if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+        } finally {
+          setIsFetchingLogo(false);
+        }
+      } else {
+        // If provider doesn't have coingeckoId, clear preview only if no initial icon
+        if (!account.providerDisplayIconUrl) setLogoPreviewUrl(null);
+        form.setValue('providerDisplayIconUrl', account.providerDisplayIconUrl || undefined); // Keep existing if no new fetch
+      }
+    };
+    
+    // Only fetch if providerName has changed from the initial account.providerName
+    // or if initially there was no providerDisplayIconUrl
+    if (selectedProviderName !== account.providerName || (account.category === 'crypto' && !account.providerDisplayIconUrl)) {
+        fetchLogo();
+    } else if (account.category !== 'crypto') {
+        setLogoPreviewUrl(null); // Ensure it's cleared if category isn't crypto
+        form.setValue('providerDisplayIconUrl', undefined);
+    }
+
+  }, [selectedProviderName, account.category, account.providerName, account.providerDisplayIconUrl, form]);
+
+
   function onSubmit(values: EditAccountFormData) {
+    const primaryBalanceIndex = account.balances.findIndex(b => b.currency === values.primaryCurrency.toUpperCase());
+    let updatedBalances = [...account.balances];
+
+    if (primaryBalanceIndex !== -1) {
+        updatedBalances[primaryBalanceIndex] = { ...updatedBalances[primaryBalanceIndex], amount: values.primaryBalance, currency: values.primaryCurrency.toUpperCase() };
+    } else {
+        const newPrimaryCurrency = values.primaryCurrency.toUpperCase();
+        if (!updatedBalances.some(b => b.currency === newPrimaryCurrency)) {
+            updatedBalances = [{ currency: newPrimaryCurrency, amount: values.primaryBalance }];
+        } else {
+             const existingIdx = updatedBalances.findIndex(b => b.currency === newPrimaryCurrency);
+             updatedBalances[existingIdx] = { ...updatedBalances[existingIdx], amount: values.primaryBalance };
+        }
+    }
+    
+    const uniqueBalances = updatedBalances.reduce((acc, current) => {
+        const x = acc.find(item => item.currency === current.currency);
+        if (!x) {
+            return acc.concat([current]);
+        } else {
+            if(current.currency === values.primaryCurrency.toUpperCase()) {
+                const filtered = acc.filter(item => item.currency !== current.currency);
+                return filtered.concat([current]);
+            }
+            return acc;
+        }
+    }, [] as Array<{ currency: string; amount: number }>);
+
+
     const updatedAccountData: Account = {
         ...account,
         name: values.accountName,
         type: values.accountType,
-        balance: values.balance,
-        currency: values.currency.toUpperCase(),
         providerName: values.providerName,
+        balances: uniqueBalances,
+        primaryCurrency: values.primaryCurrency.toUpperCase(),
         includeInNetWorth: values.includeInNetWorth ?? true,
+        providerDisplayIconUrl: account.category === 'crypto' ? values.providerDisplayIconUrl : undefined,
     };
     onAccountUpdated(updatedAccountData);
   }
 
-  const selectedCurrency = form.watch('currency');
+  const selectedPrimaryCurrency = form.watch('primaryCurrency');
   const providerList = getProviderList(account.category);
   const accountTypes = getAccountTypes(account.category);
-  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : supportedCurrencies;
+  const currencyOptions = account.category === 'crypto' ? allowedFiatCurrenciesForCrypto : (account.balances.length > 0 ? [...new Set(account.balances.map(b => b.currency))] : [account.primaryCurrency || 'USD']);
 
 
   return (
@@ -120,22 +210,16 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     <SelectContent>
                     {providerList.map((provider) => (
                         <SelectItem key={provider.name} value={provider.name}>
-                        <div className="flex items-center">
-                            <Image
-                                src={provider.iconUrl}
-                                alt={`${provider.name} logo`}
-                                width={20}
-                                height={20}
-                                className="mr-2 rounded-sm object-contain"
-                                data-ai-hint={provider.dataAiHint}
-                            />
+                        <div className="flex items-center gap-2">
+                            {/* Icon display logic similar to AddCryptoForm or direct usage if BankInfo is updated */}
+                            {provider.iconComponent}
                             {provider.name}
                         </div>
                         </SelectItem>
                     ))}
                     <SelectItem value="Other">
-                        <div className="flex items-center">
-                            <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">
+                        <div className="flex items-center gap-2">
+                            <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">
                                 {account.category === 'asset' ? '🏦' : '💠'}
                             </span>
                             Other (Specify in Name)
@@ -144,6 +228,13 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     </SelectContent>
                 </Select>
                 <FormMessage />
+                {account.category === 'crypto' && isFetchingLogo && <Skeleton className="h-10 w-10 mt-2 rounded-full" />}
+                {account.category === 'crypto' && logoPreviewUrl && !isFetchingLogo && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <Image src={logoPreviewUrl} alt={`${selectedProviderName || account.providerName} logo`} width={24} height={24} className="rounded-full" data-ai-hint={`${selectedProviderName} logo`}/>
+                    <span className="text-xs text-muted-foreground">Logo Preview</span>
+                  </div>
+                )}
                 </FormItem>
             )}
             />
@@ -192,14 +283,14 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
             />
             <FormField
                 control={form.control}
-                name="currency"
+                name="primaryCurrency"
                 render={({ field }) => (
                 <FormItem>
-                    <FormLabel>Currency</FormLabel>
+                    <FormLabel>Primary Currency</FormLabel>
                     <Select onValueChange={field.onChange} defaultValue={field.value}>
                     <FormControl>
                         <SelectTrigger>
-                        <SelectValue placeholder="Select currency" />
+                        <SelectValue placeholder="Select primary currency" />
                         </SelectTrigger>
                     </FormControl>
                     <SelectContent>
@@ -211,7 +302,7 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                     </SelectContent>
                     </Select>
                     <FormDescription>
-                        {account.category === 'crypto' ? 'Fiat currency for this crypto account.' : 'Account currency.'}
+                        The main currency for this account's display and primary balance.
                     </FormDescription>
                     <FormMessage />
                 </FormItem>
@@ -221,19 +312,19 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
 
         <FormField
             control={form.control}
-            name="balance"
+            name="primaryBalance"
             render={({ field }) => (
             <FormItem>
-                <FormLabel>Current Balance ({getCurrencySymbol(selectedCurrency || 'BRL')})</FormLabel>
+                <FormLabel>Primary Balance ({getCurrencySymbol(selectedPrimaryCurrency || 'USD')})</FormLabel>
                 <FormControl>
-                <Input type="number" placeholder="0.00" step="0.01" {...field} />
+                <Input type="number" placeholder="0.00" step="0.01" {...field} value={field.value ?? ''} />
                 </FormControl>
                 <FormMessage />
             </FormItem>
             )}
         />
          <FormDescription>
-            Enter the current balance in the selected currency.
+            Enter the current balance for the selected primary currency.
          </FormDescription>
 
         <FormField
@@ -252,12 +343,14 @@ const EditAccountForm: FC<EditAccountFormProps> = ({ account, onAccountUpdated }
                   Include in Net Worth Calculations
                 </FormLabel>
                 <FormDescription>
-                  If checked, this account's balance will be part of your total net worth and dashboard summaries.
+                  If checked, this account's balances will be part of your total net worth and dashboard summaries.
                 </FormDescription>
               </div>
             </FormItem>
           )}
         />
+        {account.category === 'crypto' && <FormField control={form.control} name="providerDisplayIconUrl" render={({ field }) => <Input type="hidden" {...field} />} />}
+
 
         <Button type="submit" className="w-full">Save Changes</Button>
       </form>

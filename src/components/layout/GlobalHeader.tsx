@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { FC } from 'react';
@@ -5,7 +6,7 @@ import DateRangePicker from '@/components/dashboard/date-range-picker';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown } from 'lucide-react';
+import { PlusCircle, ArrowDownCircle, ArrowUpCircle, ArrowLeftRight as TransferIcon, ChevronDown, PanelLeft } from 'lucide-react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import AddTransactionForm from '@/components/transactions/add-transaction-form';
 import type { Transaction } from '@/services/transactions';
@@ -14,9 +15,10 @@ import { getCategories, type Category } from '@/services/categories';
 import { getTags, type Tag } from '@/services/tags';
 import { useToast } from "@/hooks/use-toast";
 import { useState, useEffect } from 'react';
-import { format as formatDateFns } from 'date-fns'; // Use aliased import
+import { format as formatDateFns } from 'date-fns';
 import { addTransaction } from '@/services/transactions';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SidebarTrigger } from '@/components/ui/sidebar';
 
 
 const GlobalHeader: FC = () => {
@@ -36,14 +38,13 @@ const GlobalHeader: FC = () => {
         try {
           const fetchedAccounts = await getAccounts();
           
-          // Perform checks based on freshly fetched accounts
           if (transactionTypeToAdd === 'transfer' && fetchedAccounts.length < 2) {
             toast({
               title: "Not Enough Accounts",
               description: "You need at least two accounts to make a transfer.",
               variant: "destructive",
             });
-            setIsAddTransactionDialogOpen(false); // Abort opening
+            setIsAddTransactionDialogOpen(false);
             setIsLoadingDataForForm(false);
             return;
           }
@@ -53,14 +54,13 @@ const GlobalHeader: FC = () => {
               description: "Please add an account first before adding transactions.",
               variant: "destructive",
             });
-            setIsAddTransactionDialogOpen(false); // Abort opening
+            setIsAddTransactionDialogOpen(false);
             setIsLoadingDataForForm(false);
             return;
           }
           
-          setAccounts(fetchedAccounts); // Set accounts state for the form
+          setAccounts(fetchedAccounts);
 
-          // If account checks pass, fetch categories and tags
           const [fetchedCategories, fetchedTagsList] = await Promise.all([
             getCategories(),
             getTags()
@@ -71,7 +71,7 @@ const GlobalHeader: FC = () => {
         } catch (error) {
           console.error("Failed to fetch data for transaction form:", error);
           toast({ title: "Error", description: "Could not load data for transaction form.", variant: "destructive" });
-          setIsAddTransactionDialogOpen(false); // Close dialog on error
+          setIsAddTransactionDialogOpen(false);
         } finally {
           setIsLoadingDataForForm(false);
         }
@@ -83,7 +83,7 @@ const GlobalHeader: FC = () => {
 
 
   const openAddTransactionDialog = (type: 'expense' | 'income' | 'transfer') => {
-    setTransactionTypeToAdd(type); // Set the type, useEffect will handle fetching and checks
+    setTransactionTypeToAdd(type); 
     setIsAddTransactionDialogOpen(true);
   };
 
@@ -99,12 +99,10 @@ const GlobalHeader: FC = () => {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string; date: Date; description?: string; tags?: string[];}) => {
     try {
-      const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       
-      // Fetch fresh account names for description, in case local state 'accounts' is not fully up-to-date here
       const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown Account';
       const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown Account';
@@ -112,7 +110,7 @@ const GlobalHeader: FC = () => {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -transferAmount,
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -122,8 +120,8 @@ const GlobalHeader: FC = () => {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: transferAmount,
-        transactionCurrency: data.transactionCurrency,
+        amount: Math.abs(data.toAccountAmount),
+        transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -141,7 +139,9 @@ const GlobalHeader: FC = () => {
 
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center justify-end gap-4 border-b bg-background/95 px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 sm:py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+    <header className="sticky top-0 z-30 flex h-16 items-center justify-between gap-4 border-b bg-background/95 px-4 sm:static sm:h-auto sm:border-0 sm:bg-transparent sm:px-6 sm:py-4 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+      <SidebarTrigger className="md:hidden" />
+      
       <div className="ml-auto flex items-center gap-2">
         <DateRangePicker
           initialRange={selectedDateRange}
@@ -196,6 +196,7 @@ const GlobalHeader: FC = () => {
               onTransferAdded={handleTransferAdded}
               isLoading={false} 
               initialType={transactionTypeToAdd}
+              initialData={{date: new Date()}}
             />
           ) : (
             <div className="py-4 text-center text-muted-foreground">
@@ -214,3 +215,4 @@ const GlobalHeader: FC = () => {
 };
 
 export default GlobalHeader;
+

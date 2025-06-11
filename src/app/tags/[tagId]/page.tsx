@@ -1,3 +1,4 @@
+
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -24,6 +25,7 @@ import type { AddTransactionFormData } from '@/components/transactions/add-trans
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const formatDate = (dateString: string): string => {
     try {
@@ -40,6 +42,7 @@ export default function TagDetailPage() {
   const params = useParams();
   const router = useRouter();
   const tagId = typeof params.tagId === 'string' ? params.tagId : undefined;
+  const { user, isLoadingAuth } = useAuthContext();
 
   const [tag, setTag] = useState<TagType | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -60,9 +63,10 @@ export default function TagDetailPage() {
   const [clonedTransactionData, setClonedTransactionData] = useState<Partial<AddTransactionFormData> | undefined>(undefined);
 
   const fetchData = useCallback(async () => {
-    if (!tagId || typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined' || !tagId) {
         setIsLoading(false);
-        if(!tagId) setError("Tag ID is missing.");
+        if(!tagId && !isLoadingAuth && user) setError("Tag ID is missing.");
+        else if (!user && !isLoadingAuth) setError("Please log in to view tag details.");
         return;
     }
     setIsLoading(true);
@@ -101,20 +105,27 @@ export default function TagDetailPage() {
 
     } catch (err: any) {
         console.error(`Failed to fetch data for tag ${tagId}:`, err);
-        setError("Could not load tag data. Please try again later.");
+        setError("Could not load tag data. Please try again later. " + err.message);
         toast({ title: "Error", description: err.message || "Failed to load tag data.", variant: "destructive" });
     } finally {
         setIsLoading(false);
     }
-  }, [tagId, toast]);
+  }, [tagId, toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setTag(null);
+        setTransactions([]);
+        setError("Please log in to view tag details.");
+    }
+  }, [fetchData, user, isLoadingAuth]);
 
   useEffect(() => {
     const handleStorageChange = (event: StorageEvent) => {
-         if (event.type === 'storage') {
+         if (event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
             const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
@@ -130,7 +141,7 @@ export default function TagDetailPage() {
     return () => {
         if (typeof window !== 'undefined') window.removeEventListener('storage', handleStorageChange);
     };
-  }, [tagId, fetchData]);
+  }, [tagId, fetchData, user, isLoadingAuth]);
 
 
   const filteredTransactions = useMemo(() => {
@@ -165,7 +176,6 @@ export default function TagDetailPage() {
       setIsEditDialogOpen(false);
       setSelectedTransaction(null);
       toast({ title: "Success", description: `Transaction "${transactionToUpdate.description}" updated.` });
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to update transaction:", err);
@@ -185,7 +195,6 @@ export default function TagDetailPage() {
     try {
       await deleteTransaction(selectedTransaction.id, selectedTransaction.accountId);
       toast({ title: "Transaction Deleted", description: `Transaction "${selectedTransaction.description}" removed.` });
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (err: any) {
       console.error("Failed to delete transaction:", err);
@@ -205,7 +214,6 @@ export default function TagDetailPage() {
       toast({ title: "Success", description: `${data.amount > 0 ? 'Income' : 'Expense'} added successfully.` });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transaction:", error);
@@ -213,9 +221,8 @@ export default function TagDetailPage() {
     }
   };
 
-   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; }) => {
+   const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string; }) => {
     try {
-      const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
       const currentAccounts = await getAccounts();
       const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
@@ -228,7 +235,7 @@ export default function TagDetailPage() {
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -transferAmount,
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -238,8 +245,8 @@ export default function TagDetailPage() {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: transferAmount,
-        transactionCurrency: data.transactionCurrency,
+        amount: Math.abs(data.toAccountAmount),
+        transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -249,7 +256,6 @@ export default function TagDetailPage() {
       toast({ title: "Success", description: "Transfer recorded successfully." });
       setIsAddTransactionDialogOpen(false);
       setClonedTransactionData(undefined);
-      // await fetchData(); // Re-fetch data for immediate UI update // Let storage event handle it
       window.dispatchEvent(new Event('storage'));
     } catch (error: any) {
       console.error("Failed to add transfer:", error);
@@ -310,7 +316,7 @@ export default function TagDetailPage() {
     return 'All Time';
   }, [selectedDateRange]);
 
-  if (isLoading && !tag) {
+  if (isLoadingAuth || (isLoading && !tag)) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6 lg:px-8">
         <Skeleton className="h-8 w-1/2 mb-6" />
@@ -475,6 +481,7 @@ export default function TagDetailPage() {
               categories={allCategories}
               tags={allTags}
               onTransactionAdded={handleUpdateTransaction}
+              onTransferAdded={handleTransferAdded}
               isLoading={isLoading}
               initialData={{
                 ...selectedTransaction,
@@ -508,3 +515,4 @@ export default function TagDetailPage() {
     </div>
   );
 }
+

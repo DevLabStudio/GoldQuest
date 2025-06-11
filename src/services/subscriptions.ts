@@ -15,22 +15,23 @@ export interface Subscription {
   currency: string;
   type: SubscriptionType;
   category: string;
-  accountId?: string; // Optional: Link to an account
-  groupId: string | null; // Optional: Link to a group, can be null
+  accountId?: string | null; // Changed to allow null explicitly for Firebase
+  groupId: string | null;
   startDate: string; // ISO string: YYYY-MM-DD
   frequency: SubscriptionFrequency;
   nextPaymentDate: string; // ISO string: YYYY-MM-DD
-  notes?: string;
+  notes?: string | null; // Changed to allow null
   tags?: string[];
-  lastPaidMonth?: string | null; // YYYY-MM format, or null if not paid for the current cycle
-  description?: string;
-  createdAt?: object; // For server timestamp
-  updatedAt?: object; // For server timestamp
+  lastPaidMonth?: string | null;
+  description?: string | null; // Changed to allow null
+  createdAt?: object | string;
+  updatedAt?: object | string;
 }
 
 export type NewSubscriptionData = Omit<Subscription, 'id' | 'createdAt' | 'updatedAt' | 'lastPaidMonth'> & {
     lastPaidMonth?: string | null;
-    groupId?: string | null; // Ensure groupId is optional and can be null here too
+    groupId?: string | null;
+    accountId?: string | null; // Ensure this can also be null here for consistency
 };
 
 export function getSubscriptionsRefPath(currentUser: User | null) {
@@ -57,23 +58,23 @@ export async function getSubscriptions(): Promise<Subscription[]> {
     if (snapshot.exists()) {
       const subscriptionsData = snapshot.val();
       return Object.entries(subscriptionsData).map(([id, data]) => {
-        const subData = data as Partial<Omit<Subscription, 'id'>>; // Treat as partial initially
+        const subData = data as Partial<Omit<Subscription, 'id'>>;
         return {
           id,
           name: subData.name || 'Unnamed Subscription',
           amount: typeof subData.amount === 'number' ? subData.amount : 0,
-          currency: subData.currency || 'USD', // Default currency
-          type: subData.type || 'expense', // Default type
+          currency: subData.currency || 'USD',
+          type: subData.type || 'expense',
           category: subData.category || 'Uncategorized',
-          accountId: subData.accountId,
-          groupId: subData.groupId === undefined ? null : subData.groupId, // Ensure groupId is null if undefined
-          startDate: typeof subData.startDate === 'string' && subData.startDate ? subData.startDate : new Date().toISOString().split('T')[0], // Default if missing/invalid
-          frequency: subData.frequency || 'monthly', // Default frequency
-          nextPaymentDate: typeof subData.nextPaymentDate === 'string' && subData.nextPaymentDate ? subData.nextPaymentDate : new Date().toISOString().split('T')[0], // Default if missing/invalid
-          notes: subData.notes,
+          accountId: subData.accountId === undefined ? null : subData.accountId,
+          groupId: subData.groupId === undefined ? null : subData.groupId,
+          startDate: typeof subData.startDate === 'string' && subData.startDate ? subData.startDate : new Date().toISOString().split('T')[0],
+          frequency: subData.frequency || 'monthly',
+          nextPaymentDate: typeof subData.nextPaymentDate === 'string' && subData.nextPaymentDate ? subData.nextPaymentDate : new Date().toISOString().split('T')[0],
+          notes: subData.notes === undefined ? null : subData.notes,
           tags: subData.tags || [],
-          lastPaidMonth: subData.lastPaidMonth || null,
-          description: subData.description,
+          lastPaidMonth: subData.lastPaidMonth === undefined ? null : subData.lastPaidMonth,
+          description: subData.description === undefined ? null : subData.description,
           createdAt: subData.createdAt,
           updatedAt: subData.updatedAt,
         };
@@ -99,17 +100,34 @@ export async function addSubscription(subscriptionData: NewSubscriptionData): Pr
     throw new Error("Failed to generate a new subscription ID.");
   }
 
-  const newSubscription: Subscription = {
-    ...subscriptionData,
-    id: newSubscriptionRef.key,
-    lastPaidMonth: subscriptionData.lastPaidMonth || null,
+  // Prepare data for saving, ensuring undefined optional fields become null
+  const dataToSave: Omit<Subscription, 'id'> = {
+    name: subscriptionData.name,
+    amount: subscriptionData.amount,
+    currency: subscriptionData.currency,
+    type: subscriptionData.type,
+    category: subscriptionData.category,
+    accountId: subscriptionData.accountId === undefined ? null : subscriptionData.accountId,
     groupId: subscriptionData.groupId === undefined || subscriptionData.groupId === "" ? null : subscriptionData.groupId,
+    startDate: subscriptionData.startDate,
+    frequency: subscriptionData.frequency,
+    nextPaymentDate: subscriptionData.nextPaymentDate,
+    notes: subscriptionData.notes === undefined ? null : subscriptionData.notes,
+    tags: subscriptionData.tags || [],
+    lastPaidMonth: subscriptionData.lastPaidMonth === undefined ? null : subscriptionData.lastPaidMonth,
+    description: subscriptionData.description === undefined ? null : subscriptionData.description,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
   };
 
-  const dataToSave = { ...newSubscription } as any;
-  delete dataToSave.id; // Firebase key is the ID
+  const newSubscription: Subscription = {
+    id: newSubscriptionRef.key,
+    ...dataToSave, // Use the processed dataToSave which has nulls for undefined
+    // serverTimestamp() returns an object, which is fine for DB, but for immediate state, we might convert/approximate
+    createdAt: new Date().toISOString(), // Approximate for immediate use
+    updatedAt: new Date().toISOString(), // Approximate for immediate use
+  };
+
 
   try {
     await set(newSubscriptionRef, dataToSave);
@@ -130,7 +148,6 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
   const subscriptionRefPath = getSingleSubscriptionRefPath(currentUser, id);
   const subscriptionRef = ref(database, subscriptionRefPath);
 
-  // Build the update object selectively to avoid sending undefined values
   const dataToUpdate: Partial<Omit<Subscription, 'id' | 'createdAt'>> & { updatedAt: object } = {
     name: updatedSubscription.name,
     amount: updatedSubscription.amount,
@@ -142,27 +159,23 @@ export async function updateSubscription(updatedSubscription: Subscription): Pro
     nextPaymentDate: updatedSubscription.nextPaymentDate,
     tags: updatedSubscription.tags || [],
     lastPaidMonth: updatedSubscription.lastPaidMonth === undefined ? null : updatedSubscription.lastPaidMonth,
-    description: updatedSubscription.description || null, // Ensure description is null if empty
+    description: updatedSubscription.description === undefined ? null : updatedSubscription.description,
     updatedAt: serverTimestamp(),
+    accountId: updatedSubscription.accountId === undefined ? null : updatedSubscription.accountId,
+    groupId: updatedSubscription.groupId === undefined || updatedSubscription.groupId === "" ? null : updatedSubscription.groupId,
+    notes: updatedSubscription.notes === undefined ? null : updatedSubscription.notes,
   };
-
-  // Handle optional fields correctly, ensuring they are set to null if not provided
-  // to remove them from Firebase if they were previously set.
-  dataToUpdate.accountId = updatedSubscription.accountId || null; // set to null if undefined or empty
-  dataToUpdate.groupId = updatedSubscription.groupId === undefined || updatedSubscription.groupId === "" ? null : updatedSubscription.groupId;
-  dataToUpdate.notes = updatedSubscription.notes || null;
-
 
   try {
     await update(subscriptionRef, dataToUpdate);
-    // Return a consistent object reflecting what was attempted to be saved
     return {
-      ...updatedSubscription,
+      ...updatedSubscription, // Start with the input data
       accountId: dataToUpdate.accountId === null ? undefined : dataToUpdate.accountId,
       groupId: dataToUpdate.groupId,
       notes: dataToUpdate.notes === null ? undefined : dataToUpdate.notes,
       description: dataToUpdate.description === null ? undefined : dataToUpdate.description,
       lastPaidMonth: dataToUpdate.lastPaidMonth,
+      updatedAt: new Date().toISOString(), // Approximate for local state
     };
   } catch (error) {
     console.error("Error updating subscription in Firebase:", error);

@@ -23,6 +23,7 @@ import type { AddTransactionFormData } from '@/components/transactions/add-trans
 import MonthlySummarySidebar from '@/components/transactions/monthly-summary-sidebar';
 import { useDateRange } from '@/contexts/DateRangeContext';
 import Link from 'next/link';
+import { useAuthContext } from '@/contexts/AuthContext';
 
 const INITIAL_TRANSACTION_LIMIT = 50;
 
@@ -38,6 +39,7 @@ const formatDate = (dateString: string): string => {
 };
 
 export default function TransfersPage() {
+  const { user, isLoadingAuth } = useAuthContext();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [allTransactionsUnfiltered, setAllTransactionsUnfiltered] = useState<Transaction[]>([]);
   const [allCategories, setAllCategories] = useState<Category[]>([]);
@@ -57,9 +59,9 @@ export default function TransfersPage() {
 
 
   const fetchData = useCallback(async () => {
-    if (typeof window === 'undefined') {
+    if (!user || isLoadingAuth || typeof window === 'undefined') {
         setIsLoading(false);
-        setError("Transfer data can only be loaded on the client.");
+        if (!user && !isLoadingAuth) setError("Please log in to view transfer data.");
         return;
     }
 
@@ -92,21 +94,29 @@ export default function TransfersPage() {
 
     } catch (err: any) {
     console.error("Failed to fetch transfer data:", err);
-    setError("Could not load transfer data. Please try again later.");
+    setError("Could not load transfer data. Please try again later. " + err.message);
     toast({ title: "Error", description: err.message || "Failed to load data.", variant: "destructive" });
     } finally {
     setIsLoading(false);
     }
-  }, [toast]);
+  }, [toast, user, isLoadingAuth]);
 
   useEffect(() => {
-    fetchData();
+    if (user && !isLoadingAuth) {
+        fetchData();
+    } else if (!isLoadingAuth && !user) {
+        setIsLoading(false);
+        setAccounts([]);
+        setAllTransactionsUnfiltered([]);
+        setError("Please log in to view transfers.");
+    }
 
      const handleStorageChange = (event: StorageEvent) => {
-         if (typeof window !== 'undefined' && event.type === 'storage') {
+         if (typeof window !== 'undefined' && event.type === 'storage' && user && !isLoadingAuth) {
             const isLikelyOurCustomEvent = event.key === null;
             const relevantKeysForThisPage = ['userAccounts', 'userPreferences', 'userCategories', 'userTags', 'transactions-'];
-            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key.includes(k));
+            const isRelevantExternalChange = typeof event.key === 'string' && relevantKeysForThisPage.some(k => event.key!.includes(k));
+
 
             if (isLikelyOurCustomEvent || isRelevantExternalChange) {
                 console.log("Storage changed, refetching transfer data...");
@@ -123,7 +133,7 @@ export default function TransfersPage() {
             window.removeEventListener('storage', handleStorageChange);
          }
      };
-  }, [fetchData]);
+  }, [fetchData, user, isLoadingAuth]);
 
   const transferTransactionPairs = useMemo(() => {
     if (isLoading) return [];
@@ -142,21 +152,30 @@ export default function TransfersPage() {
     potentialTransfers.forEach(txOut => {
       if (txOut.amount < 0 && !processedIds.has(txOut.id)) {
         const matchingIncoming = potentialTransfers.filter(txIn =>
-          txIn.amount === -txOut.amount &&
           txIn.accountId !== txOut.accountId &&
           !processedIds.has(txIn.id) &&
           txIn.date === txOut.date &&
           (txIn.description === txOut.description ||
-           (txIn.description?.startsWith("Transfer") && txOut.description?.startsWith("Transfer"))) &&
-          txIn.transactionCurrency === txOut.transactionCurrency
+           (txIn.description?.startsWith("Transfer from") && txOut.description?.startsWith("Transfer from"))) && 
+          ( (txIn.transactionCurrency === txOut.transactionCurrency && txIn.amount === -txOut.amount) || 
+            (txIn.transactionCurrency !== txOut.transactionCurrency) ) 
         );
 
         if (matchingIncoming.length > 0) {
-            matchingIncoming.sort((a,b) => a.id.localeCompare(b.id));
-            const txIn = matchingIncoming[0];
-            transfers.push({ from: txOut, to: txIn });
-            processedIds.add(txOut.id);
-            processedIds.add(txIn.id);
+            let txIn;
+            const sameCurrencyExactMatch = matchingIncoming.find(match => match.transactionCurrency === txOut.transactionCurrency && match.amount === -txOut.amount);
+            if (sameCurrencyExactMatch) {
+                txIn = sameCurrencyExactMatch;
+            } else {
+                matchingIncoming.sort((a,b) => a.id.localeCompare(b.id)); 
+                txIn = matchingIncoming[0];
+            }
+
+            if(txIn) {
+                transfers.push({ from: txOut, to: txIn });
+                processedIds.add(txOut.id);
+                processedIds.add(txIn.id);
+            }
         }
       }
     });
@@ -192,7 +211,6 @@ export default function TransfersPage() {
                 description: `Transfer record removed successfully.`,
             });
             window.dispatchEvent(new Event('storage'));
-            // fetchData(); // Let storage event handle refetch
         } catch (err: any) {
             console.error("Failed to delete transfer:", err);
             toast({
@@ -219,7 +237,6 @@ export default function TransfersPage() {
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to add/update transaction:", error);
       toast({ title: "Error", description: `Could not add/update transaction: ${error.message}`, variant: "destructive" });
@@ -228,7 +245,7 @@ export default function TransfersPage() {
     }
   };
 
-  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; date: Date; description?: string; tags?: string[]; transactionCurrency: string; }) => {
+  const handleTransferAdded = async (data: { fromAccountId: string; toAccountId: string; amount: number; transactionCurrency: string; toAccountAmount: number; toAccountCurrency: string; date: Date; description?: string; tags?: string[];}) => {
     setIsLoading(true);
     try {
        if (editingTransferPair) {
@@ -238,15 +255,16 @@ export default function TransfersPage() {
            console.log("Old transfer pair deleted.");
        }
 
-      const transferAmount = Math.abs(data.amount);
       const formattedDate = formatDateFns(data.date, 'yyyy-MM-dd');
-      const fromAccountName = accounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown';
-      const toAccountName = accounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown';
+      
+      const currentAccounts = await getAccounts();
+      const fromAccountName = currentAccounts.find(a=>a.id === data.fromAccountId)?.name || 'Unknown Account';
+      const toAccountName = currentAccounts.find(a=>a.id === data.toAccountId)?.name || 'Unknown Account';
       const desc = data.description || `Transfer from ${fromAccountName} to ${toAccountName}`;
 
       await addTransaction({
         accountId: data.fromAccountId,
-        amount: -transferAmount,
+        amount: -Math.abs(data.amount),
         transactionCurrency: data.transactionCurrency,
         date: formattedDate,
         description: desc,
@@ -256,8 +274,8 @@ export default function TransfersPage() {
 
       await addTransaction({
         accountId: data.toAccountId,
-        amount: transferAmount,
-        transactionCurrency: data.transactionCurrency,
+        amount: Math.abs(data.toAccountAmount),
+        transactionCurrency: data.toAccountCurrency,
         date: formattedDate,
         description: desc,
         category: 'Transfer',
@@ -268,7 +286,6 @@ export default function TransfersPage() {
       setIsAddTransactionDialogOpen(false);
       setEditingTransferPair(null);
       window.dispatchEvent(new Event('storage'));
-      // fetchData(); // Let storage event handle refetch
     } catch (error: any) {
       console.error("Failed to add/update transfer:", error);
       toast({ title: "Error", description: `Could not record transfer: ${error.message}`, variant: "destructive" });
@@ -301,19 +318,32 @@ export default function TransfersPage() {
 
   const initialFormDataForEdit = useMemo(() => {
     if (editingTransferPair && transactionTypeToAdd === 'transfer') {
+        const fromAcc = accounts.find(a => a.id === editingTransferPair.from.accountId);
+        const toAcc = accounts.find(a => a.id === editingTransferPair.to.accountId);
+
+        let toAmt = Math.abs(editingTransferPair.to.amount);
+        if (fromAcc && toAcc && fromAcc.currency !== toAcc.currency) {
+            toAmt = Math.abs(editingTransferPair.to.amount);
+        } else if (fromAcc && toAcc && fromAcc.currency === toAcc.currency) {
+            toAmt = Math.abs(editingTransferPair.from.amount);
+        }
+
+
         return {
             type: 'transfer' as 'transfer',
             fromAccountId: editingTransferPair.from.accountId,
             toAccountId: editingTransferPair.to.accountId,
-            amount: Math.abs(editingTransferPair.from.amount),
-            transactionCurrency: editingTransferPair.from.transactionCurrency,
+            amount: Math.abs(editingTransferPair.from.amount), 
+            transactionCurrency: editingTransferPair.from.transactionCurrency, 
+            toAccountAmount: toAmt, 
+            toAccountCurrency: editingTransferPair.to.transactionCurrency, 
             date: parseISO(editingTransferPair.from.date.includes('T') ? editingTransferPair.from.date : editingTransferPair.from.date + 'T00:00:00Z'),
             description: editingTransferPair.from.description,
             tags: editingTransferPair.from.tags || [],
         };
     }
     return {date: new Date()};
-  }, [editingTransferPair, transactionTypeToAdd]);
+  }, [editingTransferPair, transactionTypeToAdd, accounts]);
 
   const dateRangeLabel = useMemo(() => {
     if (selectedDateRange.from && selectedDateRange.to) {

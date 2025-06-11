@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { format as formatDateFns, parseISO } from 'date-fns';
 import { supportedCurrencies, getCurrencySymbol } from '@/lib/currency';
 import { popularBanks, type BankInfo } from '@/lib/banks';
-import Image from 'next/image';
+// Image import removed as we are using iconComponent
 import { Textarea } from '@/components/ui/textarea';
 import type { NewCreditCardData, CreditCard } from '@/services/credit-cards';
 
@@ -112,22 +112,15 @@ const AddCreditCardForm: FC<AddCreditCardFormProps> = ({ onSubmit: passedOnSubmi
                     <SelectContent>
                         {popularBanks.map((bank: BankInfo) => (
                         <SelectItem key={bank.name} value={bank.name}>
-                            <div className="flex items-center">
-                            <Image
-                                src={bank.iconUrl}
-                                alt={`${bank.name} logo`}
-                                width={20}
-                                height={20}
-                                className="mr-2 rounded-sm object-contain"
-                                data-ai-hint={bank.dataAiHint}
-                            />
-                            {bank.name}
+                            <div className="flex items-center gap-2"> {/* Added gap-2 for spacing */}
+                              {bank.iconComponent}
+                              {bank.name}
                             </div>
                         </SelectItem>
                         ))}
                         <SelectItem value="Other">
-                            <div className="flex items-center">
-                                <span className="w-5 h-5 mr-2 flex items-center justify-center text-muted-foreground">🏦</span>
+                            <div className="flex items-center gap-2">
+                                <span className="w-5 h-5 flex items-center justify-center text-muted-foreground">🏦</span>
                                 Other
                             </div>
                         </SelectItem>
@@ -273,3 +266,4 @@ const AddCreditCardForm: FC<AddCreditCardFormProps> = ({ onSubmit: passedOnSubmi
 };
 
 export default AddCreditCardForm;
+
