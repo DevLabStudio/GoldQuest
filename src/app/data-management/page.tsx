@@ -1,4 +1,3 @@
-
 'use client';
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
@@ -35,6 +34,7 @@ import { cn } from '@/lib/utils';
 import { useAuthContext } from '@/contexts/AuthContext';
 import Link from 'next/link';
 import { exportAllUserDataToZip, type ExportableGroup, type ExportableTransaction } from '@/services/export';
+import { getTransactions } from '@/services/transactions';
 
 type CsvRecord = {
   [key: string]: string | undefined;
@@ -1662,25 +1662,60 @@ export default function DataManagementPage() {
       }
       updateProgress();
 
-      // 6. Transactions (Import all, including "Opening Balance" from CSV, with skipBalanceModification)
+      // 6. Transactions (in chronological order)
       const transactionsFile = zip.file('goldquest_transactions.csv');
       if (transactionsFile) {
           const transactionsCsv = await transactionsFile.async('text');
-          const parsedTransactions = Papa.parse<ExportableTransaction>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
+          const parsedTransactions = Papa.parse<any>(transactionsCsv, { header: true, skipEmptyLines: true, dynamicTyping: true }).data;
           
-          parsedTransactions.sort((a, b) => new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime());
+          // Sort transactions by date to ensure correct balance calculation
+          parsedTransactions.sort((a: any, b: any) => {
+              const dateA = new Date(a.date).getTime();
+              const dateB = new Date(b.date).getTime();
+              return dateA - dateB;
+          });
 
+          // First, process all opening balance transactions
           for (const txCSV of parsedTransactions) {
-              if (txCSV.id && txCSV.accountId && txCSV.date && txCSV.amount !== undefined && txCSV.transactionCurrency) {
+              if (txCSV.category?.toLowerCase() === 'opening balance') {
                   const newAccountId = oldAccountIdToNewIdMap[txCSV.accountId];
                   if (newAccountId) {
                       const newTxData: NewTransactionData = {
-                          date: typeof txCSV.date === 'string' ? txCSV.date : formatDateFns(new Date(txCSV.date as any), 'yyyy-MM-dd'),
-                          amount: typeof txCSV.amount === 'string' ? parseFloat(txCSV.amount) : txCSV.amount,
-                          transactionCurrency: txCSV.transactionCurrency,
-                          description: txCSV.description || 'Restored Transaction',
-                          category: txCSV.category || 'Uncategorized', 
                           accountId: newAccountId,
+                          date: txCSV.date,
+                          amount: txCSV.amount,
+                          description: txCSV.description || 'Opening Balance',
+                          category: 'Opening Balance',
+                          transactionCurrency: txCSV.transactionCurrency || 'USD',
+                          foreignAmount: txCSV.foreignAmount,
+                          foreignCurrency: txCSV.foreignCurrency,
+                          tags: txCSV.tags ? txCSV.tags.split('|').filter(Boolean) : [],
+                          originalImportData: txCSV.originalImportData ? JSON.parse(txCSV.originalImportData) : undefined,
+                      };
+                      try {
+                          await addTransaction(newTxData, { skipBalanceModification: true });
+                      } catch (e: any) {
+                          console.error(`Error restoring opening balance transaction for account ${newAccountId}: ${e.message}`);
+                          overallSuccess = false;
+                      }
+                  }
+              }
+          }
+
+          // Then, process all other transactions
+          for (const txCSV of parsedTransactions) {
+              if (txCSV.category?.toLowerCase() !== 'opening balance') {
+                  const newAccountId = oldAccountIdToNewIdMap[txCSV.accountId];
+                  if (newAccountId) {
+                      const newTxData: NewTransactionData = {
+                          accountId: newAccountId,
+                          date: txCSV.date,
+                          amount: txCSV.amount,
+                          description: txCSV.description,
+                          category: txCSV.category,
+                          transactionCurrency: txCSV.transactionCurrency || 'USD',
+                          foreignAmount: txCSV.foreignAmount,
+                          foreignCurrency: txCSV.foreignCurrency,
                           tags: txCSV.tags ? txCSV.tags.split('|').filter(Boolean) : [],
                           originalImportData: txCSV.originalImportData ? JSON.parse(txCSV.originalImportData) : undefined,
                       };
@@ -1690,13 +1725,7 @@ export default function DataManagementPage() {
                           console.error(`Error restoring transaction ${txCSV.description}: ${e.message}`);
                           overallSuccess = false;
                       }
-                  } else {
-                      console.warn(`Could not map old account ID ${txCSV.accountId} for transaction ${txCSV.description}`);
-                      overallSuccess = false;
                   }
-              } else {
-                  console.warn("Skipping invalid transaction row from CSV:", txCSV);
-                  overallSuccess = false;
               }
           }
           toast({ title: "Restore Progress", description: "Transactions (history) restored."});
@@ -1706,36 +1735,47 @@ export default function DataManagementPage() {
       // 7. Set Final Account Balances
       if (parsedAccountsFromCsv.length > 0) {
           toast({ title: "Restore Progress", description: "Finalizing account balances..." });
+          
+          // Primeiro, vamos recalcular todos os saldos das contas
           for (const accFromCsv of parsedAccountsFromCsv) {
               const newAccountId = oldAccountIdToNewIdMap[accFromCsv.id];
               if (newAccountId) {
                   try {
-                      // Ensure balances from CSV are valid
-                      let balancesForUpdate: Array<{ currency: string; amount: number }> = [];
-                      if (Array.isArray(accFromCsv.balances) && accFromCsv.balances.length > 0) {
-                          balancesForUpdate = accFromCsv.balances.map(b => ({
-                              currency: String(b.currency || 'USD').toUpperCase(),
-                              amount: parseFloat(String(b.amount)) || 0
-                          }));
-                      } else if ((accFromCsv as any).balance !== undefined && (accFromCsv as any).currency !== undefined) { // Legacy single balance
-                          balancesForUpdate = [{ 
-                              currency: String((accFromCsv as any).currency).toUpperCase(), 
-                              amount: parseFloat(String((accFromCsv as any).balance)) || 0 
-                          }];
-                      } else {
-                           console.warn(`Account ${accFromCsv.name} in CSV has no balance data. Setting to 0 USD.`);
-                           balancesForUpdate = [{ currency: 'USD', amount: 0}];
+                      // Buscar todas as transações da conta
+                      const accountTransactions = await getTransactions(newAccountId);
+                      
+                      // Calcular o saldo total em cada moeda
+                      const balanceMap: Record<string, number> = {};
+                      
+                      for (const tx of accountTransactions) {
+                          const currency = tx.transactionCurrency.toUpperCase();
+                          if (!balanceMap[currency]) {
+                              balanceMap[currency] = 0;
+                          }
+                          balanceMap[currency] += tx.amount;
                       }
                       
+                      // Converter para o formato de balances
+                      const balancesForUpdate = Object.entries(balanceMap).map(([currency, amount]) => ({
+                          currency,
+                          amount: parseFloat(amount.toFixed(2))
+                      }));
+                      
+                      // Determinar a moeda primária
                       let primaryCurrencyForUpdate = accFromCsv.primaryCurrency 
-                        ? accFromCsv.primaryCurrency.toUpperCase() 
-                        : (balancesForUpdate[0]?.currency || 'USD');
+                          ? accFromCsv.primaryCurrency.toUpperCase() 
+                          : (balancesForUpdate[0]?.currency || 'USD');
                       
                       if (!balancesForUpdate.some(b => b.currency === primaryCurrencyForUpdate)) {
                           primaryCurrencyForUpdate = balancesForUpdate[0]?.currency || 'USD';
                       }
+                      
+                      // Garantir que a moeda primária tenha um saldo
+                      if (!balancesForUpdate.some(b => b.currency === primaryCurrencyForUpdate)) {
+                          balancesForUpdate.push({ currency: primaryCurrencyForUpdate, amount: 0 });
+                      }
 
-
+                      // Atualizar a conta com os novos saldos
                       await updateAccount({
                           id: newAccountId,
                           name: accFromCsv.name,
